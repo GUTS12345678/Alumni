@@ -32,6 +32,12 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::get('/my-responses', [SurveyController::class, 'myResponses']);
 });
 
+// Alumni-only routes (authentication + alumni role required)
+Route::prefix('v1/alumni')->middleware(['auth:sanctum', 'alumni'])->group(function () {
+    // Alumni profile
+    Route::get('/profile', [AuthController::class, 'alumniProfile']);
+});
+
 // Admin-only routes (authentication + admin role required)
 Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
     // Dashboard

@@ -1,85 +1,296 @@
-import InputError from '@/components/input-error';
-import TextLink from '@/components/text-link';
+import React, { useState } from 'react';
+import { Head } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import AuthLayout from '@/layouts/auth-layout';
-import { Form, Head } from '@inertiajs/react';
-import { LoaderCircle } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { GraduationCap, User, Shield, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 
-interface LoginProps {
-    status?: string;
-    canResetPassword: boolean;
-}
+type UserType = 'alumni' | 'admin' | null;
 
-export default function Login({ status, canResetPassword }: LoginProps) {
-    return (
-        <AuthLayout title="Log in to your account" description="Enter your email and password below to log in">
-            <Head title="Log in" />
+export default function Login() {
+    const [selectedUserType, setSelectedUserType] = useState<UserType>(null);
+    const [formData, setFormData] = useState({
+        email: '',
+        password: ''
+    });
+    const [showPassword, setShowPassword] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
-            <Form method="post" action={route('login')} resetOnSuccess={['password']} className="flex flex-col gap-6">
-                {({ processing, errors }) => (
-                    <>
-                        <div className="grid gap-6">
-                            <div className="grid gap-2">
-                                <Label htmlFor="email">Email address</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    name="email"
-                                    required
-                                    autoFocus
-                                    tabIndex={1}
-                                    autoComplete="email"
-                                    placeholder="email@example.com"
-                                />
-                                <InputError message={errors.email} />
-                            </div>
+    const handleUserTypeSelect = (type: UserType) => {
+        setSelectedUserType(type);
+        setErrors({});
+    };
 
-                            <div className="grid gap-2">
-                                <div className="flex items-center">
-                                    <Label htmlFor="password">Password</Label>
-                                    {canResetPassword && (
-                                        <TextLink href={route('password.request')} className="ml-auto text-sm" tabIndex={5}>
-                                            Forgot password?
-                                        </TextLink>
-                                    )}
+    const handleInputChange = (key: string, value: string) => {
+        setFormData(prev => ({ ...prev, [key]: value }));
+        if (errors[key]) {
+            setErrors(prev => ({ ...prev, [key]: '' }));
+        }
+    };
+
+    const validateForm = () => {
+        const newErrors: Record<string, string> = {};
+
+        if (!formData.email) {
+            newErrors.email = 'Email is required';
+        } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+            newErrors.email = 'Please enter a valid email address';
+        }
+
+        if (!formData.password) {
+            newErrors.password = 'Password is required';
+        }
+
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!validateForm()) return;
+
+        setIsSubmitting(true);
+
+        try {
+            const response = await fetch('/api/v1/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: formData.email,
+                    password: formData.password,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Login failed');
+            }
+
+            if (data.success) {
+                // Store the authentication token
+                localStorage.setItem('auth_token', data.data.token);
+                localStorage.setItem('user', JSON.stringify(data.data.user));
+
+                // Redirect based on user role
+                if (data.data.user.role === 'admin') {
+                    window.location.href = '/admin/dashboard';
+                } else {
+                    window.location.href = '/alumni/dashboard';
+                }
+            } else {
+                throw new Error(data.message || 'Login failed');
+            }
+        } catch (error: unknown) {
+            console.error('Login failed:', error);
+            if (error instanceof Error) {
+                setErrors({ general: error.message });
+            } else {
+                setErrors({ general: 'Login failed. Please check your credentials and try again.' });
+            }
+        } finally {
+            setIsSubmitting(false);
+        }
+    }; const handleBackToSurvey = () => {
+        window.location.href = '/';
+    };
+
+    if (!selectedUserType) {
+        return (
+            <>
+                <Head title="Login - Alumni Tracer System" />
+
+                <div className="min-h-screen bg-gradient-to-br from-beige-50 to-beige-100 flex items-center justify-center px-4">
+                    <div className="w-full max-w-md">
+                        {/* Header */}
+                        <div className="text-center mb-8">
+                            <div className="flex items-center justify-center mb-4">
+                                <GraduationCap className="h-12 w-12 text-maroon-600 mr-3" />
+                                <div>
+                                    <h1 className="text-3xl font-bold text-maroon-800">Alumni Tracer System</h1>
+                                    <p className="text-maroon-600">Choose your login type</p>
                                 </div>
-                                <Input
-                                    id="password"
-                                    type="password"
-                                    name="password"
-                                    required
-                                    tabIndex={2}
-                                    autoComplete="current-password"
-                                    placeholder="Password"
-                                />
-                                <InputError message={errors.password} />
                             </div>
+                        </div>
 
-                            <div className="flex items-center space-x-3">
-                                <Checkbox id="remember" name="remember" tabIndex={3} />
-                                <Label htmlFor="remember">Remember me</Label>
-                            </div>
+                        <div className="space-y-4">
+                            {/* Alumni Login Card */}
+                            <Card
+                                className="cursor-pointer transition-all hover:shadow-lg hover:border-maroon-300 border-2"
+                                onClick={() => handleUserTypeSelect('alumni')}
+                            >
+                                <CardHeader className="text-center pb-4">
+                                    <div className="mx-auto w-16 h-16 bg-maroon-100 rounded-full flex items-center justify-center mb-4">
+                                        <User className="h-8 w-8 text-maroon-600" />
+                                    </div>
+                                    <CardTitle className="text-xl text-maroon-800">Alumni Login</CardTitle>
+                                    <CardDescription className="text-maroon-600">
+                                        Access your alumni profile and career information
+                                    </CardDescription>
+                                </CardHeader>
+                            </Card>
 
-                            <Button type="submit" className="mt-4 w-full" tabIndex={4} disabled={processing}>
-                                {processing && <LoaderCircle className="h-4 w-4 animate-spin" />}
-                                Log in
+                            {/* Admin Login Card */}
+                            <Card
+                                className="cursor-pointer transition-all hover:shadow-lg hover:border-maroon-300 border-2"
+                                onClick={() => handleUserTypeSelect('admin')}
+                            >
+                                <CardHeader className="text-center pb-4">
+                                    <div className="mx-auto w-16 h-16 bg-maroon-100 rounded-full flex items-center justify-center mb-4">
+                                        <Shield className="h-8 w-8 text-maroon-600" />
+                                    </div>
+                                    <CardTitle className="text-xl text-maroon-800">Administrator Login</CardTitle>
+                                    <CardDescription className="text-maroon-600">
+                                        Access administrative features and system management
+                                    </CardDescription>
+                                </CardHeader>
+                            </Card>
+                        </div>
+
+                        {/* Back to Survey Button */}
+                        <div className="mt-8 text-center">
+                            <Button
+                                variant="ghost"
+                                onClick={handleBackToSurvey}
+                                className="text-maroon-600 hover:text-maroon-800 hover:bg-maroon-50"
+                            >
+                                <ArrowLeft className="w-4 h-4 mr-2" />
+                                Back to Alumni Registration Survey
                             </Button>
                         </div>
+                    </div>
+                </div>
+            </>
+        );
+    }
 
-                        <div className="text-center text-sm text-muted-foreground">
-                            Don't have an account?{' '}
-                            <TextLink href={route('register')} tabIndex={5}>
-                                Sign up
-                            </TextLink>
+    return (
+        <>
+            <Head title={`${selectedUserType === 'admin' ? 'Administrator' : 'Alumni'} Login - Alumni Tracer System`} />
+
+            <div className="min-h-screen bg-gradient-to-br from-beige-50 to-beige-100 flex items-center justify-center px-4">
+                <div className="w-full max-w-md">
+                    {/* Header */}
+                    <div className="text-center mb-8">
+                        <div className="flex items-center justify-center mb-4">
+                            <GraduationCap className="h-12 w-12 text-maroon-600 mr-3" />
+                            <div>
+                                <h1 className="text-2xl font-bold text-maroon-800">Alumni Tracer System</h1>
+                                <p className="text-maroon-600">
+                                    {selectedUserType === 'admin' ? 'Administrator' : 'Alumni'} Login
+                                </p>
+                            </div>
                         </div>
-                    </>
-                )}
-            </Form>
+                    </div>
 
-            {status && <div className="mb-4 text-center text-sm font-medium text-green-600">{status}</div>}
-        </AuthLayout>
+                    <Card className="border-beige-200 shadow-lg">
+                        <CardHeader className="bg-beige-50 border-b border-beige-200 text-center">
+                            <div className="mx-auto w-16 h-16 bg-maroon-100 rounded-full flex items-center justify-center mb-4">
+                                {selectedUserType === 'admin' ? (
+                                    <Shield className="h-8 w-8 text-maroon-600" />
+                                ) : (
+                                    <User className="h-8 w-8 text-maroon-600" />
+                                )}
+                            </div>
+                            <CardTitle className="text-xl text-maroon-800">
+                                {selectedUserType === 'admin' ? 'Administrator Login' : 'Alumni Login'}
+                            </CardTitle>
+                            <CardDescription className="text-maroon-600">
+                                Enter your credentials to access the system
+                            </CardDescription>
+                        </CardHeader>
+
+                        <CardContent className="p-6">
+                            {errors.general && (
+                                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                                    <p className="text-sm text-red-600">{errors.general}</p>
+                                </div>
+                            )}
+
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="email" className="text-base font-medium text-maroon-800">
+                                        Email Address <span className="text-red-500">*</span>
+                                    </Label>
+                                    <Input
+                                        id="email"
+                                        type="email"
+                                        value={formData.email}
+                                        onChange={(e) => handleInputChange('email', e.target.value)}
+                                        className="border-beige-300 focus:border-maroon-500 focus:ring-maroon-500"
+                                        placeholder="Enter your email address"
+                                    />
+                                    {errors.email && <p className="text-sm text-red-600">{errors.email}</p>}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label htmlFor="password" className="text-base font-medium text-maroon-800">
+                                        Password <span className="text-red-500">*</span>
+                                    </Label>
+                                    <div className="relative">
+                                        <Input
+                                            id="password"
+                                            type={showPassword ? 'text' : 'password'}
+                                            value={formData.password}
+                                            onChange={(e) => handleInputChange('password', e.target.value)}
+                                            className="border-beige-300 focus:border-maroon-500 focus:ring-maroon-500 pr-10"
+                                            placeholder="Enter your password"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                        >
+                                            {showPassword ? (
+                                                <EyeOff className="h-4 w-4" />
+                                            ) : (
+                                                <Eye className="h-4 w-4" />
+                                            )}
+                                        </button>
+                                    </div>
+                                    {errors.password && <p className="text-sm text-red-600">{errors.password}</p>}
+                                </div>
+
+                                <Button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="w-full bg-maroon-700 hover:bg-maroon-800 text-white"
+                                >
+                                    {isSubmitting ? 'Signing In...' : 'Sign In'}
+                                </Button>
+                            </form>
+
+                            <div className="mt-6 pt-4 border-t border-beige-200 space-y-3">
+                                <Button
+                                    variant="ghost"
+                                    onClick={() => setSelectedUserType(null)}
+                                    className="w-full text-maroon-600 hover:text-maroon-800 hover:bg-maroon-50"
+                                >
+                                    <ArrowLeft className="w-4 h-4 mr-2" />
+                                    Choose Different Login Type
+                                </Button>
+
+                                <div className="text-center">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={handleBackToSurvey}
+                                        className="text-sm text-maroon-600 hover:text-maroon-800 hover:bg-maroon-50"
+                                    >
+                                        Back to Alumni Registration Survey
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
+        </>
     );
 }

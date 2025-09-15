@@ -18,6 +18,32 @@
     --color-background: var(--background);
     --color-foreground: var(--foreground);
 
+    /* Maroon Color Palette */
+    --color-maroon-50: oklch(0.975 0.015 25);
+    --color-maroon-100: oklch(0.94 0.035 25);
+    --color-maroon-200: oklch(0.87 0.06 25);
+    --color-maroon-300: oklch(0.78 0.085 25);
+    --color-maroon-400: oklch(0.65 0.12 25);
+    --color-maroon-500: oklch(0.51 0.155 25);
+    --color-maroon-600: oklch(0.42 0.175 25);
+    --color-maroon-700: oklch(0.34 0.18 25);
+    --color-maroon-800: oklch(0.27 0.165 25);
+    --color-maroon-900: oklch(0.21 0.14 25);
+    --color-maroon-950: oklch(0.13 0.09 25);
+
+    /* Beige Color Palette */
+    --color-beige-50: oklch(0.985 0.008 45);
+    --color-beige-100: oklch(0.97 0.018 45);
+    --color-beige-200: oklch(0.94 0.035 45);
+    --color-beige-300: oklch(0.9 0.05 45);
+    --color-beige-400: oklch(0.83 0.07 45);
+    --color-beige-500: oklch(0.75 0.09 45);
+    --color-beige-600: oklch(0.65 0.105 45);
+    --color-beige-700: oklch(0.55 0.115 45);
+    --color-beige-800: oklch(0.45 0.12 45);
+    --color-beige-900: oklch(0.36 0.115 45);
+    --color-beige-950: oklch(0.24 0.08 45);
+
     --color-card: var(--card);
     --color-card-foreground: var(--card-foreground);
 

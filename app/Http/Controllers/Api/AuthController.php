@@ -177,4 +177,44 @@ class AuthController extends Controller
             ]
         ]);
     }
+
+    /**
+     * Get alumni profile (alumni-only endpoint)
+     */
+    public function alumniProfile(Request $request)
+    {
+        $user = $request->user();
+        $profile = $user->alumniProfile()->with('batch')->first();
+
+        if (!$profile) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Alumni profile not found'
+            ], 404);
+        }
+
+        // Check if survey was completed by looking for any survey responses
+        $surveyCompleted = SurveyResponse::where('respondent_email', $user->email)
+            ->where('completion_status', 'completed')
+            ->exists();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'id' => $profile->user_id,
+                'email' => $user->email,
+                'first_name' => $profile->first_name,
+                'last_name' => $profile->last_name,
+                'phone' => $profile->phone,
+                'address' => $profile->address,
+                'graduation_year' => $profile->graduation_year,
+                'course' => $profile->course,
+                'current_position' => $profile->employment_info['current_position'] ?? null,
+                'current_company' => $profile->employment_info['current_company'] ?? null,
+                'employment_status' => $profile->employment_info['employment_status'] ?? null,
+                'created_at' => $user->created_at,
+                'survey_completed' => $surveyCompleted,
+            ]
+        ]);
+    }
 }

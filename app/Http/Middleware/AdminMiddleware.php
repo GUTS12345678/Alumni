@@ -18,17 +18,29 @@ class AdminMiddleware
         $user = $request->user();
 
         if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Authentication required'
-            ], 401);
+            // For API requests, return JSON
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Authentication required'
+                ], 401);
+            }
+            
+            // For web requests, redirect to login
+            return redirect('/login');
         }
 
         if ($user->role !== 'admin') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Admin access required'
-            ], 403);
+            // For API requests, return JSON
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Admin access required'
+                ], 403);
+            }
+            
+            // For web requests, redirect to home or unauthorized page
+            return redirect('/')->with('error', 'Admin access required');
         }
 
         return $next($request);

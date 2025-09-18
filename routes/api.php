@@ -65,8 +65,16 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     Route::delete('/surveys/{survey}/questions/{question}', [AdminController::class, 'deleteSurveyQuestion']);
     Route::post('/surveys/{survey}/questions/reorder', [AdminController::class, 'reorderSurveyQuestions']);
 
+    // Analytics routes
+    Route::get('/analytics/time-to-job', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'getTimeToJobAnalytics']);
+    Route::get('/analytics/time-to-job/export', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'exportTimeToJobAnalytics']);
+
     // Batch management
     Route::get('/batches', [AdminController::class, 'getBatches']);
+
+    // Activity logs management
+    Route::get('/activity-logs', [AdminController::class, 'getActivityLogs']);
+    Route::get('/activity-logs/export', [AdminController::class, 'exportActivityLogs']);
 });
 
 // Health check route

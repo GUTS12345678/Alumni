@@ -83,6 +83,14 @@ class AlumniProfile extends Model
     }
 
     /**
+     * Get the employment records for this alumni
+     */
+    public function employments()
+    {
+        return $this->hasMany(Employment::class, 'alumni_id');
+    }
+
+    /**
      * Get full name
      */
     public function getFullNameAttribute(): string

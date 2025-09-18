@@ -15,20 +15,34 @@ class AlumniMiddleware
      */
     public function handle(Request $request, Closure $next): Response
     {
+        $user = $request->user();
+
         // Check if user is authenticated
-        if (!$request->user()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Unauthorized. Please log in.'
-            ], 401);
+        if (!$user) {
+            // For API requests, return JSON
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized. Please log in.'
+                ], 401);
+            }
+            
+            // For web requests, redirect to login
+            return redirect('/login');
         }
 
         // Check if user has alumni role
-        if ($request->user()->role !== 'alumni') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Access denied. Alumni access required.'
-            ], 403);
+        if ($user->role !== 'alumni') {
+            // For API requests, return JSON
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Alumni access required.'
+                ], 403);
+            }
+            
+            // For web requests, redirect to home or unauthorized page
+            return redirect('/')->with('error', 'Alumni access required');
         }
 
         return $next($request);

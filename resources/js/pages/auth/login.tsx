@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Head } from '@inertiajs/react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Head, router } from '@inertiajs/react';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { GraduationCap, User, Shield, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 
 type UserType = 'alumni' | 'admin' | null;
@@ -47,57 +47,33 @@ export default function Login() {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
         if (!validateForm()) return;
 
         setIsSubmitting(true);
 
-        try {
-            const response = await fetch('/api/v1/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                },
-                body: JSON.stringify({
-                    email: formData.email,
-                    password: formData.password,
-                }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Login failed');
+        router.post('/login', {
+            email: formData.email,
+            password: formData.password,
+            remember: false,
+        }, {
+            onError: (errors) => {
+                setErrors(errors);
+                setIsSubmitting(false);
+            },
+            onSuccess: () => {
+                // Login successful, Inertia will handle the redirect
+                setIsSubmitting(false);
+            },
+            onFinish: () => {
+                setIsSubmitting(false);
             }
+        });
+    };
 
-            if (data.success) {
-                // Store the authentication token
-                localStorage.setItem('auth_token', data.data.token);
-                localStorage.setItem('user', JSON.stringify(data.data.user));
-
-                // Redirect based on user role
-                if (data.data.user.role === 'admin') {
-                    window.location.href = '/admin/dashboard';
-                } else {
-                    window.location.href = '/alumni/dashboard';
-                }
-            } else {
-                throw new Error(data.message || 'Login failed');
-            }
-        } catch (error: unknown) {
-            console.error('Login failed:', error);
-            if (error instanceof Error) {
-                setErrors({ general: error.message });
-            } else {
-                setErrors({ general: 'Login failed. Please check your credentials and try again.' });
-            }
-        } finally {
-            setIsSubmitting(false);
-        }
-    }; const handleBackToSurvey = () => {
+    const handleBackToSurvey = () => {
         window.location.href = '/';
     };
 

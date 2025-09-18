@@ -1208,4 +1208,185 @@ class AdminController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get activity logs with pagination and filtering
+     */
+    public function getActivityLogs(Request $request): JsonResponse
+    {
+        try {
+            $perPage = (int) $request->get('per_page', 20);
+            $page = (int) $request->get('page', 1);
+            $search = $request->get('search');
+            $action = $request->get('action');
+            $userId = $request->get('user_id');
+            $dateFilter = $request->get('date_filter');
+
+            $query = ActivityLog::with('user:id,name,email')
+                ->orderBy('created_at', 'desc');
+
+            // Apply search filter
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('description', 'like', "%{$search}%")
+                      ->orWhere('action', 'like', "%{$search}%")
+                      ->orWhere('entity_type', 'like', "%{$search}%")
+                      ->orWhereHas('user', function ($userQuery) use ($search) {
+                          $userQuery->where('name', 'like', "%{$search}%")
+                                   ->orWhere('email', 'like', "%{$search}%");
+                      });
+                });
+            }
+
+            // Apply action filter
+            if ($action && $action !== 'all') {
+                $query->where('action', $action);
+            }
+
+            // Apply user filter
+            if ($userId && $userId !== 'all') {
+                if ($userId === 'admin') {
+                    $adminUserIds = User::where('role', 'admin')->pluck('id');
+                    $query->whereIn('user_id', $adminUserIds);
+                } elseif ($userId === 'alumni') {
+                    $alumniUserIds = User::where('role', 'alumni')->pluck('id');
+                    $query->whereIn('user_id', $alumniUserIds);
+                } else {
+                    $query->where('user_id', $userId);
+                }
+            }
+
+            // Apply date filter
+            if ($dateFilter && $dateFilter !== 'all') {
+                $now = Carbon::now();
+                switch ($dateFilter) {
+                    case 'today':
+                        $query->whereDate('created_at', $now->toDateString());
+                        break;
+                    case 'week':
+                        $query->whereBetween('created_at', [$now->startOfWeek(), $now->endOfWeek()]);
+                        break;
+                    case 'month':
+                        $query->whereMonth('created_at', $now->month)
+                              ->whereYear('created_at', $now->year);
+                        break;
+                    case 'year':
+                        $query->whereYear('created_at', $now->year);
+                        break;
+                }
+            }
+
+            $activities = $query->paginate($perPage, ['*'], 'page', $page);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'data' => $activities->items(),
+                    'current_page' => $activities->currentPage(),
+                    'last_page' => $activities->lastPage(),
+                    'per_page' => $activities->perPage(),
+                    'total' => $activities->total(),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch activity logs',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Export activity logs to CSV
+     */
+    public function exportActivityLogs(Request $request)
+    {
+        try {
+            $search = $request->get('search');
+            $action = $request->get('action');
+            $userId = $request->get('user_id');
+            $dateFilter = $request->get('date_filter');
+
+            $query = ActivityLog::with('user:id,name,email')
+                ->orderBy('created_at', 'desc');
+
+            // Apply same filters as getActivityLogs
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('description', 'like', "%{$search}%")
+                      ->orWhere('action', 'like', "%{$search}%")
+                      ->orWhere('entity_type', 'like', "%{$search}%")
+                      ->orWhereHas('user', function ($userQuery) use ($search) {
+                          $userQuery->where('name', 'like', "%{$search}%")
+                                   ->orWhere('email', 'like', "%{$search}%");
+                      });
+                });
+            }
+
+            if ($action && $action !== 'all') {
+                $query->where('action', $action);
+            }
+
+            if ($userId && $userId !== 'all') {
+                if ($userId === 'admin') {
+                    $adminUserIds = User::where('role', 'admin')->pluck('id');
+                    $query->whereIn('user_id', $adminUserIds);
+                } elseif ($userId === 'alumni') {
+                    $alumniUserIds = User::where('role', 'alumni')->pluck('id');
+                    $query->whereIn('user_id', $alumniUserIds);
+                } else {
+                    $query->where('user_id', $userId);
+                }
+            }
+
+            if ($dateFilter && $dateFilter !== 'all') {
+                $now = Carbon::now();
+                switch ($dateFilter) {
+                    case 'today':
+                        $query->whereDate('created_at', $now->toDateString());
+                        break;
+                    case 'week':
+                        $query->whereBetween('created_at', [$now->startOfWeek(), $now->endOfWeek()]);
+                        break;
+                    case 'month':
+                        $query->whereMonth('created_at', $now->month)
+                              ->whereYear('created_at', $now->year);
+                        break;
+                    case 'year':
+                        $query->whereYear('created_at', $now->year);
+                        break;
+                }
+            }
+
+            $activities = $query->limit(5000)->get(); // Limit for performance
+
+            $csvData = "Timestamp,User,Email,Action,Entity Type,Entity ID,Description,IP Address\n";
+            
+            foreach ($activities as $activity) {
+                $csvData .= sprintf(
+                    "%s,%s,%s,%s,%s,%s,\"%s\",%s\n",
+                    $activity->created_at->format('Y-m-d H:i:s'),
+                    $activity->user ? $activity->user->name : 'Unknown',
+                    $activity->user ? $activity->user->email : '',
+                    $activity->action,
+                    $activity->entity_type ?: '',
+                    $activity->entity_id ?: '',
+                    str_replace('"', '""', $activity->description),
+                    $activity->ip_address ?: ''
+                );
+            }
+
+            return response($csvData, 200, [
+                'Content-Type' => 'text/csv',
+                'Content-Disposition' => 'attachment; filename="activity-logs-' . date('Y-m-d') . '.csv"',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to export activity logs',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

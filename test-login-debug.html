@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Login Debug Test</title>
+</head>
+
+<body>
+    <h1>Login Debug Test</h1>
+    <p>This page will test various login scenarios</p>
+
+    <h2>Test Links:</h2>
+    <ul>
+        <li><a href="http://localhost:8000/login" target="_blank">Direct Login Page</a></li>
+        <li><a href="http://localhost:8000/" target="_blank">Home Page</a></li>
+        <li><a href="http://localhost:8000/admin/dashboard" target="_blank">Admin Dashboard (should redirect to
+                login)</a></li>
+    </ul>
+
+    <h2>Instructions:</h2>
+    <ol>
+        <li>First, clear your browser cookies/session for localhost:8000</li>
+        <li>Click the "Direct Login Page" link</li>
+        <li>It should show the login form, not redirect to home</li>
+        <li>If it redirects, there might be a middleware issue</li>
+    </ol>
+
+    <h2>Debugging Steps:</h2>
+    <p>1. Open browser developer tools (F12)</p>
+    <p>2. Go to Network tab</p>
+    <p>3. Click login link and check for redirects</p>
+    <p>4. Check if there are any JavaScript errors in Console tab</p>
+</body>
+
+</html>

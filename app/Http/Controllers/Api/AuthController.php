@@ -152,6 +152,35 @@ class AuthController extends Controller
     }
 
     /**
+     * Get API token for already authenticated session user
+     */
+    public function getToken(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User not authenticated'
+            ], 401);
+        }
+
+        // Delete any existing tokens for this user to maintain single session
+        $user->tokens()->delete();
+
+        // Create a new token
+        $token = $user->createToken('web-session-token')->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'token' => $token,
+                'user' => $user
+            ]
+        ]);
+    }
+
+    /**
      * Get current user profile
      */
     public function profile(Request $request)

@@ -70,20 +70,28 @@ export default function Batches({ user }: Props) {
             setLoading(currentPage === 1);
             setRefreshing(currentPage !== 1);
 
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
             const params = new URLSearchParams();
             if (searchTerm) params.append('search', searchTerm);
             params.append('page', currentPage.toString());
             params.append('per_page', '15');
 
             const response = await fetch(`/api/v1/admin/batches?${params}`, {
-                credentials: 'include',
                 headers: {
                     'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
             });
 
             if (!response.ok) {
                 if (response.status === 401) {
+                    localStorage.removeItem('auth_token');
                     window.location.href = '/login';
                     return;
                 }
@@ -92,11 +100,13 @@ export default function Batches({ user }: Props) {
 
             const data: { success: boolean; data: BatchesResponse } = await response.json();
 
-            if (data.success) {
+            if (data.success && data.data && data.data.data) {
                 setBatches(data.data.data);
                 setCurrentPage(data.data.current_page);
                 setTotalPages(data.data.last_page);
                 setTotal(data.data.total);
+            } else {
+                setError('Invalid response format from server');
             }
         } catch (err) {
             console.error('Batches fetch error:', err);

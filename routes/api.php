@@ -22,10 +22,11 @@ Route::prefix('v1')->group(function () {
 });
 
 // Protected routes (authentication required)
-Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
+Route::prefix('v1')->middleware(['auth:web,sanctum'])->group(function () {
     // Authentication routes
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/profile', [AuthController::class, 'profile']);
+    Route::post('/get-token', [AuthController::class, 'getToken']);
 
     // Authenticated survey routes
     Route::get('/my-surveys', [SurveyController::class, 'mySurveys']);
@@ -33,13 +34,13 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
 });
 
 // Alumni-only routes (authentication + alumni role required)
-Route::prefix('v1/alumni')->middleware(['auth:sanctum', 'alumni'])->group(function () {
+Route::prefix('v1/alumni')->middleware(['auth:web,sanctum', 'alumni'])->group(function () {
     // Alumni profile
     Route::get('/profile', [AuthController::class, 'alumniProfile']);
 });
 
 // Admin-only routes (authentication + admin role required)
-Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
+Route::prefix('v1/admin')->middleware(['auth:web,sanctum', 'admin'])->group(function () {
     // Dashboard
     Route::get('/dashboard', [AdminController::class, 'dashboard']);
 
@@ -75,6 +76,33 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     // Activity logs management
     Route::get('/activity-logs', [AdminController::class, 'getActivityLogs']);
     Route::get('/activity-logs/export', [AdminController::class, 'exportActivityLogs']);
+
+    // User Management
+    Route::get('/users', [AdminController::class, 'getUsers']);
+    Route::post('/users', [AdminController::class, 'createUser']);
+    Route::put('/users/{id}', [AdminController::class, 'updateUser']);
+    Route::delete('/users/{id}', [AdminController::class, 'deleteUser']);
+
+    // Permissions Management  
+    Route::get('/permissions', [AdminController::class, 'getPermissions']);
+    Route::get('/roles', [AdminController::class, 'getRoles']);
+    Route::post('/permissions', [AdminController::class, 'createPermission']);
+    Route::put('/permissions/{id}', [AdminController::class, 'updatePermission']);
+
+    // Email Templates
+    Route::get('/email-templates', [AdminController::class, 'getEmailTemplates']);
+    Route::post('/email-templates', [AdminController::class, 'createEmailTemplate']);
+    Route::put('/email-templates/{id}', [AdminController::class, 'updateEmailTemplate']);
+    Route::delete('/email-templates/{id}', [AdminController::class, 'deleteEmailTemplate']);
+
+    // System Settings
+    Route::get('/settings', [AdminController::class, 'getSystemSettings']);
+    Route::put('/settings', [AdminController::class, 'updateSystemSettings']);
+
+    // Backup & Export
+    Route::get('/backup', [AdminController::class, 'getBackupInfo']);
+    Route::post('/backup/create', [AdminController::class, 'createBackup']);
+    Route::get('/backup/download/{file}', [AdminController::class, 'downloadBackup']);
 });
 
 // Health check route

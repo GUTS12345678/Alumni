@@ -77,157 +77,159 @@ export default function AdminDashboard({ user }: Props) {
 
     return (
         <AdminBaseLayout title="Admin Dashboard" user={user}>
-            {/* Statistics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
-                <Card className="border-beige-200 shadow-lg">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-maroon-800">Total Alumni</CardTitle>
-                        <Users className="h-4 w-4 text-maroon-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-maroon-800">{stats?.total_alumni || 0}</div>
-                        <p className="text-xs text-maroon-600 mt-1">Registered in system</p>
-                    </CardContent>
-                </Card>
+            <div className="space-y-6">
+                {/* Statistics Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <Card className="border-beige-200 shadow-lg">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium text-maroon-800">Total Alumni</CardTitle>
+                            <Users className="h-4 w-4 text-maroon-600" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold text-maroon-800">{stats?.total_alumni || 0}</div>
+                            <p className="text-xs text-maroon-600 mt-1">Registered in system</p>
+                        </CardContent>
+                    </Card>
 
-                <Card className="border-beige-200 shadow-lg">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-maroon-800">Active Surveys</CardTitle>
-                        <ClipboardList className="h-4 w-4 text-maroon-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-maroon-800">{stats?.active_surveys || 0}</div>
-                        <p className="text-xs text-maroon-600 mt-1">Currently running</p>
-                    </CardContent>
-                </Card>
+                    <Card className="border-beige-200 shadow-lg">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium text-maroon-800">Active Surveys</CardTitle>
+                            <ClipboardList className="h-4 w-4 text-maroon-600" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold text-maroon-800">{stats?.active_surveys || 0}</div>
+                            <p className="text-xs text-maroon-600 mt-1">Currently running</p>
+                        </CardContent>
+                    </Card>
 
-                <Card className="border-beige-200 shadow-lg">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-maroon-800">Total Responses</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-maroon-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-maroon-800">{stats?.total_responses || 0}</div>
-                        <p className="text-xs text-maroon-600 mt-1">Survey submissions</p>
-                    </CardContent>
-                </Card>
+                    <Card className="border-beige-200 shadow-lg">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium text-maroon-800">Total Responses</CardTitle>
+                            <TrendingUp className="h-4 w-4 text-maroon-600" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold text-maroon-800">{stats?.total_responses || 0}</div>
+                            <p className="text-xs text-maroon-600 mt-1">Survey submissions</p>
+                        </CardContent>
+                    </Card>
 
-                <Card className="border-beige-200 shadow-lg">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium text-maroon-800">Employment Rate</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-maroon-600" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold text-maroon-800">{stats?.employment_rate || 0}%</div>
-                        <p className="text-xs text-maroon-600 mt-1">Alumni employed</p>
-                    </CardContent>
-                </Card>
-            </div>
+                    <Card className="border-beige-200 shadow-lg">
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium text-maroon-800">Employment Rate</CardTitle>
+                            <TrendingUp className="h-4 w-4 text-maroon-600" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-3xl font-bold text-maroon-800">{stats?.employment_rate || 0}%</div>
+                            <p className="text-xs text-maroon-600 mt-1">Alumni employed</p>
+                        </CardContent>
+                    </Card>
+                </div>
 
-            {/* Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                <Card className="border-beige-200 shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
-                    onClick={() => router.visit('/admin/alumni')}>
-                    <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800 flex items-center">
-                            <Users className="h-6 w-6 mr-3 text-maroon-600" />
-                            Alumni Bank
-                        </CardTitle>
-                        <CardDescription className="text-maroon-600">
-                            Manage and view all registered alumni profiles
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-sm text-gray-600 mb-4">
-                            View, search, and manage alumni records. Export data and track career progress.
-                        </p>
-                        <Button className="bg-maroon-700 hover:bg-maroon-800 text-white">
-                            View Alumni Bank
-                        </Button>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-beige-200 shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
-                    onClick={() => router.visit('/admin/surveys')}>
-                    <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800 flex items-center">
-                            <ClipboardList className="h-6 w-6 mr-3 text-maroon-600" />
-                            Survey Bank
-                        </CardTitle>
-                        <CardDescription className="text-maroon-600">
-                            Create and manage surveys for alumni
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-sm text-gray-600 mb-4">
-                            Design surveys, track responses, and analyze alumni feedback and career data.
-                        </p>
-                        <Button className="bg-maroon-700 hover:bg-maroon-800 text-white">
-                            Manage Surveys
-                        </Button>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-beige-200 shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
-                    onClick={() => router.visit('/admin/analytics')}>
-                    <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800 flex items-center">
-                            <TrendingUp className="h-6 w-6 mr-3 text-maroon-600" />
-                            Analytics
-                        </CardTitle>
-                        <CardDescription className="text-maroon-600">
-                            View detailed reports and insights
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-sm text-gray-600 mb-4">
-                            Generate reports, view trends, and analyze alumni career progression data.
-                        </p>
-                        <Button className="bg-maroon-700 hover:bg-maroon-800 text-white">
-                            View Analytics
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Recent Activity */}
-            <Card className="border-beige-200 shadow-lg">
-                <CardHeader>
-                    <CardTitle className="text-xl text-maroon-800">Recent Activity</CardTitle>
-                    <CardDescription className="text-maroon-600">
-                        Latest system activity and alumni registrations
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between p-3 bg-beige-50 rounded-lg">
-                            <div>
-                                <p className="font-medium text-maroon-800">Alumni Registration Survey</p>
-                                <p className="text-sm text-maroon-600">Active and receiving responses</p>
-                            </div>
-                            <span className="text-sm text-green-600 font-medium">Active</span>
-                        </div>
-
-                        <div className="flex items-center justify-between p-3 bg-beige-50 rounded-lg">
-                            <div>
-                                <p className="font-medium text-maroon-800">Recent Registrations</p>
-                                <p className="text-sm text-maroon-600">{stats?.recent_registrations || 0} new alumni this week</p>
-                            </div>
-                            <span className="text-sm text-blue-600 font-medium">+{stats?.recent_registrations || 0}</span>
-                        </div>
-
-                        <div className="text-center pt-4">
-                            <Button
-                                variant="outline"
-                                className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
-                                onClick={() => router.visit('/admin/activity')}
-                            >
-                                View Full Activity Log
+                {/* Quick Actions */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <Card className="border-beige-200 shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
+                        onClick={() => router.visit('/admin/alumni')}>
+                        <CardHeader>
+                            <CardTitle className="text-xl text-maroon-800 flex items-center">
+                                <Users className="h-6 w-6 mr-3 text-maroon-600" />
+                                Alumni Bank
+                            </CardTitle>
+                            <CardDescription className="text-maroon-600">
+                                Manage and view all registered alumni profiles
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-sm text-gray-600 mb-4">
+                                View, search, and manage alumni records. Export data and track career progress.
+                            </p>
+                            <Button className="bg-maroon-700 hover:bg-maroon-800 text-white">
+                                View Alumni Bank
                             </Button>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-beige-200 shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
+                        onClick={() => router.visit('/admin/surveys')}>
+                        <CardHeader>
+                            <CardTitle className="text-xl text-maroon-800 flex items-center">
+                                <ClipboardList className="h-6 w-6 mr-3 text-maroon-600" />
+                                Survey Bank
+                            </CardTitle>
+                            <CardDescription className="text-maroon-600">
+                                Create and manage surveys for alumni
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-sm text-gray-600 mb-4">
+                                Design surveys, track responses, and analyze alumni feedback and career data.
+                            </p>
+                            <Button className="bg-maroon-700 hover:bg-maroon-800 text-white">
+                                Manage Surveys
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="border-beige-200 shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
+                        onClick={() => router.visit('/admin/analytics')}>
+                        <CardHeader>
+                            <CardTitle className="text-xl text-maroon-800 flex items-center">
+                                <TrendingUp className="h-6 w-6 mr-3 text-maroon-600" />
+                                Analytics
+                            </CardTitle>
+                            <CardDescription className="text-maroon-600">
+                                View detailed reports and insights
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-sm text-gray-600 mb-4">
+                                Generate reports, view trends, and analyze alumni career progression data.
+                            </p>
+                            <Button className="bg-maroon-700 hover:bg-maroon-800 text-white">
+                                View Analytics
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Recent Activity */}
+                <Card className="border-beige-200 shadow-lg">
+                    <CardHeader>
+                        <CardTitle className="text-xl text-maroon-800">Recent Activity</CardTitle>
+                        <CardDescription className="text-maroon-600">
+                            Latest system activity and alumni registrations
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between p-3 bg-beige-50 rounded-lg">
+                                <div>
+                                    <p className="font-medium text-maroon-800">Alumni Registration Survey</p>
+                                    <p className="text-sm text-maroon-600">Active and receiving responses</p>
+                                </div>
+                                <span className="text-sm text-green-600 font-medium">Active</span>
+                            </div>
+
+                            <div className="flex items-center justify-between p-3 bg-beige-50 rounded-lg">
+                                <div>
+                                    <p className="font-medium text-maroon-800">Recent Registrations</p>
+                                    <p className="text-sm text-maroon-600">{stats?.recent_registrations || 0} new alumni this week</p>
+                                </div>
+                                <span className="text-sm text-blue-600 font-medium">+{stats?.recent_registrations || 0}</span>
+                            </div>
+
+                            <div className="text-center pt-4">
+                                <Button
+                                    variant="outline"
+                                    className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                    onClick={() => router.visit('/admin/activity')}
+                                >
+                                    View Full Activity Log
+                                </Button>
+                            </div>
                         </div>
-                    </div>
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
+            </div>
         </AdminBaseLayout>
     );
 }

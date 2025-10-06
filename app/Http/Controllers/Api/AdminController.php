@@ -1389,4 +1389,117 @@ class AdminController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get users for admin management
+     */
+    public function getUsers(Request $request): JsonResponse
+    {
+        try {
+            $users = User::orderBy('created_at', 'desc')->get();
+            
+            return response()->json([
+                'success' => true,
+                'data' => $users
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch users',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get permissions data
+     */
+    public function getPermissions(Request $request): JsonResponse
+    {
+        try {
+            $permissions = ['view', 'create', 'edit', 'delete']; // Basic permissions
+            
+            return response()->json([
+                'success' => true,
+                'data' => $permissions
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch permissions',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get email templates
+     */
+    public function getEmailTemplates(Request $request): JsonResponse
+    {
+        try {
+            $templates = []; // Placeholder - implement based on your email template system
+            
+            return response()->json([
+                'success' => true,
+                'data' => $templates
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch email templates',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get system settings
+     */
+    public function getSystemSettings(Request $request): JsonResponse
+    {
+        try {
+            $settings = [
+                'app_name' => config('app.name'),
+                'app_url' => config('app.url'),
+                'mail_from_address' => config('mail.from.address'),
+            ];
+            
+            return response()->json([
+                'success' => true,
+                'data' => $settings
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch system settings',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get backup information
+     */
+    public function getBackupInfo(Request $request): JsonResponse
+    {
+        try {
+            $backupInfo = [
+                'last_backup' => null,
+                'backup_size' => 0,
+                'available_backups' => []
+            ];
+            
+            return response()->json([
+                'success' => true,
+                'data' => $backupInfo
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch backup info',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

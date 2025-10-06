@@ -73,21 +73,28 @@ export default function AlumniBank({ user }: Props) {
             setLoading(currentPage === 1);
             setRefreshing(currentPage !== 1);
 
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
             const params = new URLSearchParams();
             if (searchTerm) params.append('search', searchTerm);
             params.append('page', currentPage.toString());
             params.append('per_page', '15');
 
             const response = await fetch(`/api/v1/admin/alumni?${params}`, {
-                credentials: 'include', // Include session cookies
                 headers: {
                     'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`,
                     'X-Requested-With': 'XMLHttpRequest',
                 },
             });
 
             if (!response.ok) {
                 if (response.status === 401) {
+                    localStorage.removeItem('auth_token');
                     window.location.href = '/login';
                     return;
                 }
@@ -119,10 +126,16 @@ export default function AlumniBank({ user }: Props) {
 
     const handleExport = async () => {
         try {
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
             const response = await fetch('/api/v1/admin/alumni/export', {
-                credentials: 'include', // Include session cookies
                 headers: {
                     'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`,
                     'X-Requested-With': 'XMLHttpRequest',
                 },
             });

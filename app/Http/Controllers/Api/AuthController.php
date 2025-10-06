@@ -224,7 +224,7 @@ class AuthController extends Controller
 
         // Check if survey was completed by looking for any survey responses
         $surveyCompleted = SurveyResponse::where('respondent_email', $user->email)
-            ->where('completion_status', 'completed')
+            ->where('status', 'completed')
             ->exists();
 
         return response()->json([
@@ -247,3 +247,4 @@ class AuthController extends Controller
         ]);
     }
 }
+

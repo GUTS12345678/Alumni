@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,8 @@ import {
     AlertTriangle
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import ResponseTrendsChart from '@/components/charts/ResponseTrendsChart';
+import EmploymentDistributionChart from '@/components/charts/EmploymentDistributionChart';
 
 interface Survey {
     id: string;
@@ -78,6 +80,14 @@ export default function SurveyAnalytics() {
     const [dateRange, setDateRange] = useState('30'); // days
     const [error, setError] = useState<string | null>(null);
 
+    // Helper function to get CSRF token
+    const getCsrfToken = () => {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') || '' : '';
+    };
+    const [autoRefresh, setAutoRefresh] = useState(false);
+    const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
     const fetchSurveys = async () => {
         try {
             setLoading(true);
@@ -89,24 +99,27 @@ export default function SurveyAnalytics() {
             }
 
             const [surveysResponse, statsResponse] = await Promise.all([
-                fetch('/api/v1/admin/surveys?status=active,closed', {
+                fetch('/api/v1/admin/surveys', {
                     headers: {
-                        'Authorization': `Bearer ${token}`,
                         'Accept': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                        'X-Requested-With': 'XMLHttpRequest',
                     },
+                    credentials: 'same-origin',
                 }),
                 fetch('/api/v1/admin/analytics/overview', {
                     headers: {
-                        'Authorization': `Bearer ${token}`,
                         'Accept': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                        'X-Requested-With': 'XMLHttpRequest',
                     },
+                    credentials: 'same-origin',
                 })
             ]);
 
             if (!surveysResponse.ok || !statsResponse.ok) {
                 if (surveysResponse.status === 401 || statsResponse.status === 401) {
                     localStorage.removeItem('auth_token');
-                    localStorage.removeItem('user');
                     window.location.href = '/login';
                     return;
                 }
@@ -117,12 +130,18 @@ export default function SurveyAnalytics() {
             const statsData = await statsResponse.json();
 
             if (surveysData.success) {
-                setSurveys(surveysData.data);
+                // Extract array from paginated response
+                const surveysList = Array.isArray(surveysData.data) 
+                    ? surveysData.data 
+                    : (surveysData.data?.data || []);
+                setSurveys(surveysList);
             }
 
             if (statsData.success) {
                 setStats(statsData.data);
             }
+
+            setLastUpdated(new Date());
         } catch (err) {
             console.error('Surveys fetch error:', err);
             setError('Failed to load surveys');
@@ -131,25 +150,38 @@ export default function SurveyAnalytics() {
         }
     };
 
-    const fetchSurveyAnalytics = async (surveyId: string) => {
+    const fetchSurveyAnalytics = useCallback(async (surveyId: string) => {
         try {
             setAnalyticsLoading(true);
 
             const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
             const response = await fetch(`/api/v1/admin/analytics/surveys/${surveyId}?days=${dateRange}`, {
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
+                credentials: 'same-origin',
             });
 
             if (!response.ok) {
+                if (response.status === 401) {
+                    localStorage.removeItem('auth_token');
+                    window.location.href = '/login';
+                    return;
+                }
                 throw new Error('Failed to fetch survey analytics');
             }
 
             const data = await response.json();
             if (data.success) {
                 setAnalytics(data.data);
+                setLastUpdated(new Date());
             }
         } catch (err) {
             console.error('Analytics fetch error:', err);
@@ -157,7 +189,7 @@ export default function SurveyAnalytics() {
         } finally {
             setAnalyticsLoading(false);
         }
-    };
+    }, [dateRange]);
 
     useEffect(() => {
         fetchSurveys();
@@ -167,21 +199,49 @@ export default function SurveyAnalytics() {
         if (selectedSurvey) {
             fetchSurveyAnalytics(selectedSurvey);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedSurvey, dateRange]);
+    }, [selectedSurvey, fetchSurveyAnalytics]);
+
+    // Auto-refresh effect
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+
+        if (autoRefresh) {
+            interval = setInterval(() => {
+                if (selectedSurvey) {
+                    fetchSurveyAnalytics(selectedSurvey);
+                } else {
+                    fetchSurveys();
+                }
+            }, 30000); // Refresh every 30 seconds
+        }
+
+        return () => {
+            if (interval) {
+                clearInterval(interval);
+            }
+        };
+    }, [autoRefresh, selectedSurvey, fetchSurveyAnalytics]);
 
     const exportAnalytics = async () => {
         if (!selectedSurvey) return;
 
         try {
             const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
             const response = await fetch(`/api/v1/admin/analytics/surveys/${selectedSurvey}/export`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': getCsrfToken(),
                 },
+                credentials: 'same-origin',
                 body: JSON.stringify({ days: dateRange }),
             });
 
@@ -237,10 +297,15 @@ export default function SurveyAnalytics() {
         return `${hours}h ${mins}m`;
     };
 
-    const filteredSurveys = surveys.filter(survey =>
-        survey.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        survey.description.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredSurveys = (Array.isArray(surveys) ? surveys : []).filter(survey => {
+        // Filter by status (show active and closed surveys only)
+        const statusMatch = survey.status === 'active' || survey.status === 'closed';
+        // Filter by search term
+        const searchMatch = !searchTerm || 
+            survey.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            survey.description?.toLowerCase().includes(searchTerm.toLowerCase());
+        return statusMatch && searchMatch;
+    });
 
     if (loading) {
         return (
@@ -281,9 +346,26 @@ export default function SurveyAnalytics() {
                     <div>
                         <h2 className="text-2xl font-bold text-maroon-800">Survey Analytics</h2>
                         <p className="text-maroon-600">Detailed insights and response analytics</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Last updated: {lastUpdated.toLocaleTimeString()}
+                            {autoRefresh && <span className="ml-2 text-green-600">● Live</span>}
+                        </p>
                     </div>
 
                     <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2 mr-2">
+                            <input
+                                type="checkbox"
+                                id="auto-refresh"
+                                checked={autoRefresh}
+                                onChange={(e) => setAutoRefresh(e.target.checked)}
+                                className="rounded border-maroon-300 text-maroon-600 focus:ring-maroon-200"
+                            />
+                            <label htmlFor="auto-refresh" className="text-sm text-maroon-700">
+                                Auto-refresh (30s)
+                            </label>
+                        </div>
+
                         {selectedSurvey && (
                             <Button
                                 onClick={exportAnalytics}
@@ -297,12 +379,13 @@ export default function SurveyAnalytics() {
                         )}
 
                         <Button
-                            onClick={() => fetchSurveys()}
+                            onClick={() => selectedSurvey ? fetchSurveyAnalytics(selectedSurvey) : fetchSurveys()}
                             variant="outline"
                             size="sm"
                             className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            disabled={loading || analyticsLoading}
                         >
-                            <RefreshCw className="h-4 w-4 mr-2" />
+                            <RefreshCw className={`h-4 w-4 mr-2 ${(loading || analyticsLoading) ? 'animate-spin' : ''}`} />
                             Refresh
                         </Button>
                     </div>
@@ -404,8 +487,8 @@ export default function SurveyAnalytics() {
                                     <Card
                                         key={survey.id}
                                         className={`cursor-pointer transition-all hover:shadow-md border-2 ${selectedSurvey === survey.id
-                                                ? 'border-maroon-400 bg-maroon-50'
-                                                : 'border-beige-200 hover:border-maroon-200'
+                                            ? 'border-maroon-400 bg-maroon-50'
+                                            : 'border-beige-200 hover:border-maroon-200'
                                             }`}
                                         onClick={() => setSelectedSurvey(survey.id)}
                                     >
@@ -486,15 +569,59 @@ export default function SurveyAnalytics() {
                                     <TrendingUp className="h-5 w-5 mr-2" />
                                     Response Trends
                                 </CardTitle>
+                                <CardDescription className="text-maroon-600">
+                                    Daily response activity over time
+                                </CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-center py-8">
-                                    <BarChart3 className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                                    <p className="text-gray-600">Response trend chart would be displayed here</p>
-                                    <p className="text-sm text-gray-500 mt-2">
-                                        Integration with charting library required for visualization
-                                    </p>
+                                <div className="mb-4 flex justify-end">
+                                    <div className="flex items-center space-x-2">
+                                        <label className="text-sm text-gray-600">Chart Type:</label>
+                                        <select
+                                            className="text-sm border border-beige-300 rounded px-2 py-1"
+                                            value={analytics.response_rate_by_date.length > 10 ? 'area' : 'line'}
+                                            onChange={() => {
+                                                // Could add state to control chart type
+                                            }}
+                                        >
+                                            <option value="line">Line Chart</option>
+                                            <option value="area">Area Chart</option>
+                                        </select>
+                                    </div>
                                 </div>
+
+                                <ResponseTrendsChart
+                                    data={analytics.response_rate_by_date}
+                                    height={350}
+                                    showArea={analytics.response_rate_by_date.length > 10}
+                                />
+
+                                {analytics.response_rate_by_date.length > 0 && (
+                                    <div className="mt-4 p-3 bg-beige-50 rounded-lg">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                            <div className="text-center">
+                                                <div className="font-medium text-maroon-700">Peak Day</div>
+                                                <div className="text-gray-600">
+                                                    {analytics.response_rate_by_date.reduce((max, curr) =>
+                                                        curr.responses > max.responses ? curr : max
+                                                    ).date}
+                                                </div>
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="font-medium text-maroon-700">Total Days</div>
+                                                <div className="text-gray-600">
+                                                    {analytics.response_rate_by_date.length} days
+                                                </div>
+                                            </div>
+                                            <div className="text-center">
+                                                <div className="font-medium text-maroon-700">Avg per Day</div>
+                                                <div className="text-gray-600">
+                                                    {Math.round(analytics.response_rate_by_date.reduce((sum, curr) => sum + curr.responses, 0) / analytics.response_rate_by_date.length)} responses
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
 
@@ -506,23 +633,42 @@ export default function SurveyAnalytics() {
                                         <PieChart className="h-5 w-5 mr-2" />
                                         Employment Status Distribution
                                     </CardTitle>
+                                    <CardDescription className="text-maroon-600">
+                                        Breakdown of employment status from survey responses
+                                    </CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="space-y-3">
-                                        {analytics.employment_status_distribution.map((item, index) => (
-                                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                                <div className="flex items-center space-x-3">
-                                                    <div className="w-4 h-4 rounded-full bg-maroon-600"></div>
-                                                    <span className="font-medium text-gray-800">{item.status}</span>
-                                                </div>
-                                                <div className="flex items-center space-x-4">
-                                                    <span className="text-lg font-bold text-maroon-800">{item.count}</span>
-                                                    <Badge className="bg-maroon-100 text-maroon-800">
-                                                        {item.percentage.toFixed(1)}%
-                                                    </Badge>
-                                                </div>
+                                    <div className="mb-4">
+                                        <EmploymentDistributionChart
+                                            data={analytics.employment_status_distribution}
+                                            height={400}
+                                            chartType="pie"
+                                        />
+                                    </div>
+
+                                    {/* Summary stats below the chart */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-beige-200">
+                                        <div className="text-center">
+                                            <div className="text-2xl font-bold text-maroon-800">
+                                                {analytics.employment_status_distribution.length}
                                             </div>
-                                        ))}
+                                            <div className="text-sm text-gray-600">Categories</div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-2xl font-bold text-blue-600">
+                                                {analytics.employment_status_distribution.reduce((sum, item) => sum + item.count, 0)}
+                                            </div>
+                                            <div className="text-sm text-gray-600">Total Responses</div>
+                                        </div>
+                                        <div className="text-center">
+                                            <div className="text-2xl font-bold text-green-600">
+                                                {analytics.employment_status_distribution.length > 0
+                                                    ? analytics.employment_status_distribution.reduce((max, item) => item.count > max.count ? item : max).status.slice(0, 12)
+                                                    : 'N/A'
+                                                }
+                                            </div>
+                                            <div className="text-sm text-gray-600">Most Common</div>
+                                        </div>
                                     </div>
                                 </CardContent>
                             </Card>

@@ -141,16 +141,21 @@ export default function SystemSettings() {
     const clearCache = async () => {
         try {
             const token = localStorage.getItem('auth_token');
-            await fetch('/api/v1/admin/system/cache/clear', {
+            const response = await fetch('/api/v1/admin/system/cache/clear', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',
                 },
             });
-            fetchSettings(); // Refresh stats
+
+            if (response.ok) {
+                fetchSettings(); // Refresh stats
+                alert('Cache cleared successfully');
+            }
         } catch (error) {
             console.error('Clear cache error:', error);
+            alert('Failed to clear cache');
         }
     };
 
@@ -167,16 +172,14 @@ export default function SystemSettings() {
 
             if (response.ok) {
                 const data = await response.json();
-                if (data.success && data.data.backup_url) {
-                    // Download the backup file
-                    const a = document.createElement('a');
-                    a.href = data.data.backup_url;
-                    a.download = `backup-${new Date().toISOString().split('T')[0]}.sql`;
-                    a.click();
+                if (data.success) {
+                    alert(`Backup created successfully: ${data.data.filename} (${data.data.size})`);
+                    fetchSettings(); // Refresh stats
                 }
             }
         } catch (error) {
             console.error('Backup error:', error);
+            alert('Failed to create backup');
         }
     };
 

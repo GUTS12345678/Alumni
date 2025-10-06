@@ -23,9 +23,28 @@ import {
     Calendar,
     Users,
     BarChart3,
-    Clock
+    Clock,
+    X,
+    List
 } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import axios from 'axios';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import QuestionsManager from '@/components/QuestionsManager';
 
 interface Survey {
     id: number;
@@ -41,13 +60,7 @@ interface Survey {
     target_audience: string;
 }
 
-interface SurveyResponse {
-    data: Survey[];
-    current_page: number;
-    last_page: number;
-    per_page: number;
-    total: number;
-}
+
 
 interface User {
     id: number;
@@ -70,38 +83,59 @@ export default function SurveyBank({ user }: Props) {
     const [total, setTotal] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
 
+    // Modal states
+    const [viewModalOpen, setViewModalOpen] = useState(false);
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [questionsModalOpen, setQuestionsModalOpen] = useState(false);
+    const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(null);
+    const [editSurveyForm, setEditSurveyForm] = useState<{
+        title: string;
+        description: string;
+        target_audience: string;
+        status: 'draft' | 'active' | 'closed' | 'archived';
+        start_date: string;
+        end_date: string;
+    }>({
+        title: '',
+        description: '',
+        target_audience: '',
+        status: 'draft',
+        start_date: '',
+        end_date: ''
+    });
+    const [submitting, setSubmitting] = useState(false);
+
     const fetchSurveys = useCallback(async () => {
         try {
             setLoading(currentPage === 1);
             setRefreshing(currentPage !== 1);
+
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
 
             const params = new URLSearchParams();
             if (searchTerm) params.append('search', searchTerm);
             params.append('page', currentPage.toString());
             params.append('per_page', '15');
 
-            const response = await fetch(`/api/v1/admin/surveys?${params}`, {
-                credentials: 'include',
+            const response = await axios.get(`/api/v1/admin/surveys?${params}`, {
                 headers: {
                     'Accept': 'application/json',
-                },
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
             });
 
-            if (!response.ok) {
-                if (response.status === 401) {
-                    window.location.href = '/login';
-                    return;
-                }
-                throw new Error('Failed to fetch surveys data');
-            }
-
-            const data: { success: boolean; data: SurveyResponse } = await response.json();
-
-            if (data.success) {
-                setSurveys(data.data.data);
-                setCurrentPage(data.data.current_page);
-                setTotalPages(data.data.last_page);
-                setTotal(data.data.total);
+            if (response.data.success) {
+                setSurveys(response.data.data.data);
+                setCurrentPage(response.data.data.current_page);
+                setTotalPages(response.data.data.last_page);
+                setTotal(response.data.data.total);
+                setError(null);
             }
         } catch (err) {
             console.error('Surveys fetch error:', err);
@@ -116,33 +150,52 @@ export default function SurveyBank({ user }: Props) {
         fetchSurveys();
     }, [fetchSurveys]);
 
+    // Debounced search effect
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (currentPage !== 1) {
+                setCurrentPage(1);
+            } else {
+                fetchSurveys();
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const handleExport = async () => {
         try {
-            const response = await fetch('/api/v1/admin/surveys/export', {
-                credentials: 'include',
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const response = await axios.get('/api/v1/admin/surveys/export', {
                 headers: {
                     'Accept': 'application/json',
-                },
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
             });
 
-            if (response.ok) {
-                const data = await response.json();
-                if (data.success && data.data.csv_content) {
-                    const csvContent = atob(data.data.csv_content);
-                    const blob = new Blob([csvContent], { type: 'text/csv' });
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = 'surveys-data.csv';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                }
+            if (response.data.success && response.data.data.csv_content) {
+                const csvContent = atob(response.data.data.csv_content);
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `surveys-export-${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                alert('Surveys data exported successfully!');
             }
         } catch (error) {
             console.error('Export error:', error);
+            alert('Failed to export surveys data. Please try again.');
         }
     };
 
@@ -167,6 +220,107 @@ export default function SurveyBank({ user }: Props) {
             month: 'short',
             day: 'numeric'
         });
+    };
+
+    // Action handlers
+    const handleNewSurvey = () => {
+        window.location.href = '/admin/surveys/create';
+    };
+
+    const handleViewSurvey = (survey: Survey) => {
+        setSelectedSurvey(survey);
+        setViewModalOpen(true);
+    };
+
+    const handleEditSurvey = (survey: Survey) => {
+        setSelectedSurvey(survey);
+        setEditSurveyForm({
+            title: survey.title,
+            description: survey.description,
+            target_audience: survey.target_audience,
+            status: survey.status,
+            start_date: survey.start_date || '',
+            end_date: survey.end_date || ''
+        });
+        setEditModalOpen(true);
+    };
+
+    const handleDeleteSurvey = (survey: Survey) => {
+        setSelectedSurvey(survey);
+        setDeleteModalOpen(true);
+    };
+
+
+
+    const handleUpdateSurvey = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedSurvey) return;
+
+        setSubmitting(true);
+
+        try {
+            await axios.get('/sanctum/csrf-cookie');
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const response = await axios.put(`/api/v1/admin/surveys/${selectedSurvey.id}`, editSurveyForm, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            });
+
+            if (response.data.success) {
+                setEditModalOpen(false);
+                fetchSurveys();
+                alert('Survey updated successfully!');
+            }
+        } catch (error: unknown) {
+            console.error('Error updating survey:', error);
+            const axiosError = error as { response?: { data?: { message?: string } } };
+            alert('Error: ' + (axiosError.response?.data?.message || 'Failed to update survey'));
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!selectedSurvey) return;
+
+        setSubmitting(true);
+
+        try {
+            await axios.get('/sanctum/csrf-cookie');
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const response = await axios.delete(`/api/v1/admin/surveys/${selectedSurvey.id}`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            });
+
+            if (response.data.success) {
+                setDeleteModalOpen(false);
+                fetchSurveys();
+                alert('Survey deleted successfully!');
+            }
+        } catch (error: unknown) {
+            console.error('Error deleting survey:', error);
+            const axiosError = error as { response?: { data?: { message?: string } } };
+            alert('Error: ' + (axiosError.response?.data?.message || 'Failed to delete survey'));
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     if (loading) {
@@ -233,6 +387,7 @@ export default function SurveyBank({ user }: Props) {
                         </Button>
 
                         <Button
+                            onClick={handleNewSurvey}
                             className="bg-maroon-700 hover:bg-maroon-800 text-white"
                             size="sm"
                         >
@@ -401,6 +556,7 @@ export default function SurveyBank({ user }: Props) {
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
+                                                        onClick={() => handleViewSurvey(survey)}
                                                         className="text-maroon-700 hover:text-maroon-800 hover:bg-maroon-50"
                                                         title="View Details"
                                                     >
@@ -409,6 +565,7 @@ export default function SurveyBank({ user }: Props) {
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
+                                                        onClick={() => handleEditSurvey(survey)}
                                                         className="text-blue-700 hover:text-blue-800 hover:bg-blue-50"
                                                         title="Edit Survey"
                                                     >
@@ -417,6 +574,7 @@ export default function SurveyBank({ user }: Props) {
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
+                                                        onClick={() => handleDeleteSurvey(survey)}
                                                         className="text-red-700 hover:text-red-800 hover:bg-red-50"
                                                         title="Delete Survey"
                                                     >
@@ -460,6 +618,381 @@ export default function SurveyBank({ user }: Props) {
                         )}
                     </CardContent>
                 </Card>
+
+
+
+                {/* View Survey Modal */}
+                <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
+                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader className="relative">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setViewModalOpen(false)}
+                                className="absolute right-0 top-0 h-8 w-8 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+                            <DialogTitle className="text-xl text-maroon-800 pr-8 flex items-center">
+                                <FileText className="h-5 w-5 mr-2" />
+                                Survey Details
+                            </DialogTitle>
+                            <DialogDescription>
+                                {selectedSurvey?.title}
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        {selectedSurvey && (
+                            <div className="space-y-6">
+                                {/* Survey Information */}
+                                <Card className="border-beige-200">
+                                    <CardHeader>
+                                        <CardTitle className="text-lg text-maroon-800">Survey Information</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-sm font-medium text-gray-600">Title</label>
+                                                <p className="text-sm text-gray-900 mt-1">{selectedSurvey.title}</p>
+                                            </div>
+                                            <div>
+                                                <label className="text-sm font-medium text-gray-600">Status</label>
+                                                <div className="mt-1">
+                                                    {getStatusBadge(selectedSurvey.status)}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="text-sm font-medium text-gray-600">Description</label>
+                                            <p className="text-sm text-gray-900 mt-1">{selectedSurvey.description}</p>
+                                        </div>
+
+                                        <div>
+                                            <label className="text-sm font-medium text-gray-600">Target Audience</label>
+                                            <p className="text-sm text-gray-900 mt-1">{selectedSurvey.target_audience}</p>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="text-sm font-medium text-gray-600">Created</label>
+                                                <p className="text-sm text-gray-900 mt-1">{formatDate(selectedSurvey.created_at)}</p>
+                                            </div>
+                                            <div>
+                                                <label className="text-sm font-medium text-gray-600">Last Updated</label>
+                                                <p className="text-sm text-gray-900 mt-1">{formatDate(selectedSurvey.updated_at)}</p>
+                                            </div>
+                                        </div>
+
+                                        {(selectedSurvey.start_date || selectedSurvey.end_date) && (
+                                            <div className="grid grid-cols-2 gap-4">
+                                                {selectedSurvey.start_date && (
+                                                    <div>
+                                                        <label className="text-sm font-medium text-gray-600">Start Date</label>
+                                                        <p className="text-sm text-gray-900 mt-1">{formatDate(selectedSurvey.start_date)}</p>
+                                                    </div>
+                                                )}
+                                                {selectedSurvey.end_date && (
+                                                    <div>
+                                                        <label className="text-sm font-medium text-gray-600">End Date</label>
+                                                        <p className="text-sm text-gray-900 mt-1">{formatDate(selectedSurvey.end_date)}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+
+                                {/* Statistics */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <Card className="border-beige-200">
+                                        <CardHeader className="pb-3">
+                                            <CardTitle className="text-lg text-maroon-800 flex items-center">
+                                                <Users className="h-5 w-5 mr-2" />
+                                                Responses
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <div className="text-3xl font-bold text-maroon-800">
+                                                {selectedSurvey.responses_count}
+                                            </div>
+                                            <p className="text-sm text-gray-600">Total responses received</p>
+                                        </CardContent>
+                                    </Card>
+
+                                    <Card className="border-beige-200">
+                                        <CardHeader className="pb-3">
+                                            <CardTitle className="text-lg text-maroon-800 flex items-center">
+                                                <BarChart3 className="h-5 w-5 mr-2" />
+                                                Questions
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <div className="text-3xl font-bold text-maroon-800">
+                                                {selectedSurvey.questions_count}
+                                            </div>
+                                            <p className="text-sm text-gray-600">Questions in this survey</p>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="flex justify-end space-x-2 pt-4 border-t">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setViewModalOpen(false);
+                                            setQuestionsModalOpen(true);
+                                        }}
+                                        className="border-green-300 text-green-700 hover:bg-green-50"
+                                    >
+                                        <List className="h-4 w-4 mr-2" />
+                                        Manage Questions
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setViewModalOpen(false);
+                                            handleEditSurvey(selectedSurvey);
+                                        }}
+                                        className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                                    >
+                                        <Edit className="h-4 w-4 mr-2" />
+                                        Edit Survey
+                                    </Button>
+                                    <Button
+                                        onClick={() => setViewModalOpen(false)}
+                                        className="bg-maroon-700 hover:bg-maroon-800"
+                                    >
+                                        Close
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
+
+                {/* Edit Survey Modal */}
+                <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader className="relative">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setEditModalOpen(false)}
+                                className="absolute right-0 top-0 h-8 w-8 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
+                            >
+                                <X className="h-4 w-4" />
+                            </Button>
+                            <DialogTitle className="text-xl text-maroon-800 pr-8">
+                                Edit Survey
+                            </DialogTitle>
+                            <DialogDescription>
+                                Update survey information and settings
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <form onSubmit={handleUpdateSurvey} className="space-y-6">
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700">Survey Title *</label>
+                                    <Input
+                                        value={editSurveyForm.title}
+                                        onChange={(e) => setEditSurveyForm(prev => ({
+                                            ...prev,
+                                            title: e.target.value
+                                        }))}
+                                        placeholder="Enter survey title"
+                                        className="mt-1"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700">Description *</label>
+                                    <Textarea
+                                        value={editSurveyForm.description}
+                                        onChange={(e) => setEditSurveyForm(prev => ({
+                                            ...prev,
+                                            description: e.target.value
+                                        }))}
+                                        placeholder="Describe the purpose and scope of this survey"
+                                        className="mt-1"
+                                        rows={3}
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700">Target Audience *</label>
+                                    <Input
+                                        value={editSurveyForm.target_audience}
+                                        onChange={(e) => setEditSurveyForm(prev => ({
+                                            ...prev,
+                                            target_audience: e.target.value
+                                        }))}
+                                        placeholder="e.g., All Alumni, Class of 2023, Computer Science graduates"
+                                        className="mt-1"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700">Status</label>
+                                    <Select
+                                        value={editSurveyForm.status}
+                                        onValueChange={(value: 'draft' | 'active' | 'closed' | 'archived') =>
+                                            setEditSurveyForm(prev => ({ ...prev, status: value }))
+                                        }
+                                    >
+                                        <SelectTrigger className="mt-1">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="draft">Draft</SelectItem>
+                                            <SelectItem value="active">Active</SelectItem>
+                                            <SelectItem value="closed">Closed</SelectItem>
+                                            <SelectItem value="archived">Archived</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-700">Start Date</label>
+                                        <Input
+                                            type="date"
+                                            value={editSurveyForm.start_date}
+                                            onChange={(e) => setEditSurveyForm(prev => ({
+                                                ...prev,
+                                                start_date: e.target.value
+                                            }))}
+                                            className="mt-1"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-700">End Date</label>
+                                        <Input
+                                            type="date"
+                                            value={editSurveyForm.end_date}
+                                            onChange={(e) => setEditSurveyForm(prev => ({
+                                                ...prev,
+                                                end_date: e.target.value
+                                            }))}
+                                            className="mt-1"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end space-x-2 pt-4 border-t">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => setEditModalOpen(false)}
+                                    disabled={submitting}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    className="bg-maroon-700 hover:bg-maroon-800"
+                                    disabled={submitting}
+                                >
+                                    {submitting ? (
+                                        <>
+                                            <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
+                                            Updating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Edit className="h-4 w-4 mr-2" />
+                                            Update Survey
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Delete Confirmation Modal */}
+                <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
+                    <DialogContent className="max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="text-xl text-red-800">
+                                Delete Survey
+                            </DialogTitle>
+                            <DialogDescription>
+                                Are you sure you want to delete this survey? This action cannot be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        {selectedSurvey && (
+                            <div className="space-y-4">
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                                    <div className="font-medium text-red-800">{selectedSurvey.title}</div>
+                                    <div className="text-sm text-red-600 mt-1">
+                                        {selectedSurvey.responses_count} responses • {selectedSurvey.questions_count} questions
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end space-x-2 pt-4 border-t">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setDeleteModalOpen(false)}
+                                        disabled={submitting}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        onClick={handleConfirmDelete}
+                                        className="bg-red-600 hover:bg-red-700 text-white"
+                                        disabled={submitting}
+                                    >
+                                        {submitting ? (
+                                            <>
+                                                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
+                                                Deleting...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Trash2 className="h-4 w-4 mr-2" />
+                                                Delete Survey
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
+
+                {/* Questions Management Modal */}
+                <Dialog open={questionsModalOpen} onOpenChange={setQuestionsModalOpen}>
+                    <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle className="text-xl text-maroon-800 flex items-center">
+                                <List className="h-5 w-5 mr-2" />
+                                Manage Questions: {selectedSurvey?.title}
+                            </DialogTitle>
+                            <DialogDescription>
+                                Edit, reorder, and manage questions for this survey
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        {selectedSurvey && (
+                            <QuestionsManager
+                                surveyId={selectedSurvey.id.toString()}
+                                onClose={() => setQuestionsModalOpen(false)}
+                                onQuestionsUpdated={() => {
+                                    // Refresh surveys list to update question count
+                                    fetchSurveys();
+                                }}
+                            />
+                        )}
+                    </DialogContent>
+                </Dialog>
             </div>
         </AdminBaseLayout>
     );

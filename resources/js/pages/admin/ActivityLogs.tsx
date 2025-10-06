@@ -85,13 +85,14 @@ export default function ActivityLogs({ user }: Props) {
             // Try multiple possible endpoints
             let response;
             let apiUrl = '';
+            const token = localStorage.getItem('auth_token');
 
             // First try the expected API endpoint
             try {
                 apiUrl = `/api/v1/admin/activity-logs?${params}`;
                 response = await fetch(apiUrl, {
-                    credentials: 'include',
                     headers: {
+                        'Authorization': `Bearer ${token}`,
                         'Accept': 'application/json',
                     },
                 });
@@ -100,8 +101,8 @@ export default function ActivityLogs({ user }: Props) {
                     // Try alternative endpoint
                     apiUrl = `/admin/activity?${params}`;
                     response = await fetch(apiUrl, {
-                        credentials: 'include',
                         headers: {
+                            'Authorization': `Bearer ${token}`,
                             'Accept': 'application/json',
                         },
                     });
@@ -114,41 +115,6 @@ export default function ActivityLogs({ user }: Props) {
             if (!response.ok) {
                 if (response.status === 401) {
                     window.location.href = '/login';
-                    return;
-                }
-
-                // If API endpoint doesn't exist (404), provide mock data for demo
-                if (response.status === 404) {
-                    console.warn('Activity logs API endpoint not found, using mock data');
-                    const mockActivities: ActivityLog[] = [
-                        {
-                            id: 1,
-                            user: { id: 1, name: 'Admin User', email: 'admin@example.com' },
-                            action: 'login',
-                            entity_type: 'User',
-                            entity_id: 1,
-                            description: 'User logged into the system',
-                            ip_address: '127.0.0.1',
-                            user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                            created_at: new Date().toISOString(),
-                        },
-                        {
-                            id: 2,
-                            user: { id: 1, name: 'Admin User', email: 'admin@example.com' },
-                            action: 'view',
-                            entity_type: 'Survey',
-                            entity_id: 2,
-                            description: 'Viewed activity logs page',
-                            ip_address: '127.0.0.1',
-                            user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                            created_at: new Date(Date.now() - 300000).toISOString(), // 5 minutes ago
-                        }
-                    ];
-
-                    setActivities(mockActivities);
-                    setCurrentPage(1);
-                    setTotalPages(1);
-                    setTotal(mockActivities.length);
                     return;
                 }
 

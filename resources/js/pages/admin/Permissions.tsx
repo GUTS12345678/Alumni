@@ -19,6 +19,7 @@ import {
     XCircle
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import { router } from '@inertiajs/react';
 
 interface Permission {
     id: string;
@@ -186,8 +187,8 @@ export default function PermissionsManagement() {
         }
     };
 
-    const deleteRole = async (roleId: string) => {
-        if (!confirm('Are you sure you want to delete this role?')) {
+    const deleteRole = async (roleId: string, roleName: string) => {
+        if (!confirm(`Are you sure you want to delete the "${roleName}" role? This action cannot be undone.`)) {
             return;
         }
 
@@ -203,9 +204,13 @@ export default function PermissionsManagement() {
 
             if (response.ok) {
                 fetchData();
+            } else {
+                const data = await response.json();
+                alert(data.message || 'Failed to delete role');
             }
         } catch (error) {
             console.error('Delete role error:', error);
+            alert('Failed to delete role');
         }
     };
 
@@ -320,7 +325,7 @@ export default function PermissionsManagement() {
 
                     <div className="flex items-center space-x-2">
                         <Button
-                            onClick={() => window.location.href = '/admin/roles/create'}
+                            onClick={() => router.visit('/admin/roles/create')}
                             className="bg-maroon-700 hover:bg-maroon-800 text-white"
                         >
                             <Plus className="h-4 w-4 mr-2" />
@@ -464,7 +469,7 @@ export default function PermissionsManagement() {
                                         {searchTerm ? 'Try adjusting your search' : 'Create your first role to get started'}
                                     </p>
                                     <Button
-                                        onClick={() => window.location.href = '/admin/roles/create'}
+                                        onClick={() => router.visit('/admin/roles/create')}
                                         className="bg-maroon-700 hover:bg-maroon-800 text-white"
                                     >
                                         <Plus className="h-4 w-4 mr-2" />
@@ -506,29 +511,32 @@ export default function PermissionsManagement() {
 
                                                 <div className="flex items-center space-x-2 ml-4">
                                                     <Button
-                                                        onClick={() => window.location.href = `/admin/roles/${role.id}`}
+                                                        onClick={() => router.visit(`/admin/roles/${role.id}`)}
                                                         variant="outline"
                                                         size="sm"
                                                         className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                                        title="View role details"
                                                     >
                                                         <Eye className="h-4 w-4" />
                                                     </Button>
 
                                                     <Button
-                                                        onClick={() => window.location.href = `/admin/roles/${role.id}/edit`}
+                                                        onClick={() => router.visit(`/admin/roles/${role.id}/edit`)}
                                                         variant="outline"
                                                         size="sm"
                                                         className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                                        title="Edit role"
                                                     >
                                                         <Edit className="h-4 w-4" />
                                                     </Button>
 
                                                     {!role.is_default && (
                                                         <Button
-                                                            onClick={() => deleteRole(role.id)}
+                                                            onClick={() => deleteRole(role.id, role.display_name)}
                                                             variant="outline"
                                                             size="sm"
                                                             className="border-red-300 text-red-700 hover:bg-red-50"
+                                                            title="Delete role"
                                                         >
                                                             <Trash2 className="h-4 w-4" />
                                                         </Button>
@@ -648,10 +656,11 @@ export default function PermissionsManagement() {
 
                                                 <div className="flex items-center space-x-2 ml-4">
                                                     <Button
-                                                        onClick={() => window.location.href = `/admin/users/${user.id}/roles`}
+                                                        onClick={() => router.visit(`/admin/users/${user.id}/roles`)}
                                                         variant="outline"
                                                         size="sm"
                                                         className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                                        title="Manage user roles"
                                                     >
                                                         <Settings className="h-4 w-4 mr-2" />
                                                         Manage Roles

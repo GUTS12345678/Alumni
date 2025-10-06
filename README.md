@@ -1,11 +1,106 @@
-# Alumni Tracer System - API Testing with cURL
+# Alumni Tracer System
+
+A comprehensive alumni tracking and engagement platform built with Laravel 11 and React, featuring survey-based registration, role management, and detailed analytics.
+
+---
+
+## 📚 Documentation
+
+**Complete documentation is available in the [`/docs`](./docs) folder.**
+
+👉 **[View Documentation Index](./docs/INDEX.md)** for a complete guide to all available documentation.
+
+### Quick Links:
+- **[Master Plan](./docs/ALUMNI_TRACER_MASTER_PLAN.md)** - Project overview and roadmap
+- **[Deployment Guide](./docs/DEPLOYMENT_GUIDE.md)** - Production deployment instructions
+- **[Database Schema](./docs/DATABASE_SCHEMA.md)** - Complete database documentation
+- **[API Testing Guide](./docs/API_TESTING_GUIDE.md)** - API endpoint testing with cURL
+- **[Feature Documentation](./docs)** - All feature guides and bug fix documentation
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- PHP 8.2+
+- Composer
+- Node.js 18+
+- MySQL 8.0+
+- XAMPP (recommended for local development)
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/GUTS12345678/Alumni.git
+   cd Alumni
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   composer install
+   npm install
+   ```
+
+3. **Configure environment:**
+   ```bash
+   cp .env.example .env
+   php artisan key:generate
+   ```
+
+4. **Set up database:**
+   - Create a MySQL database named `alumni_tracer_system`
+   - Update `.env` with your database credentials
+   - Run migrations:
+     ```bash
+     php artisan migrate --seed
+     ```
+
+5. **Build frontend assets:**
+   ```bash
+   npm run build
+   ```
+
+6. **Start development server:**
+   ```bash
+   php artisan serve
+   ```
+
+7. **Access the application:**
+   - Frontend: `http://127.0.0.1:8000`
+   - API: `http://127.0.0.1:8000/api`
+
+---
+
+## 🎯 Features
+
+### For Alumni
+- ✅ Survey-based registration process
+- ✅ Profile management and updates
+- ✅ Survey participation
+- ✅ Career tracking and updates
+
+### For Administrators
+- ✅ Comprehensive dashboard with analytics
+- ✅ Alumni Bank with advanced filtering
+- ✅ Survey creation and management
+- ✅ User and role management
+- ✅ Activity logging and monitoring
+- ✅ Data export capabilities (CSV)
+- ✅ Batch organization by graduation year
+- ✅ Email template management
+- ✅ System settings configuration
+
+---
+
+## 🧪 API Testing with cURL
 
 A comprehensive guide for testing the Alumni Tracer System API using cURL commands. This system supports both alumni registration flows and comprehensive admin management capabilities.
 
 ## Table of Contents
 
-- [Quick Start](#quick-start)
-- [System Overview](#system-overview)
+- [Quick Start](#quick-start-1)
+- [System Overview](#system-overview-1)
 - [Authentication](#authentication)
 - [Alumni Flow Testing](#alumni-flow-testing)
 - [Admin Dashboard Testing](#admin-dashboard-testing)
@@ -15,7 +110,7 @@ A comprehensive guide for testing the Alumni Tracer System API using cURL comman
 - [Error Handling](#error-handling)
 - [Testing Scenarios](#testing-scenarios)
 
-## Quick Start
+## Quick Start (API Testing)
 
 1. **Start the Laravel development server:**
 
@@ -37,7 +132,7 @@ A comprehensive guide for testing the Alumni Tracer System API using cURL comman
       -d '{"email": "admin@alumnitracer.edu", "password": "password"}'
     ```
 
-## System Overview
+## System Overview (API Capabilities)
 
 The Alumni Tracer System provides:
 

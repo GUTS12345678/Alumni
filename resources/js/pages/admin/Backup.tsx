@@ -44,6 +44,15 @@ export default function BackupManagement() {
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // Helper function to get CSRF token from cookie
+    const getCsrfToken = () => {
+        const csrfCookie = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('XSRF-TOKEN='))
+            ?.split('=')[1];
+        return csrfCookie ? decodeURIComponent(csrfCookie) : '';
+    };
+
     const fetchBackupData = async () => {
         try {
             setLoading(true);
@@ -104,56 +113,94 @@ export default function BackupManagement() {
     const createBackup = async (type: 'full' | 'partial' | 'structure') => {
         try {
             setCreating(true);
+            setError(null);
 
             const token = localStorage.getItem('auth_token');
+
             const response = await fetch('/api/v1/admin/backups', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
+                    'X-XSRF-TOKEN': getCsrfToken(),
                 },
                 body: JSON.stringify({ type }),
             });
 
-            if (response.ok) {
-                const result = await response.json();
-                if (result.success) {
-                    fetchBackupData(); // Refresh the backup list
-                }
+            const result = await response.json();
+            
+            if (response.ok && result.success) {
+                alert(`✅ Backup created successfully!\n\nFilename: ${result.data.filename}\nSize: ${result.data.size}\nType: ${result.data.type}`);
+                fetchBackupData(); // Refresh the backup list
+            } else {
+                setError(result.message || 'Failed to create backup');
+                alert('❌ Failed to create backup: ' + (result.message || 'Unknown error'));
             }
         } catch (error) {
             console.error('Create backup error:', error);
+            setError('Failed to create backup');
+            alert('❌ Failed to create backup. Please check the console for details.');
         } finally {
             setCreating(false);
         }
     };
 
-    const downloadBackup = (backup: BackupFile) => {
-        if (backup.download_url) {
-            const a = document.createElement('a');
-            a.href = backup.download_url;
-            a.download = backup.filename;
-            a.click();
+    const downloadBackup = async (backup: BackupFile) => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch(`/api/v1/admin/backups/download/${backup.filename}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = backup.filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } else {
+                console.error('Download failed:', response.statusText);
+            }
+        } catch (error) {
+            console.error('Download error:', error);
         }
     };
 
     const deleteBackup = async (backupId: string) => {
+        if (!confirm('Are you sure you want to delete this backup? This action cannot be undone.')) {
+            return;
+        }
+
         try {
             const token = localStorage.getItem('auth_token');
+
             const response = await fetch(`/api/v1/admin/backups/${backupId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',
+                    'X-XSRF-TOKEN': getCsrfToken(),
                 },
             });
 
-            if (response.ok) {
+            const result = await response.json();
+            
+            if (response.ok && result.success) {
+                alert('✅ Backup deleted successfully!');
                 fetchBackupData(); // Refresh the backup list
+            } else {
+                alert('❌ Failed to delete backup: ' + (result.message || 'Unknown error'));
             }
         } catch (error) {
             console.error('Delete backup error:', error);
+            alert('❌ Failed to delete backup. Please check the console for details.');
         }
     };
 

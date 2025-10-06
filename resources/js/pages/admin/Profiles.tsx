@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +12,20 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import {
     User,
     Search,
@@ -24,7 +39,8 @@ import {
     RefreshCw,
     Filter,
     Download,
-    Calendar
+    Calendar,
+    X
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 
@@ -78,6 +94,54 @@ export default function Profiles() {
     const [totalPages, setTotalPages] = useState(1);
     const [total, setTotal] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
+
+    // Modal states
+    const [viewModalOpen, setViewModalOpen] = useState(false);
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [selectedProfile, setSelectedProfile] = useState<AlumniProfile | null>(null);
+    interface EditFormData {
+        id?: number;
+        first_name?: string;
+        last_name?: string;
+        student_id?: string;
+        gender?: string;
+        birth_date?: string | null;
+        phone?: string | null;
+        city?: string | null;
+        country?: string | null;
+        degree_program?: string;
+        graduation_year?: number;
+        gpa?: number | null;
+        batch_id?: number | null;
+        employment_status?: string | null;
+        current_job_title?: string | null;
+        current_employer?: string | null;
+        current_salary?: number | null;
+    }
+    const [editFormData, setEditFormData] = useState<EditFormData>({});
+    const [updating, setUpdating] = useState(false);
+    const [batches, setBatches] = useState<Array<{ id: number, name: string }>>([]);
+
+    const fetchBatches = useCallback(async () => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            if (!token) return;
+
+            const response = await axios.get('/api/v1/admin/batches', {
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            });
+
+            if (response.data.success) {
+                setBatches(response.data.data.data || []);
+            }
+        } catch (error) {
+            console.error('Error fetching batches:', error);
+        }
+    }, []);
 
     const fetchProfiles = useCallback(async () => {
         try {
@@ -133,7 +197,8 @@ export default function Profiles() {
 
     useEffect(() => {
         fetchProfiles();
-    }, [fetchProfiles]);
+        fetchBatches();
+    }, [fetchProfiles, fetchBatches]);
 
     const getEmploymentStatusBadge = (status: string) => {
         const statusColors = {
@@ -209,6 +274,93 @@ export default function Profiles() {
             }
         } catch (error) {
             console.error('Export error:', error);
+        }
+    };
+
+    // Profile action handlers
+    const handleViewProfile = (profile: AlumniProfile) => {
+        setSelectedProfile(profile);
+        setViewModalOpen(true);
+    };
+
+    const handleEditProfile = (profile: AlumniProfile) => {
+        setSelectedProfile(profile);
+        setEditFormData({
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+            student_id: profile.student_id,
+            birth_date: profile.birth_date,
+            gender: profile.gender,
+            phone: profile.phone,
+            city: profile.city,
+            country: profile.country,
+            degree_program: profile.degree_program,
+            graduation_year: profile.graduation_year,
+            employment_status: profile.employment_status,
+            current_job_title: profile.current_job_title,
+            current_employer: profile.current_employer,
+            current_salary: profile.current_salary,
+            gpa: profile.gpa,
+            batch_id: profile.batch?.id || null
+        });
+        setEditModalOpen(true);
+    };
+
+    const handleSendEmail = (profile: AlumniProfile) => {
+        const subject = encodeURIComponent('Alumni Tracer - Contact from Admin');
+        const body = encodeURIComponent(`Dear ${profile.first_name} ${profile.last_name},\n\n`);
+        window.location.href = `mailto:${profile.user.email}?subject=${subject}&body=${body}`;
+    };
+
+    const handleUpdateProfile = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedProfile) return;
+
+        setUpdating(true);
+        try {
+            await axios.get('/sanctum/csrf-cookie');
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const response = await axios.put(`/api/v1/admin/profiles/${selectedProfile.id}`, editFormData, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            });
+
+            if (response.data.success) {
+                // Update the profile in the local state
+                setProfiles(profiles.map(p =>
+                    p.id === selectedProfile.id
+                        ? { ...p, ...response.data.data }
+                        : p
+                ));
+                setEditModalOpen(false);
+                setEditFormData({});
+                alert('Profile updated successfully!');
+                // Refresh the data to ensure consistency
+                fetchProfiles();
+            } else {
+                alert('Failed to update profile: ' + response.data.message);
+            }
+        } catch (error: unknown) {
+            console.error('Error updating profile:', error);
+            const axiosError = error as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } };
+            if (axiosError.response?.data?.errors) {
+                const errors = Object.values(axiosError.response.data.errors).flat();
+                alert('Validation errors: ' + errors.join(', '));
+            } else if (axiosError.response?.data?.message) {
+                alert('Error: ' + axiosError.response.data.message);
+            } else {
+                alert('Failed to update profile. Please try again.');
+            }
+        } finally {
+            setUpdating(false);
         }
     };
 
@@ -477,11 +629,12 @@ export default function Profiles() {
                                                 </div>
                                             </TableCell>
                                             <TableCell>
-                                                <div className="flex items-center space-x-1">
+                                                <div className="flex items-center justify-end space-x-1">
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="text-maroon-700 hover:text-maroon-800 hover:bg-maroon-50"
+                                                        onClick={() => handleViewProfile(profile)}
+                                                        className="text-maroon-700 hover:text-maroon-800 hover:bg-maroon-50 h-8 w-8 p-0 rounded-full transition-colors"
                                                         title="View Full Profile"
                                                     >
                                                         <Eye className="h-4 w-4" />
@@ -489,7 +642,8 @@ export default function Profiles() {
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+                                                        onClick={() => handleEditProfile(profile)}
+                                                        className="text-blue-700 hover:text-blue-800 hover:bg-blue-50 h-8 w-8 p-0 rounded-full transition-colors"
                                                         title="Edit Profile"
                                                     >
                                                         <Edit className="h-4 w-4" />
@@ -497,7 +651,8 @@ export default function Profiles() {
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="text-green-700 hover:text-green-800 hover:bg-green-50"
+                                                        onClick={() => handleSendEmail(profile)}
+                                                        className="text-green-700 hover:text-green-800 hover:bg-green-50 h-8 w-8 p-0 rounded-full transition-colors"
                                                         title="Send Email"
                                                     >
                                                         <Mail className="h-4 w-4" />
@@ -540,6 +695,554 @@ export default function Profiles() {
                         )}
                     </CardContent>
                 </Card>
+
+                {/* View Profile Modal */}
+                <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
+                    <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0">
+                        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4">
+                            <DialogHeader className="relative">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setViewModalOpen(false)}
+                                    className="absolute right-0 top-0 h-8 w-8 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
+                                >
+                                    <X className="h-4 w-4" />
+                                </Button>
+                                <DialogTitle className="text-xl text-maroon-800 pr-10 flex items-center">
+                                    <User className="h-5 w-5 mr-2" />
+                                    Alumni Profile Details
+                                </DialogTitle>
+                                <DialogDescription className="text-gray-600 mt-1">
+                                    Complete profile information for {selectedProfile?.first_name} {selectedProfile?.last_name}
+                                </DialogDescription>
+                            </DialogHeader>
+                        </div>
+                        <div className="px-6 py-4">
+
+                            {selectedProfile && (
+                                <div className="space-y-6">
+                                    {/* Personal Information */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <Card className="border-beige-200">
+                                            <CardHeader className="pb-3">
+                                                <CardTitle className="text-lg text-maroon-800 flex items-center">
+                                                    <User className="h-5 w-5 mr-2" />
+                                                    Personal Information
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-3">
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-600">Full Name</label>
+                                                    <p className="text-sm text-gray-900">
+                                                        {selectedProfile.first_name} {selectedProfile.last_name}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-600">Student ID</label>
+                                                    <p className="text-sm text-gray-900">{selectedProfile.student_id}</p>
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-600">Gender</label>
+                                                    <p className="text-sm text-gray-900">{selectedProfile.gender}</p>
+                                                </div>
+                                                {selectedProfile.birth_date && (
+                                                    <div>
+                                                        <label className="text-sm font-medium text-gray-600">Birth Date</label>
+                                                        <p className="text-sm text-gray-900">
+                                                            {new Date(selectedProfile.birth_date).toLocaleDateString()}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+
+                                        <Card className="border-beige-200">
+                                            <CardHeader className="pb-3">
+                                                <CardTitle className="text-lg text-maroon-800 flex items-center">
+                                                    <Mail className="h-5 w-5 mr-2" />
+                                                    Contact Information
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-3">
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-600">Email</label>
+                                                    <p className="text-sm text-gray-900 flex items-center">
+                                                        <Mail className="h-3 w-3 mr-1" />
+                                                        {selectedProfile.user.email}
+                                                    </p>
+                                                </div>
+                                                {selectedProfile.phone && (
+                                                    <div>
+                                                        <label className="text-sm font-medium text-gray-600">Phone</label>
+                                                        <p className="text-sm text-gray-900 flex items-center">
+                                                            <Phone className="h-3 w-3 mr-1" />
+                                                            {selectedProfile.phone}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                                {selectedProfile.city && (
+                                                    <div>
+                                                        <label className="text-sm font-medium text-gray-600">Location</label>
+                                                        <p className="text-sm text-gray-900 flex items-center">
+                                                            <MapPin className="h-3 w-3 mr-1" />
+                                                            {selectedProfile.city}, {selectedProfile.country}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+
+                                    {/* Academic Information */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <Card className="border-beige-200">
+                                            <CardHeader className="pb-3">
+                                                <CardTitle className="text-lg text-maroon-800 flex items-center">
+                                                    <GraduationCap className="h-5 w-5 mr-2" />
+                                                    Academic Details
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-3">
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-600">Degree Program</label>
+                                                    <p className="text-sm text-gray-900">{selectedProfile.degree_program}</p>
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-600">Graduation Year</label>
+                                                    <p className="text-sm text-gray-900">Class of {selectedProfile.graduation_year}</p>
+                                                </div>
+                                                {selectedProfile.gpa && (
+                                                    <div>
+                                                        <label className="text-sm font-medium text-gray-600">GPA</label>
+                                                        <p className="text-sm text-gray-900">{selectedProfile.gpa}</p>
+                                                    </div>
+                                                )}
+                                                {selectedProfile.batch && (
+                                                    <div>
+                                                        <label className="text-sm font-medium text-gray-600">Batch</label>
+                                                        <p className="text-sm text-gray-900">{selectedProfile.batch.name}</p>
+                                                    </div>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+
+                                        <Card className="border-beige-200">
+                                            <CardHeader className="pb-3">
+                                                <CardTitle className="text-lg text-maroon-800 flex items-center">
+                                                    <Briefcase className="h-5 w-5 mr-2" />
+                                                    Employment Information
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="space-y-3">
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-600">Employment Status</label>
+                                                    <div className="mt-1">
+                                                        {getEmploymentStatusBadge(selectedProfile.employment_status)}
+                                                    </div>
+                                                </div>
+                                                {selectedProfile.current_job_title && (
+                                                    <div>
+                                                        <label className="text-sm font-medium text-gray-600">Job Title</label>
+                                                        <p className="text-sm text-gray-900">{selectedProfile.current_job_title}</p>
+                                                    </div>
+                                                )}
+                                                {selectedProfile.current_employer && (
+                                                    <div>
+                                                        <label className="text-sm font-medium text-gray-600">Current Employer</label>
+                                                        <p className="text-sm text-gray-900">{selectedProfile.current_employer}</p>
+                                                    </div>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+
+                                    {/* Profile Status */}
+                                    <Card className="border-beige-200">
+                                        <CardHeader className="pb-3">
+                                            <CardTitle className="text-lg text-maroon-800">Profile Status</CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-600">Completion Status</p>
+                                                    <div className="mt-1">
+                                                        {getProfileCompletionBadge(selectedProfile.profile_completed)}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-600">Registration Date</p>
+                                                    <p className="text-sm text-gray-900">{formatDate(selectedProfile.created_at)}</p>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
+                                        <div className="flex flex-1 gap-2">
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => handleSendEmail(selectedProfile)}
+                                                className="flex-1 border-green-300 text-green-700 hover:bg-green-50 hover:border-green-400"
+                                            >
+                                                <Mail className="h-4 w-4 mr-2" />
+                                                Send Email
+                                            </Button>
+                                            <Button
+                                                onClick={() => {
+                                                    setViewModalOpen(false);
+                                                    handleEditProfile(selectedProfile);
+                                                }}
+                                                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                                            >
+                                                <Edit className="h-4 w-4 mr-2" />
+                                                Edit Profile
+                                            </Button>
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => setViewModalOpen(false)}
+                                            className="sm:w-auto border-gray-300 text-gray-600 hover:bg-gray-50"
+                                        >
+                                            Close
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Edit Profile Modal */}
+                <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0">
+                        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4">
+                            <DialogHeader className="relative">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setEditModalOpen(false)}
+                                    className="absolute right-0 top-0 h-8 w-8 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
+                                >
+                                    <X className="h-4 w-4" />
+                                </Button>
+                                <DialogTitle className="text-xl text-maroon-800 pr-10 flex items-center">
+                                    <Edit className="h-5 w-5 mr-2" />
+                                    Edit Alumni Profile
+                                </DialogTitle>
+                                <DialogDescription className="text-gray-600 mt-1">
+                                    Update profile information for {selectedProfile?.first_name} {selectedProfile?.last_name}
+                                </DialogDescription>
+                            </DialogHeader>
+                        </div>
+                        <div className="px-6 py-4">
+
+                            {selectedProfile && (
+                                <form onSubmit={handleUpdateProfile} className="space-y-6">
+                                    {/* Personal Information */}
+                                    <Card className="border-beige-200">
+                                        <CardHeader className="pb-3">
+                                            <CardTitle className="text-lg text-maroon-800">Personal Information</CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="space-y-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">First Name</label>
+                                                    <Input
+                                                        name="first_name"
+                                                        value={editFormData.first_name}
+                                                        onChange={(e) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            first_name: e.target.value
+                                                        }))}
+                                                        className="mt-1"
+                                                        required
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">Last Name</label>
+                                                    <Input
+                                                        name="last_name"
+                                                        value={editFormData.last_name}
+                                                        onChange={(e) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            last_name: e.target.value
+                                                        }))}
+                                                        className="mt-1"
+                                                        required
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">Student ID</label>
+                                                    <Input
+                                                        name="student_id"
+                                                        value={editFormData.student_id}
+                                                        onChange={(e) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            student_id: e.target.value
+                                                        }))}
+                                                        className="mt-1"
+                                                        required
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">Gender</label>
+                                                    <Select
+                                                        value={editFormData.gender}
+                                                        onValueChange={(value) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            gender: value
+                                                        }))}
+                                                    >
+                                                        <SelectTrigger className="mt-1">
+                                                            <SelectValue placeholder="Select gender" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="Male">Male</SelectItem>
+                                                            <SelectItem value="Female">Female</SelectItem>
+                                                            <SelectItem value="Other">Other</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">Birth Date</label>
+                                                    <Input
+                                                        type="date"
+                                                        name="birth_date"
+                                                        value={editFormData.birth_date || ''}
+                                                        onChange={(e) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            birth_date: e.target.value
+                                                        }))}
+                                                        className="mt-1"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">Phone</label>
+                                                    <Input
+                                                        name="phone"
+                                                        value={editFormData.phone || ''}
+                                                        onChange={(e) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            phone: e.target.value
+                                                        }))}
+                                                        className="mt-1"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Location Information */}
+                                    <Card className="border-beige-200">
+                                        <CardHeader className="pb-3">
+                                            <CardTitle className="text-lg text-maroon-800">Location Information</CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="space-y-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">City</label>
+                                                    <Input
+                                                        name="city"
+                                                        value={editFormData.city || ''}
+                                                        onChange={(e) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            city: e.target.value
+                                                        }))}
+                                                        className="mt-1"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">Country</label>
+                                                    <Input
+                                                        name="country"
+                                                        value={editFormData.country || ''}
+                                                        onChange={(e) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            country: e.target.value
+                                                        }))}
+                                                        className="mt-1"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Academic Information */}
+                                    <Card className="border-beige-200">
+                                        <CardHeader className="pb-3">
+                                            <CardTitle className="text-lg text-maroon-800">Academic Information</CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="space-y-4">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">Degree Program</label>
+                                                    <Input
+                                                        name="degree_program"
+                                                        value={editFormData.degree_program}
+                                                        onChange={(e) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            degree_program: e.target.value
+                                                        }))}
+                                                        className="mt-1"
+                                                        required
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">Graduation Year</label>
+                                                    <Input
+                                                        type="number"
+                                                        name="graduation_year"
+                                                        value={editFormData.graduation_year}
+                                                        onChange={(e) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            graduation_year: parseInt(e.target.value)
+                                                        }))}
+                                                        className="mt-1"
+                                                        min="1900"
+                                                        max={new Date().getFullYear()}
+                                                        required
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">GPA</label>
+                                                    <Input
+                                                        type="number"
+                                                        step="0.01"
+                                                        name="gpa"
+                                                        value={editFormData.gpa || ''}
+                                                        onChange={(e) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            gpa: e.target.value ? parseFloat(e.target.value) : null
+                                                        }))}
+                                                        className="mt-1"
+                                                        min="0"
+                                                        max="4"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">Batch</label>
+                                                    <Select
+                                                        value={editFormData.batch_id?.toString() || 'none'}
+                                                        onValueChange={(value) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            batch_id: value === 'none' ? null : parseInt(value)
+                                                        }))}
+                                                    >
+                                                        <SelectTrigger className="mt-1">
+                                                            <SelectValue placeholder="Select batch" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="none">No Batch</SelectItem>
+                                                            {batches.map((batch) => (
+                                                                <SelectItem key={batch.id} value={batch.id.toString()}>
+                                                                    {batch.name}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Employment Information */}
+                                    <Card className="border-beige-200">
+                                        <CardHeader className="pb-3">
+                                            <CardTitle className="text-lg text-maroon-800">Employment Information</CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="space-y-4">
+                                            <div>
+                                                <label className="text-sm font-medium text-gray-700">Employment Status</label>
+                                                <Select
+                                                    value={editFormData.employment_status || ''}
+                                                    onValueChange={(value) => setEditFormData((prev: EditFormData) => ({
+                                                        ...prev,
+                                                        employment_status: value
+                                                    }))}
+                                                >
+                                                    <SelectTrigger className="mt-1">
+                                                        <SelectValue placeholder="Select employment status" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="Employed">Employed</SelectItem>
+                                                        <SelectItem value="Self-employed">Self-employed</SelectItem>
+                                                        <SelectItem value="Unemployed">Unemployed</SelectItem>
+                                                        <SelectItem value="Student">Student</SelectItem>
+                                                        <SelectItem value="Retired">Retired</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">Current Job Title</label>
+                                                    <Input
+                                                        name="current_job_title"
+                                                        value={editFormData.current_job_title || ''}
+                                                        onChange={(e) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            current_job_title: e.target.value
+                                                        }))}
+                                                        className="mt-1"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-700">Current Employer</label>
+                                                    <Input
+                                                        name="current_employer"
+                                                        value={editFormData.current_employer || ''}
+                                                        onChange={(e) => setEditFormData((prev: EditFormData) => ({
+                                                            ...prev,
+                                                            current_employer: e.target.value
+                                                        }))}
+                                                        className="mt-1"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex flex-col-reverse sm:flex-row gap-3 pt-6 border-t border-gray-200">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => setEditModalOpen(false)}
+                                            disabled={updating}
+                                            className="sm:w-auto border-gray-300 text-gray-600 hover:bg-gray-50"
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            type="submit"
+                                            className="bg-maroon-700 hover:bg-maroon-800 text-white sm:ml-auto min-w-[140px]"
+                                            disabled={updating}
+                                        >
+                                            {updating ? (
+                                                <>
+                                                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
+                                                    Updating...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Edit className="h-4 w-4 mr-2" />
+                                                    Update Profile
+                                                </>
+                                            )}
+                                        </Button>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </div>
         </AdminBaseLayout>
     );

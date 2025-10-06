@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import axios from 'axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +12,20 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import {
     GraduationCap,
     Search,
@@ -64,6 +79,18 @@ export default function Batches({ user }: Props) {
     const [totalPages, setTotalPages] = useState(1);
     const [total, setTotal] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
+
+    // Modal states
+    const [addModalOpen, setAddModalOpen] = useState(false);
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
+    const [formData, setFormData] = useState({
+        name: '',
+        graduation_year: new Date().getFullYear(),
+        description: '',
+        status: 'active' as 'active' | 'inactive' | 'archived'
+    });
+    const [saving, setSaving] = useState(false);
 
     const fetchBatches = useCallback(async () => {
         try {
@@ -143,6 +170,123 @@ export default function Batches({ user }: Props) {
         });
     };
 
+    // Batch management handlers
+    const handleAddBatch = () => {
+        setFormData({
+            name: '',
+            graduation_year: new Date().getFullYear(),
+            description: '',
+            status: 'active'
+        });
+        setSelectedBatch(null);
+        setAddModalOpen(true);
+    };
+
+    const handleEditBatch = (batch: Batch) => {
+        setFormData({
+            name: batch.name,
+            graduation_year: batch.graduation_year,
+            description: batch.description,
+            status: batch.status
+        });
+        setSelectedBatch(batch);
+        setEditModalOpen(true);
+    };
+
+    const handleDeleteBatch = async (batch: Batch) => {
+        if (!confirm(`Are you sure you want to delete "${batch.name}"? This action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const response = await axios.delete(`/api/v1/admin/batches/${batch.id}`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            });
+
+            if (response.data.success) {
+                setBatches(batches.filter(b => b.id !== batch.id));
+                setTotal(total - 1);
+                alert(response.data.message);
+            } else {
+                alert('Failed to delete batch: ' + response.data.message);
+            }
+        } catch (error: unknown) {
+            console.error('Delete error:', error);
+            const axiosError = error as { response?: { data?: { message?: string } } };
+            if (axiosError.response?.data?.message) {
+                alert('Error: ' + axiosError.response.data.message);
+            } else {
+                alert('Failed to delete batch. Please try again.');
+            }
+        }
+    };
+
+    const handleSaveBatch = async () => {
+        if (!formData.name.trim()) {
+            alert('Please enter a batch name');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const isEdit = selectedBatch !== null;
+            const url = isEdit
+                ? `/api/v1/admin/batches/${selectedBatch.id}`
+                : '/api/v1/admin/batches';
+            const method = isEdit ? 'put' : 'post';
+
+            const response = await axios[method](url, formData, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            });
+
+            if (response.data.success) {
+                if (isEdit) {
+                    setBatches(batches.map(b =>
+                        b.id === selectedBatch.id ? response.data.data : b
+                    ));
+                    setEditModalOpen(false);
+                } else {
+                    setBatches([response.data.data, ...batches]);
+                    setTotal(total + 1);
+                    setAddModalOpen(false);
+                }
+                alert(response.data.message);
+            } else {
+                alert('Failed to save batch: ' + response.data.message);
+            }
+        } catch (error: unknown) {
+            console.error('Save error:', error);
+            const axiosError = error as { response?: { data?: { message?: string } } };
+            if (axiosError.response?.data?.message) {
+                alert('Error: ' + axiosError.response.data.message);
+            } else {
+                alert('Failed to save batch. Please try again.');
+            }
+        } finally {
+            setSaving(false);
+        }
+    };
+
     if (loading) {
         return (
             <AdminBaseLayout title="Batch Management" user={user}>
@@ -197,6 +341,7 @@ export default function Batches({ user }: Props) {
                         </Button>
 
                         <Button
+                            onClick={handleAddBatch}
                             className="bg-maroon-700 hover:bg-maroon-800 text-white"
                             size="sm"
                         >
@@ -354,6 +499,7 @@ export default function Batches({ user }: Props) {
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
+                                                        onClick={() => handleEditBatch(batch)}
                                                         className="text-blue-700 hover:text-blue-800 hover:bg-blue-50"
                                                         title="Edit Batch"
                                                     >
@@ -371,6 +517,7 @@ export default function Batches({ user }: Props) {
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
+                                                        onClick={() => handleDeleteBatch(batch)}
                                                         className="text-red-700 hover:text-red-800 hover:bg-red-50"
                                                         title="Delete Batch"
                                                     >
@@ -414,6 +561,170 @@ export default function Batches({ user }: Props) {
                         )}
                     </CardContent>
                 </Card>
+
+                {/* Add Batch Modal */}
+                <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
+                    <DialogContent className="max-w-lg">
+                        <DialogHeader>
+                            <DialogTitle className="text-xl text-maroon-800">
+                                Add New Batch
+                            </DialogTitle>
+                            <DialogDescription>
+                                Create a new graduation batch/cohort
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-sm font-medium text-gray-700">Batch Name</label>
+                                <Input
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    placeholder="e.g., Class of 2025"
+                                    className="mt-1"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-medium text-gray-700">Graduation Year</label>
+                                <Input
+                                    type="number"
+                                    value={formData.graduation_year}
+                                    onChange={(e) => setFormData({ ...formData, graduation_year: parseInt(e.target.value) })}
+                                    min="1900"
+                                    max="2050"
+                                    className="mt-1"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-medium text-gray-700">Description</label>
+                                <Input
+                                    value={formData.description}
+                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    placeholder="Brief description (optional)"
+                                    className="mt-1"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-medium text-gray-700">Status</label>
+                                <Select
+                                    value={formData.status}
+                                    onValueChange={(value: 'active' | 'inactive' | 'archived') => setFormData({ ...formData, status: value })}
+                                >
+                                    <SelectTrigger className="mt-1">
+                                        <SelectValue placeholder="Select status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="active">Active</SelectItem>
+                                        <SelectItem value="inactive">Inactive</SelectItem>
+                                        <SelectItem value="archived">Archived</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="flex justify-end space-x-2 pt-4 border-t">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setAddModalOpen(false)}
+                                    disabled={saving}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={handleSaveBatch}
+                                    disabled={saving}
+                                    className="bg-maroon-700 hover:bg-maroon-800"
+                                >
+                                    {saving ? 'Creating...' : 'Create Batch'}
+                                </Button>
+                            </div>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Edit Batch Modal */}
+                <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+                    <DialogContent className="max-w-lg">
+                        <DialogHeader>
+                            <DialogTitle className="text-xl text-maroon-800">
+                                Edit Batch
+                            </DialogTitle>
+                            <DialogDescription>
+                                Update batch information
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-sm font-medium text-gray-700">Batch Name</label>
+                                <Input
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    placeholder="e.g., Class of 2025"
+                                    className="mt-1"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-medium text-gray-700">Graduation Year</label>
+                                <Input
+                                    type="number"
+                                    value={formData.graduation_year}
+                                    onChange={(e) => setFormData({ ...formData, graduation_year: parseInt(e.target.value) })}
+                                    min="1900"
+                                    max="2050"
+                                    className="mt-1"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-medium text-gray-700">Description</label>
+                                <Input
+                                    value={formData.description}
+                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    placeholder="Brief description (optional)"
+                                    className="mt-1"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-medium text-gray-700">Status</label>
+                                <Select
+                                    value={formData.status}
+                                    onValueChange={(value: 'active' | 'inactive' | 'archived') => setFormData({ ...formData, status: value })}
+                                >
+                                    <SelectTrigger className="mt-1">
+                                        <SelectValue placeholder="Select status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="active">Active</SelectItem>
+                                        <SelectItem value="inactive">Inactive</SelectItem>
+                                        <SelectItem value="archived">Archived</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="flex justify-end space-x-2 pt-4 border-t">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setEditModalOpen(false)}
+                                    disabled={saving}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    onClick={handleSaveBatch}
+                                    disabled={saving}
+                                    className="bg-maroon-700 hover:bg-maroon-800"
+                                >
+                                    {saving ? 'Updating...' : 'Update Batch'}
+                                </Button>
+                            </div>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </div>
         </AdminBaseLayout>
     );

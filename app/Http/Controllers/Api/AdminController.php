@@ -10,6 +10,8 @@ use App\Models\Survey;
 use App\Models\SurveyResponse;
 use App\Models\SurveyAnswer;
 use App\Models\ActivityLog;
+use App\Models\EmailTemplate;
+use App\Models\AdminSetting;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -631,22 +633,249 @@ class AdminController extends Controller
     /**
      * Get all batches with alumni counts
      */
-    public function getBatches(): JsonResponse
+    public function getBatches(Request $request): JsonResponse
     {
         try {
-            $batches = Batch::withCount('alumniProfiles')
+            $perPage = (int) $request->get('per_page', 15);
+            $search = $request->get('search');
+
+            $query = Batch::withCount(['alumniProfiles as alumni_count'])
                 ->orderBy('graduation_year', 'desc')
-                ->orderBy('name')
-                ->get();
+                ->orderBy('name');
+
+            // Apply search filter
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                      ->orWhere('graduation_year', 'like', "%{$search}%")
+                      ->orWhere('description', 'like', "%{$search}%");
+                });
+            }
+
+            $batches = $query->paginate($perPage);
 
             return response()->json([
                 'success' => true,
-                'data' => $batches
+                'data' => [
+                    'data' => $batches->items(),
+                    'current_page' => $batches->currentPage(),
+                    'last_page' => $batches->lastPage(),
+                    'per_page' => $batches->perPage(),
+                    'total' => $batches->total(),
+                    'from' => $batches->firstItem(),
+                    'to' => $batches->lastItem(),
+                ]
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch batches',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Create a new batch
+     */
+    public function createBatch(Request $request): JsonResponse
+    {
+        try {
+            $validatedData = $request->validate([
+                'name' => 'required|string|max:255',
+                'graduation_year' => 'required|integer|min:1900|max:2050',
+                'description' => 'nullable|string|max:1000',
+                'status' => 'required|in:active,inactive,archived'
+            ]);
+
+            // Check if batch with same name and year already exists
+            $existingBatch = Batch::where('name', $validatedData['name'])
+                ->where('graduation_year', $validatedData['graduation_year'])
+                ->first();
+
+            if ($existingBatch) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'A batch with this name and graduation year already exists'
+                ], 422);
+            }
+
+            $batch = Batch::create($validatedData);
+
+            // Load alumni count
+            $batch->loadCount(['alumniProfiles as alumni_count']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $batch,
+                'message' => 'Batch created successfully'
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create batch',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update batch
+     */
+    public function updateBatch(Request $request, $id): JsonResponse
+    {
+        try {
+            $batch = Batch::findOrFail($id);
+
+            $validatedData = $request->validate([
+                'name' => 'sometimes|string|max:255',
+                'graduation_year' => 'sometimes|integer|min:1900|max:2050',
+                'description' => 'nullable|string|max:1000',
+                'status' => 'sometimes|in:active,inactive,archived'
+            ]);
+
+            // Check for unique name/year combination if being updated
+            if (isset($validatedData['name']) || isset($validatedData['graduation_year'])) {
+                $name = $validatedData['name'] ?? $batch->name;
+                $year = $validatedData['graduation_year'] ?? $batch->graduation_year;
+
+                $existingBatch = Batch::where('name', $name)
+                    ->where('graduation_year', $year)
+                    ->where('id', '!=', $id)
+                    ->first();
+
+                if ($existingBatch) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'A batch with this name and graduation year already exists'
+                    ], 422);
+                }
+            }
+
+            $batch->update($validatedData);
+
+            // Load alumni count
+            $batch->loadCount(['alumniProfiles as alumni_count']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $batch,
+                'message' => 'Batch updated successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update batch',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete batch
+     */
+    public function deleteBatch($id): JsonResponse
+    {
+        try {
+            $batch = Batch::findOrFail($id);
+
+            // Check if batch has any alumni profiles
+            $alumniCount = $batch->alumniProfiles()->count();
+            if ($alumniCount > 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Cannot delete batch. It has {$alumniCount} alumni profiles associated with it."
+                ], 422);
+            }
+
+            $batchName = $batch->name;
+            $batch->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Batch '{$batchName}' deleted successfully"
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete batch',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update alumni profile
+     */
+    public function updateAlumni(Request $request, $id): JsonResponse
+    {
+        try {
+            $alumni = AlumniProfile::findOrFail($id);
+
+            $validatedData = $request->validate([
+                'first_name' => 'sometimes|string|max:255',
+                'last_name' => 'sometimes|string|max:255',
+                'phone' => 'sometimes|nullable|string|max:20',
+                'degree_program' => 'sometimes|string|max:255',
+                'graduation_year' => 'sometimes|integer|min:1900|max:' . (date('Y') + 10),
+                'employment_status' => 'sometimes|in:employed,unemployed,self-employed,pursuing_education,not_specified',
+                'current_employer' => 'sometimes|nullable|string|max:255',
+                'current_job_title' => 'sometimes|nullable|string|max:255',
+            ]);
+
+            $alumni->update($validatedData);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Alumni profile updated successfully',
+                'data' => $alumni->load(['user:id,email', 'batch:id,name,graduation_year'])
+            ]);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Alumni not found'
+            ], 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update alumni profile',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete alumni profile
+     */
+    public function deleteAlumni($id): JsonResponse
+    {
+        try {
+            $alumni = AlumniProfile::findOrFail($id);
+            $alumniName = $alumni->first_name . ' ' . $alumni->last_name;
+            
+            $alumni->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Alumni profile for {$alumniName} has been deleted successfully"
+            ]);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Alumni not found'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete alumni profile',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -796,7 +1025,7 @@ class AdminController extends Controller
                 'description' => 'nullable|string',
                 'instructions' => 'nullable|string',
                 'type' => 'required|in:registration,follow_up,annual,custom',
-                'status' => 'required|in:draft,active,paused,closed',
+                'status' => 'required|in:draft,active,inactive,archived',
                 'start_date' => 'nullable|date',
                 'end_date' => 'nullable|date|after:start_date',
                 'target_batches' => 'nullable|array',
@@ -859,7 +1088,7 @@ class AdminController extends Controller
                 'description' => 'nullable|string',
                 'instructions' => 'nullable|string',
                 'type' => 'sometimes|required|in:registration,follow_up,annual,custom',
-                'status' => 'sometimes|required|in:draft,active,paused,closed',
+                'status' => 'sometimes|required|in:draft,active,inactive,archived',
                 'start_date' => 'nullable|date',
                 'end_date' => 'nullable|date|after:start_date',
                 'target_batches' => 'nullable|array',
@@ -1396,7 +1625,53 @@ class AdminController extends Controller
     public function getUsers(Request $request): JsonResponse
     {
         try {
-            $users = User::orderBy('created_at', 'desc')->get();
+            $query = User::with('alumniProfile:id,user_id,first_name,last_name,phone')
+                ->orderBy('created_at', 'desc');
+
+            // Search filter
+            if ($request->has('search') && $request->search) {
+                $search = $request->search;
+                $query->where(function($q) use ($search) {
+                    $q->where('email', 'like', "%{$search}%")
+                      ->orWhere('name', 'like', "%{$search}%")
+                      ->orWhereHas('alumniProfile', function($profileQuery) use ($search) {
+                          $profileQuery->where('first_name', 'like', "%{$search}%")
+                                      ->orWhere('last_name', 'like', "%{$search}%");
+                      });
+                });
+            }
+
+            // Role filter
+            if ($request->has('role') && $request->role !== 'all') {
+                $query->where('role', $request->role);
+            }
+
+            // Status filter
+            if ($request->has('status') && $request->status !== 'all') {
+                $query->where('status', $request->status);
+            }
+
+            // Pagination
+            $perPage = $request->get('per_page', 15);
+            $users = $query->paginate($perPage);
+
+            // Transform data for frontend compatibility
+            $users->getCollection()->transform(function ($user) {
+                // Ensure name field exists (use email as fallback)
+                if (!$user->name) {
+                    $user->name = $user->email;
+                }
+                
+                // Map alumniProfile to profile for frontend
+                if ($user->alumniProfile) {
+                    $user->profile = $user->alumniProfile;
+                }
+                
+                // Remove alumniProfile to avoid confusion
+                unset($user->alumniProfile);
+                
+                return $user;
+            });
             
             return response()->json([
                 'success' => true,
@@ -1412,12 +1687,239 @@ class AdminController extends Controller
     }
 
     /**
+     * Update user information
+     */
+    public function updateUser(Request $request, $id): JsonResponse
+    {
+        try {
+            $user = User::findOrFail($id);
+
+            $validated = $request->validate([
+                'name' => 'sometimes|string|max:255',
+                'email' => 'sometimes|email|unique:users,email,' . $id,
+                'role' => 'sometimes|in:admin,alumni',
+                'status' => 'sometimes|in:active,inactive,pending',
+            ]);
+
+            $user->update($validated);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'User updated successfully',
+                'data' => $user
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update user',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update user status
+     */
+    public function updateUserStatus(Request $request, $id): JsonResponse
+    {
+        try {
+            $user = User::findOrFail($id);
+
+            $validated = $request->validate([
+                'status' => 'required|in:active,inactive,pending',
+            ]);
+
+            $user->update(['status' => $validated['status']]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'User status updated successfully',
+                'data' => $user
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update user status',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete user
+     */
+    public function deleteUser($id): JsonResponse
+    {
+        try {
+            $user = User::findOrFail($id);
+            
+            // Prevent deleting yourself
+            if ($user->id === auth()->id()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You cannot delete your own account'
+                ], 403);
+            }
+
+            $user->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'User deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete user',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Reset user password
+     */
+    public function resetUserPassword($id): JsonResponse
+    {
+        try {
+            $user = User::findOrFail($id);
+            
+            // Generate password reset token
+            $token = app('auth.password.broker')->createToken($user);
+            
+            // Send password reset email
+            $user->sendPasswordResetNotification($token);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Password reset email sent to ' . $user->email
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send password reset email',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Create a new user
+     */
+    public function createUser(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'name' => 'required|string|max:255',
+                'email' => 'required|email|unique:users,email',
+                'password' => 'required|string|min:8',
+                'role' => 'required|in:admin,alumni',
+                'status' => 'required|in:active,inactive,pending',
+            ]);
+
+            $user = User::create([
+                'name' => $validated['name'],
+                'email' => $validated['email'],
+                'password' => bcrypt($validated['password']),
+                'role' => $validated['role'],
+                'status' => $validated['status'],
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'User created successfully',
+                'data' => $user
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create user',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get permissions data
      */
     public function getPermissions(Request $request): JsonResponse
     {
         try {
-            $permissions = ['view', 'create', 'edit', 'delete']; // Basic permissions
+            // Sample permissions structure for the system
+            $permissions = [
+                [
+                    'id' => '1',
+                    'name' => 'view_dashboard',
+                    'display_name' => 'View Dashboard',
+                    'description' => 'Can view the admin dashboard',
+                    'category' => 'Dashboard',
+                    'guard_name' => 'web',
+                    'created_at' => now()->toISOString(),
+                    'updated_at' => now()->toISOString()
+                ],
+                [
+                    'id' => '2',
+                    'name' => 'manage_users',
+                    'display_name' => 'Manage Users',
+                    'description' => 'Can create, edit, and delete users',
+                    'category' => 'User Management',
+                    'guard_name' => 'web',
+                    'created_at' => now()->toISOString(),
+                    'updated_at' => now()->toISOString()
+                ],
+                [
+                    'id' => '3',
+                    'name' => 'manage_alumni',
+                    'display_name' => 'Manage Alumni',
+                    'description' => 'Can manage alumni profiles',
+                    'category' => 'Alumni Management',
+                    'guard_name' => 'web',
+                    'created_at' => now()->toISOString(),
+                    'updated_at' => now()->toISOString()
+                ],
+                [
+                    'id' => '4',
+                    'name' => 'manage_surveys',
+                    'display_name' => 'Manage Surveys',
+                    'description' => 'Can create and manage surveys',
+                    'category' => 'Survey Management',
+                    'guard_name' => 'web',
+                    'created_at' => now()->toISOString(),
+                    'updated_at' => now()->toISOString()
+                ],
+                [
+                    'id' => '5',
+                    'name' => 'view_analytics',
+                    'display_name' => 'View Analytics',
+                    'description' => 'Can view analytics and reports',
+                    'category' => 'Analytics',
+                    'guard_name' => 'web',
+                    'created_at' => now()->toISOString(),
+                    'updated_at' => now()->toISOString()
+                ],
+                [
+                    'id' => '6',
+                    'name' => 'manage_batches',
+                    'display_name' => 'Manage Batches',
+                    'description' => 'Can manage graduation batches',
+                    'category' => 'Batch Management',
+                    'guard_name' => 'web',
+                    'created_at' => now()->toISOString(),
+                    'updated_at' => now()->toISOString()
+                ]
+            ];
             
             return response()->json([
                 'success' => true,
@@ -1433,16 +1935,198 @@ class AdminController extends Controller
     }
 
     /**
+     * Get roles data
+     */
+    public function getRoles(Request $request): JsonResponse
+    {
+        try {
+            // Sample roles structure based on your system
+            $roles = [
+                [
+                    'id' => '1',
+                    'name' => 'admin',
+                    'display_name' => 'Administrator',
+                    'description' => 'Can manage users, alumni, and surveys',
+                    'guard_name' => 'web',
+                    'permissions' => [
+                        ['id' => '1', 'name' => 'view_dashboard'],
+                        ['id' => '2', 'name' => 'manage_users'],
+                        ['id' => '3', 'name' => 'manage_alumni'],
+                        ['id' => '4', 'name' => 'manage_surveys'],
+                        ['id' => '5', 'name' => 'view_analytics'],
+                        ['id' => '6', 'name' => 'manage_batches']
+                    ],
+                    'users_count' => User::where('role', 'admin')->count(),
+                    'is_default' => true,
+                    'created_at' => now()->toISOString(),
+                    'updated_at' => now()->toISOString()
+                ],
+                [
+                    'id' => '2',
+                    'name' => 'alumni',
+                    'display_name' => 'Alumni',
+                    'description' => 'Can view and update own profile',
+                    'guard_name' => 'web',
+                    'permissions' => [],
+                    'users_count' => User::where('role', 'alumni')->count(),
+                    'is_default' => true,
+                    'created_at' => now()->toISOString(),
+                    'updated_at' => now()->toISOString()
+                ]
+            ];
+            
+            return response()->json([
+                'success' => true,
+                'data' => $roles
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch roles',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get users with their roles
+     */
+    public function getUsersWithRoles(Request $request): JsonResponse
+    {
+        try {
+            $users = User::select('id', 'name', 'email', 'role', 'status', 'created_at')
+                ->orderBy('created_at', 'desc')
+                ->limit(50)
+                ->get()
+                ->map(function ($user) {
+                    return [
+                        'id' => (string) $user->id,
+                        'name' => $user->name ?: $user->email,
+                        'email' => $user->email,
+                        'roles' => [
+                            [
+                                'id' => $user->role,
+                                'name' => $user->role,
+                                'display_name' => ucfirst(str_replace('_', ' ', $user->role))
+                            ]
+                        ],
+                        'permissions' => [],
+                        'last_login_at' => null, // Column doesn't exist in database yet
+                        'is_active' => $user->status === 'active',
+                        'created_at' => $user->created_at->toISOString()
+                    ];
+                });
+            
+            return response()->json([
+                'success' => true,
+                'data' => $users
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch users with roles',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get permissions statistics
+     */
+    public function getPermissionsStats(Request $request): JsonResponse
+    {
+        try {
+            $totalUsers = User::count();
+            $adminCount = User::where('role', 'admin')->count();
+            $alumniCount = User::where('role', 'alumni')->count();
+
+            // Determine most used role
+            $mostUsedRole = $alumniCount >= $adminCount ? 'Alumni' : 'Admin';
+
+            $stats = [
+                'total_roles' => 2, // admin, alumni
+                'total_permissions' => 6, // Based on the permissions defined above
+                'total_users_with_roles' => $totalUsers,
+                'most_used_role' => $mostUsedRole,
+                'permission_categories' => [
+                    ['name' => 'Dashboard', 'count' => 1],
+                    ['name' => 'User Management', 'count' => 1],
+                    ['name' => 'Alumni Management', 'count' => 1],
+                    ['name' => 'Survey Management', 'count' => 1],
+                    ['name' => 'Analytics', 'count' => 1],
+                    ['name' => 'Batch Management', 'count' => 1]
+                ]
+            ];
+            
+            return response()->json([
+                'success' => true,
+                'data' => $stats
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch permissions stats',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get email templates
      */
     public function getEmailTemplates(Request $request): JsonResponse
     {
         try {
-            $templates = []; // Placeholder - implement based on your email template system
+            $query = EmailTemplate::with('creator:id,email');
+
+            // Apply filters
+            if ($request->has('search') && $request->search) {
+                $search = $request->search;
+                $query->where(function($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                      ->orWhere('subject', 'like', "%{$search}%")
+                      ->orWhere('body', 'like', "%{$search}%")
+                      ->orWhere('category', 'like', "%{$search}%");
+                });
+            }
+
+            if ($request->has('category') && $request->category) {
+                $query->where('category', $request->category);
+            }
+
+            if ($request->has('type') && $request->type) {
+                $query->where('type', $request->type);
+            }
+
+            if ($request->has('status') && $request->status) {
+                $query->where('status', $request->status);
+            }
+
+            // Sort by most recently updated
+            $templates = $query->orderBy('updated_at', 'desc')->get();
+
+            // Format response
+            $formattedTemplates = $templates->map(function ($template) {
+                return [
+                    'id' => (string) $template->id,
+                    'name' => $template->name,
+                    'subject' => $template->subject,
+                    'body' => $template->body,
+                    'category' => $template->category,
+                    'type' => $template->type,
+                    'status' => $template->status,
+                    'variables' => $template->variables ?? [],
+                    'usage_count' => $template->usage_count,
+                    'last_sent_at' => $template->last_sent_at?->toISOString(),
+                    'created_by' => $template->creator->email ?? 'Unknown',
+                    'created_at' => $template->created_at->toISOString(),
+                    'updated_at' => $template->updated_at->toISOString(),
+                ];
+            });
             
             return response()->json([
                 'success' => true,
-                'data' => $templates
+                'data' => $formattedTemplates
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -1454,17 +2138,245 @@ class AdminController extends Controller
     }
 
     /**
+     * Get email template statistics
+     */
+    public function getEmailTemplateStats(): JsonResponse
+    {
+        try {
+            $totalTemplates = EmailTemplate::count();
+            $activeTemplates = EmailTemplate::where('status', 'active')->count();
+            $totalSent = EmailTemplate::sum('usage_count');
+            
+            $mostUsedTemplate = EmailTemplate::where('usage_count', '>', 0)
+                ->orderBy('usage_count', 'desc')
+                ->first();
+
+            $categories = EmailTemplate::select('category')
+                ->selectRaw('COUNT(*) as count')
+                ->groupBy('category')
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'name' => $item->category,
+                        'count' => $item->count
+                    ];
+                });
+
+            // Get recent activity (last 30 days)
+            $recentActivity = EmailTemplate::where('last_sent_at', '>=', now()->subDays(30))
+                ->selectRaw('DATE(last_sent_at) as date, COUNT(*) as sent_count')
+                ->groupBy('date')
+                ->orderBy('date', 'desc')
+                ->limit(30)
+                ->get()
+                ->map(function ($item) {
+                    return [
+                        'date' => $item->date,
+                        'sent_count' => $item->sent_count
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'total_templates' => $totalTemplates,
+                    'active_templates' => $activeTemplates,
+                    'total_sent' => $totalSent,
+                    'most_used_template' => $mostUsedTemplate?->name ?? 'N/A',
+                    'categories' => $categories,
+                    'recent_activity' => $recentActivity
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch email template stats',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get a single email template by ID
+     */
+    public function getEmailTemplate($id): JsonResponse
+    {
+        try {
+            $template = EmailTemplate::with('creator:id,name,email')->findOrFail($id);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'id' => (string) $template->id,
+                    'name' => $template->name,
+                    'subject' => $template->subject,
+                    'body' => $template->body,
+                    'category' => $template->category,
+                    'type' => $template->type,
+                    'status' => $template->status,
+                    'variables' => $template->variables ?? [],
+                    'usage_count' => $template->usage_count,
+                    'last_sent_at' => $template->last_sent_at?->toISOString(),
+                    'created_by' => $template->creator->email ?? 'Unknown',
+                    'created_at' => $template->created_at->toISOString(),
+                    'updated_at' => $template->updated_at->toISOString(),
+                    'creator' => $template->creator ? [
+                        'name' => $template->creator->name,
+                        'email' => $template->creator->email,
+                    ] : null,
+                ]
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email template not found'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch email template',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Create a new email template
+     */
+    public function createEmailTemplate(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'name' => 'required|string|max:255|unique:email_templates,name',
+                'subject' => 'required|string|max:500',
+                'body' => 'required|string',
+                'category' => 'required|string|max:100',
+                'type' => 'required|in:notification,reminder,announcement,survey,system',
+                'status' => 'required|in:active,inactive,draft',
+                'variables' => 'nullable|array',
+            ]);
+
+            $validated['created_by'] = auth()->id();
+
+            $template = EmailTemplate::create($validated);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Email template created successfully',
+                'data' => $template
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create email template',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update an email template
+     */
+    public function updateEmailTemplate(Request $request, $id): JsonResponse
+    {
+        try {
+            $template = EmailTemplate::findOrFail($id);
+
+            $validated = $request->validate([
+                'name' => 'sometimes|required|string|max:255|unique:email_templates,name,' . $id,
+                'subject' => 'sometimes|required|string|max:500',
+                'body' => 'sometimes|required|string',
+                'category' => 'sometimes|required|string|max:100',
+                'type' => 'sometimes|required|in:notification,reminder,announcement,survey,system',
+                'status' => 'sometimes|required|in:active,inactive,draft',
+                'variables' => 'nullable|array',
+            ]);
+
+            $template->update($validated);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Email template updated successfully',
+                'data' => $template->fresh()
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email template not found'
+            ], 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update email template',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete an email template
+     */
+    public function deleteEmailTemplate($id): JsonResponse
+    {
+        try {
+            $template = EmailTemplate::findOrFail($id);
+            $template->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Email template deleted successfully'
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email template not found'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete email template',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get system settings
      */
     public function getSystemSettings(Request $request): JsonResponse
     {
         try {
-            $settings = [
-                'app_name' => config('app.name'),
-                'app_url' => config('app.url'),
-                'mail_from_address' => config('mail.from.address'),
-            ];
-            
+            $settings = AdminSetting::orderBy('category')
+                ->orderBy('key')
+                ->get()
+                ->map(function ($setting) {
+                    return [
+                        'key' => $setting->key,
+                        'value' => $setting->value,
+                        'type' => $setting->type,
+                        'category' => $setting->category,
+                        'description' => $setting->description,
+                        'is_sensitive' => in_array($setting->key, [
+                            'smtp_password',
+                            'api_key',
+                            'secret_key',
+                            'encryption_key'
+                        ])
+                    ];
+                });
+
             return response()->json([
                 'success' => true,
                 'data' => $settings
@@ -1479,27 +2391,748 @@ class AdminController extends Controller
     }
 
     /**
-     * Get backup information
+     * Update system settings
      */
-    public function getBackupInfo(Request $request): JsonResponse
+    public function updateSystemSettings(Request $request): JsonResponse
     {
         try {
-            $backupInfo = [
-                'last_backup' => null,
-                'backup_size' => 0,
-                'available_backups' => []
-            ];
-            
+            $validated = $request->validate([
+                'settings' => 'required|array',
+                'settings.*' => 'string|nullable'
+            ]);
+
+            $updated = [];
+            foreach ($validated['settings'] as $key => $value) {
+                $setting = AdminSetting::where('key', $key)->first();
+                
+                if ($setting) {
+                    $setting->value = $value;
+                    $setting->save();
+                    $updated[] = $key;
+                }
+            }
+
             return response()->json([
                 'success' => true,
-                'data' => $backupInfo
+                'message' => count($updated) . ' setting(s) updated successfully',
+                'data' => [
+                    'updated_count' => count($updated),
+                    'updated_keys' => $updated
+                ]
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update system settings',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get system statistics
+     */
+    public function getSystemStats(): JsonResponse
+    {
+        try {
+            $stats = [
+                'total_users' => User::count(),
+                'total_alumni' => AlumniProfile::count(),
+                'total_surveys' => Survey::count(),
+                'database_size' => $this->getDatabaseSize(),
+                'cache_size' => $this->getCacheSize(),
+                'uptime' => $this->getSystemUptime(),
+                'last_backup' => $this->getLastBackupDate()
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $stats
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to fetch backup info',
+                'message' => 'Failed to fetch system stats',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Clear application cache
+     */
+    public function clearCache(): JsonResponse
+    {
+        try {
+            \Artisan::call('cache:clear');
+            \Artisan::call('config:clear');
+            \Artisan::call('route:clear');
+            \Artisan::call('view:clear');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cache cleared successfully',
+                'data' => [
+                    'cleared' => ['cache', 'config', 'routes', 'views']
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to clear cache',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Create database backup
+     */
+    public function createBackup(Request $request): JsonResponse
+    {
+        try {
+            $type = $request->input('type', 'full');
+            $timestamp = now()->format('Y-m-d_H-i-s');
+            $filename = "backup_{$timestamp}.sql";
+            $storagePath = storage_path('app/backups');
+            
+            if (!file_exists($storagePath)) {
+                mkdir($storagePath, 0755, true);
+            }
+
+            $filepath = "{$storagePath}/{$filename}";
+
+            $database = config('database.connections.mysql.database');
+            $username = config('database.connections.mysql.username');
+            $password = config('database.connections.mysql.password');
+            $host = config('database.connections.mysql.host');
+
+            // Try to find mysqldump in common locations
+            $mysqldumpPath = 'mysqldump'; // Default (if in PATH)
+            
+            // Check XAMPP location (Windows)
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                $xamppPath = 'C:\\xampp\\mysql\\bin\\mysqldump.exe';
+                if (file_exists($xamppPath)) {
+                    $mysqldumpPath = $xamppPath;
+                }
+            }
+
+            // Build command based on backup type
+            $additionalOptions = '';
+            if ($type === 'structure') {
+                $additionalOptions = '--no-data'; // Schema only
+            } elseif ($type === 'partial') {
+                $additionalOptions = '--skip-triggers --skip-routines'; // Data without extras
+            }
+
+            $command = sprintf(
+                '"%s" -h %s -u %s --password=%s %s %s > %s 2>&1',
+                $mysqldumpPath,
+                escapeshellarg($host),
+                escapeshellarg($username),
+                escapeshellarg($password),
+                $additionalOptions,
+                escapeshellarg($database),
+                escapeshellarg($filepath)
+            );
+
+            exec($command, $output, $returnCode);
+
+            // Check if backup was created successfully
+            if (!file_exists($filepath) || filesize($filepath) === 0) {
+                $errorMsg = implode("\n", $output);
+                throw new \Exception('Backup creation failed: ' . $errorMsg);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Backup created successfully',
+                'data' => [
+                    'id' => basename($filename, '.sql'),
+                    'filename' => $filename,
+                    'size' => $this->formatBytes(filesize($filepath)),
+                    'created_at' => now()->toISOString(),
+                    'type' => $type,
+                    'status' => 'completed'
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create backup',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get list of all backups
+     */
+    public function getBackups(): JsonResponse
+    {
+        try {
+            $backupPath = storage_path('app/backups');
+            
+            if (!file_exists($backupPath)) {
+                return response()->json([
+                    'success' => true,
+                    'data' => []
+                ]);
+            }
+
+            $files = glob($backupPath . '/backup_*.sql');
+            
+            $backups = array_map(function($file) {
+                $filename = basename($file);
+                $size = filesize($file);
+                $created = filemtime($file);
+                
+                return [
+                    'id' => basename($filename, '.sql'),
+                    'filename' => $filename,
+                    'size' => $this->formatBytes($size),
+                    'created_at' => Carbon::createFromTimestamp($created)->toISOString(),
+                    'type' => 'full',
+                    'status' => 'completed',
+                    'download_url' => '/api/v1/admin/backups/download/' . urlencode($filename)
+                ];
+            }, $files);
+
+            // Sort by created date descending
+            usort($backups, function($a, $b) {
+                return strtotime($b['created_at']) - strtotime($a['created_at']);
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $backups
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch backups',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete a backup file
+     */
+    public function deleteBackup($id): JsonResponse
+    {
+        try {
+            $backupPath = storage_path('app/backups');
+            $filename = $id . '.sql';
+            $filepath = $backupPath . '/' . $filename;
+
+            // Security check: ensure filename doesn't contain path traversal
+            if (strpos($filename, '..') !== false || strpos($filename, '/') !== false) {
+                throw new \Exception('Invalid filename');
+            }
+
+            if (!file_exists($filepath)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Backup file not found'
+                ], 404);
+            }
+
+            unlink($filepath);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Backup deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete backup',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get system information for backup page
+     */
+    public function getSystemInfo(): JsonResponse
+    {
+        try {
+            $database = config('database.connections.mysql.database');
+            
+            // Get total tables
+            $tables = DB::select("
+                SELECT COUNT(*) as count
+                FROM information_schema.TABLES
+                WHERE table_schema = ?
+            ", [$database]);
+            
+            $totalTables = $tables[0]->count ?? 0;
+
+            // Get total records across all tables
+            $recordCounts = DB::select("
+                SELECT SUM(table_rows) as total
+                FROM information_schema.TABLES
+                WHERE table_schema = ?
+            ", [$database]);
+            
+            $totalRecords = $recordCounts[0]->total ?? 0;
+
+            // Get available disk space
+            $availableSpace = $this->getAvailableSpace();
+
+            $info = [
+                'database_size' => $this->getDatabaseSize(),
+                'total_tables' => (int)$totalTables,
+                'total_records' => (int)$totalRecords,
+                'last_backup' => $this->getLastBackupDate(),
+                'available_space' => $availableSpace,
+                'backup_directory' => storage_path('app/backups')
+            ];
+
+            return response()->json([
+                'success' => true,
+                'data' => $info
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch system info',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Helper: Get available disk space
+     */
+    private function getAvailableSpace(): string
+    {
+        try {
+            $path = storage_path('app');
+            $freeSpace = disk_free_space($path);
+            
+            if ($freeSpace === false) {
+                return 'Unknown';
+            }
+
+            return $this->formatBytes($freeSpace);
+        } catch (\Exception $e) {
+            return 'Unknown';
+        }
+    }
+
+    /**
+     * Download a backup file
+     */
+    public function downloadBackup($filename)
+    {
+        try {
+            $backupPath = storage_path('app/backups');
+            $filepath = $backupPath . '/' . $filename;
+
+            // Security check: ensure filename doesn't contain path traversal
+            if (strpos($filename, '..') !== false || strpos($filename, '/') !== false) {
+                abort(403, 'Invalid filename');
+            }
+
+            if (!file_exists($filepath)) {
+                abort(404, 'Backup file not found');
+            }
+
+            return response()->download($filepath);
+        } catch (\Exception $e) {
+            abort(500, 'Failed to download backup: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Helper: Get database size
+     */
+    private function getDatabaseSize(): string
+    {
+        try {
+            $database = config('database.connections.mysql.database');
+            $result = DB::select("
+                SELECT SUM(data_length + index_length) as size
+                FROM information_schema.TABLES 
+                WHERE table_schema = ?
+            ", [$database]);
+
+            $bytes = $result[0]->size ?? 0;
+            return $this->formatBytes($bytes);
+        } catch (\Exception $e) {
+            return 'Unknown';
+        }
+    }
+
+    /**
+     * Helper: Get cache size
+     */
+    private function getCacheSize(): string
+    {
+        try {
+            $cachePath = storage_path('framework/cache/data');
+            if (!file_exists($cachePath)) {
+                return '0 B';
+            }
+
+            $size = 0;
+            $files = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($cachePath)
+            );
+
+            foreach ($files as $file) {
+                if ($file->isFile()) {
+                    $size += $file->getSize();
+                }
+            }
+
+            return $this->formatBytes($size);
+        } catch (\Exception $e) {
+            return 'Unknown';
+        }
+    }
+
+    /**
+     * Helper: Get system uptime
+     */
+    private function getSystemUptime(): string
+    {
+        try {
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                return 'Running';
+            } else {
+                $uptime = shell_exec('uptime -p');
+                return trim($uptime ?: 'Unknown');
+            }
+        } catch (\Exception $e) {
+            return 'Unknown';
+        }
+    }
+
+    /**
+     * Helper: Get last backup date
+     */
+    private function getLastBackupDate(): string
+    {
+        try {
+            $backupPath = storage_path('app/backups');
+            
+            if (!file_exists($backupPath)) {
+                return 'Never';
+            }
+
+            $files = glob($backupPath . '/backup_*.sql');
+            
+            if (empty($files)) {
+                return 'Never';
+            }
+
+            usort($files, function($a, $b) {
+                return filemtime($b) - filemtime($a);
+            });
+
+            $lastBackup = filemtime($files[0]);
+            return \Carbon\Carbon::createFromTimestamp($lastBackup)->diffForHumans();
+        } catch (\Exception $e) {
+            return 'Unknown';
+        }
+    }
+
+    /**
+     * Helper: Format bytes to human readable
+     */
+    private function formatBytes(int $bytes, int $precision = 2): string
+    {
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        
+        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+            $bytes /= 1024;
+        }
+
+        return round($bytes, $precision) . ' ' . $units[$i];
+    }
+
+    /**
+     * Update alumni profile
+     */
+    public function updateProfile(Request $request, $id): JsonResponse
+    {
+        try {
+            $profile = AlumniProfile::findOrFail($id);
+
+            $validatedData = $request->validate([
+                'first_name' => 'required|string|max:255',
+                'last_name' => 'required|string|max:255',
+                'student_id' => 'required|string|max:50|unique:alumni_profiles,student_id,' . $id,
+                'gender' => 'required|in:Male,Female,Other',
+                'birth_date' => 'nullable|date',
+                'phone' => 'nullable|string|max:20',
+                'city' => 'nullable|string|max:100',
+                'country' => 'nullable|string|max:100',
+                'degree_program' => 'required|string|max:255',
+                'graduation_year' => 'required|integer|min:1900|max:' . (date('Y') + 10),
+                'gpa' => 'nullable|numeric|min:0|max:4',
+                'batch_id' => 'nullable|exists:batches,id',
+                'employment_status' => 'nullable|in:Employed,Self-employed,Unemployed,Student,Retired',
+                'current_job_title' => 'nullable|string|max:255',
+                'current_employer' => 'nullable|string|max:255',
+                'current_salary' => 'nullable|numeric|min:0'
+            ]);
+
+            $profile->update($validatedData);
+
+            // Load updated profile with relationships
+            $updatedProfile = AlumniProfile::with(['user', 'batch'])
+                ->find($id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile updated successfully',
+                'data' => $updatedProfile
+            ]);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Profile not found'
+            ], 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update profile',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get a single role with permissions
+     */
+    public function getRole($id): JsonResponse
+    {
+        try {
+            // For now, return mock data based on role name (admin or alumni)
+            $roles = $this->getRoles(new Request())->getData(true);
+            
+            if (!isset($roles['data'])) {
+                throw new \Exception('Failed to load roles');
+            }
+
+            $role = collect($roles['data'])->firstWhere('id', $id);
+            
+            if (!$role) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Role not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $role
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch role',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Create a new role
+     */
+    public function createRole(Request $request): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'name' => 'required|string|max:255|regex:/^[a-z0-9_]+$/',
+                'display_name' => 'required|string|max:255',
+                'description' => 'required|string|max:1000',
+                'guard_name' => 'required|string|max:255',
+                'permission_ids' => 'nullable|array',
+                'permission_ids.*' => 'string'
+            ]);
+
+            // Check if role name already exists
+            // For now, just check against existing admin/alumni roles
+            if (in_array($validated['name'], ['admin', 'alumni'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'A role with this name already exists',
+                    'errors' => [
+                        'name' => ['This role name is already in use']
+                    ]
+                ], 422);
+            }
+
+            // In a real implementation, you would:
+            // 1. Create the role in a roles table
+            // 2. Attach permissions to the role
+            // For now, return success with mock data
+            
+            $newRole = [
+                'id' => '3',
+                'name' => $validated['name'],
+                'display_name' => $validated['display_name'],
+                'description' => $validated['description'],
+                'guard_name' => $validated['guard_name'],
+                'permissions' => [],
+                'users_count' => 0,
+                'is_default' => false,
+                'created_at' => now()->toISOString(),
+                'updated_at' => now()->toISOString()
+            ];
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Role created successfully',
+                'data' => $newRole
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create role',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update an existing role
+     */
+    public function updateRole(Request $request, $id): JsonResponse
+    {
+        try {
+            $validated = $request->validate([
+                'name' => 'sometimes|string|max:255|regex:/^[a-z0-9_]+$/',
+                'display_name' => 'sometimes|string|max:255',
+                'description' => 'sometimes|string|max:1000',
+                'guard_name' => 'sometimes|string|max:255',
+                'permission_ids' => 'nullable|array',
+                'permission_ids.*' => 'string'
+            ]);
+
+            // Check if role exists and is not a default role
+            $roles = $this->getRoles(new Request())->getData(true);
+            $role = collect($roles['data'])->firstWhere('id', $id);
+            
+            if (!$role) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Role not found'
+                ], 404);
+            }
+
+            if ($role['is_default'] && isset($validated['name']) && $validated['name'] !== $role['name']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot change the name of default roles',
+                    'errors' => [
+                        'name' => ['Default role names cannot be modified']
+                    ]
+                ], 422);
+            }
+
+            // In a real implementation, update the role in database
+            // For now, return success with updated mock data
+            
+            $updatedRole = array_merge($role, [
+                'display_name' => $validated['display_name'] ?? $role['display_name'],
+                'description' => $validated['description'] ?? $role['description'],
+                'updated_at' => now()->toISOString()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Role updated successfully',
+                'data' => $updatedRole
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update role',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete a role
+     */
+    public function deleteRole($id): JsonResponse
+    {
+        try {
+            // Check if role exists
+            $roles = $this->getRoles(new Request())->getData(true);
+            $role = collect($roles['data'])->firstWhere('id', $id);
+            
+            if (!$role) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Role not found'
+                ], 404);
+            }
+
+            // Check if it's a default role
+            if ($role['is_default']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot delete default system roles'
+                ], 422);
+            }
+
+            // Check if role has users
+            if ($role['users_count'] > 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Cannot delete role. It has {$role['users_count']} users assigned to it."
+                ], 422);
+            }
+
+            // In a real implementation, delete the role from database
+            // For now, return success
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Role deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete role',
                 'error' => $e->getMessage()
             ], 500);
         }
     }
 }
+

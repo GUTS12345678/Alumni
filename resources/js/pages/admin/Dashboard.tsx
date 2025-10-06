@@ -6,12 +6,35 @@ import { router } from '@inertiajs/react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 
 interface DashboardStats {
-    total_alumni: number;
-    total_surveys: number;
-    total_responses: number;
-    active_surveys: number;
-    recent_registrations: number;
-    employment_rate: number;
+    overview: {
+        total_alumni: number;
+        total_surveys: number;
+        total_batches: number;
+        total_responses: number;
+        response_rate: number;
+    };
+    recent_activity: {
+        recent_registrations: number;
+        recent_responses: number;
+    };
+    batch_distribution: Array<{
+        batch_name: string;
+        batch_year: number;
+        alumni_count: number;
+    }>;
+    employment_stats: Record<string, number>;
+    recent_surveys: Array<{
+        id: number;
+        title: string;
+        status: string;
+        created_by: string;
+        created_at: string;
+        responses_count: number;
+    }>;
+    monthly_trend: Array<{
+        month: string;
+        registrations: number;
+    }>;
 }
 
 interface User {
@@ -28,22 +51,46 @@ interface Props {
 export default function AdminDashboard({ user }: Props) {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [loading, setLoading] = useState(true);
-    const [error] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // For now, let's set some mock data to get the dashboard working
-        // Later we can implement the API endpoint
-        setTimeout(() => {
-            setStats({
-                total_alumni: 156,
-                total_surveys: 8,
-                total_responses: 142,
-                active_surveys: 3,
-                recent_registrations: 12,
-                employment_rate: 78
-            });
-            setLoading(false);
-        }, 1000);
+        const fetchDashboardData = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+
+                const token = localStorage.getItem('auth_token');
+                const response = await fetch('/api/v1/admin/dashboard', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/json',
+                    },
+                });
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        window.location.href = '/login';
+                        return;
+                    }
+                    throw new Error(`Failed to fetch dashboard data: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    setStats(data.data);
+                } else {
+                    throw new Error(data.message || 'Failed to load dashboard data');
+                }
+            } catch (err) {
+                console.error('Dashboard fetch error:', err);
+                setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchDashboardData();
     }, []);
 
     if (loading) {
@@ -86,19 +133,19 @@ export default function AdminDashboard({ user }: Props) {
                             <Users className="h-4 w-4 text-maroon-600" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold text-maroon-800">{stats?.total_alumni || 0}</div>
+                            <div className="text-3xl font-bold text-maroon-800">{stats?.overview.total_alumni || 0}</div>
                             <p className="text-xs text-maroon-600 mt-1">Registered in system</p>
                         </CardContent>
                     </Card>
 
                     <Card className="border-beige-200 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Active Surveys</CardTitle>
+                            <CardTitle className="text-sm font-medium text-maroon-800">Total Surveys</CardTitle>
                             <ClipboardList className="h-4 w-4 text-maroon-600" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold text-maroon-800">{stats?.active_surveys || 0}</div>
-                            <p className="text-xs text-maroon-600 mt-1">Currently running</p>
+                            <div className="text-3xl font-bold text-maroon-800">{stats?.overview.total_surveys || 0}</div>
+                            <p className="text-xs text-maroon-600 mt-1">Created surveys</p>
                         </CardContent>
                     </Card>
 
@@ -108,19 +155,19 @@ export default function AdminDashboard({ user }: Props) {
                             <TrendingUp className="h-4 w-4 text-maroon-600" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold text-maroon-800">{stats?.total_responses || 0}</div>
+                            <div className="text-3xl font-bold text-maroon-800">{stats?.overview.total_responses || 0}</div>
                             <p className="text-xs text-maroon-600 mt-1">Survey submissions</p>
                         </CardContent>
                     </Card>
 
                     <Card className="border-beige-200 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Employment Rate</CardTitle>
+                            <CardTitle className="text-sm font-medium text-maroon-800">Response Rate</CardTitle>
                             <TrendingUp className="h-4 w-4 text-maroon-600" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-3xl font-bold text-maroon-800">{stats?.employment_rate || 0}%</div>
-                            <p className="text-xs text-maroon-600 mt-1">Alumni employed</p>
+                            <div className="text-3xl font-bold text-maroon-800">{stats?.overview.response_rate || 0}%</div>
+                            <p className="text-xs text-maroon-600 mt-1">Survey completion rate</p>
                         </CardContent>
                     </Card>
                 </div>
@@ -203,25 +250,25 @@ export default function AdminDashboard({ user }: Props) {
                         <div className="space-y-4">
                             <div className="flex items-center justify-between p-3 bg-beige-50 rounded-lg">
                                 <div>
-                                    <p className="font-medium text-maroon-800">Alumni Registration Survey</p>
-                                    <p className="text-sm text-maroon-600">Active and receiving responses</p>
+                                    <p className="font-medium text-maroon-800">Recent Survey Responses</p>
+                                    <p className="text-sm text-maroon-600">{stats?.recent_activity.recent_responses || 0} responses (last 30 days)</p>
                                 </div>
-                                <span className="text-sm text-green-600 font-medium">Active</span>
+                                <span className="text-sm text-green-600 font-medium">+{stats?.recent_activity.recent_responses || 0}</span>
                             </div>
 
                             <div className="flex items-center justify-between p-3 bg-beige-50 rounded-lg">
                                 <div>
                                     <p className="font-medium text-maroon-800">Recent Registrations</p>
-                                    <p className="text-sm text-maroon-600">{stats?.recent_registrations || 0} new alumni this week</p>
+                                    <p className="text-sm text-maroon-600">{stats?.recent_activity.recent_registrations || 0} new alumni (last 30 days)</p>
                                 </div>
-                                <span className="text-sm text-blue-600 font-medium">+{stats?.recent_registrations || 0}</span>
+                                <span className="text-sm text-blue-600 font-medium">+{stats?.recent_activity.recent_registrations || 0}</span>
                             </div>
 
                             <div className="text-center pt-4">
                                 <Button
                                     variant="outline"
                                     className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
-                                    onClick={() => router.visit('/admin/activity')}
+                                    onClick={() => router.visit('/admin/activity-logs')}
                                 >
                                     View Full Activity Log
                                 </Button>

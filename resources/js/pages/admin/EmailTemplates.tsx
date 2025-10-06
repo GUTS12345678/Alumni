@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { router } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -342,7 +343,7 @@ export default function EmailTemplatesManagement() {
                         </Button>
 
                         <Button
-                            onClick={() => window.location.href = '/admin/email-templates/create'}
+                            onClick={() => router.visit('/admin/email-templates/create')}
                             className="bg-maroon-700 hover:bg-maroon-800 text-white"
                         >
                             <Plus className="h-4 w-4 mr-2" />
@@ -474,7 +475,7 @@ export default function EmailTemplatesManagement() {
                                     }
                                 </p>
                                 <Button
-                                    onClick={() => window.location.href = '/admin/email-templates/create'}
+                                    onClick={() => router.visit('/admin/email-templates/create')}
                                     className="bg-maroon-700 hover:bg-maroon-800 text-white"
                                 >
                                     <Plus className="h-4 w-4 mr-2" />
@@ -534,7 +535,7 @@ export default function EmailTemplatesManagement() {
 
                                             <div className="flex items-center space-x-2 ml-4">
                                                 <Button
-                                                    onClick={() => setPreviewTemplate(template)}
+                                                    onClick={() => router.visit(`/admin/email-templates/${template.id}`)}
                                                     variant="outline"
                                                     size="sm"
                                                     className="border-blue-300 text-blue-700 hover:bg-blue-50"
@@ -561,7 +562,7 @@ export default function EmailTemplatesManagement() {
                                                 </Button>
 
                                                 <Button
-                                                    onClick={() => window.location.href = `/admin/email-templates/${template.id}/edit`}
+                                                    onClick={() => router.visit(`/admin/email-templates/${template.id}/edit`)}
                                                     variant="outline"
                                                     size="sm"
                                                     className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"

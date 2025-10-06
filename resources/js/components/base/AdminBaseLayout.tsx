@@ -9,7 +9,6 @@ import {
     UserCheck,
     ClipboardList,
     Plus,
-    MessageSquare,
     BarChart3,
     Shield,
     Key,
@@ -59,7 +58,6 @@ const adminNavigation = [
         items: [
             { name: "Survey Bank", href: "/admin/surveys", icon: ClipboardList },
             { name: "Create Survey", href: "/admin/surveys/create", icon: Plus },
-            { name: "Question Bank", href: "/admin/questions", icon: MessageSquare },
             { name: "Survey Analytics", href: "/admin/survey-analytics", icon: BarChart3 }
         ]
     },
@@ -382,7 +380,7 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
         <>
             <Head title={title} />
 
-            <div className="md:flex bg-beige-50 min-h-screen">
+            <div className="md:flex bg-beige-50 min-h-screen w-full overflow-hidden">
                 {/* Desktop Sidebar */}
                 <div className={cn(
                     "hidden md:flex md:flex-col bg-white border-r border-beige-200 transition-all duration-300 self-start sticky top-0",
@@ -447,10 +445,10 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                 )}
 
                 {/* Main Content */}
-                <div className="flex-1 w-full">
+                <div className="flex-1 min-w-0 flex flex-col">
                     {/* Header */}
-                    <header className="bg-white border-b border-beige-200 px-4 py-3 relative z-10">
-                        <div className="flex items-center justify-between">
+                    <header className="bg-white border-b border-beige-200 px-4 py-3 relative z-10 flex-shrink-0">
+                        <div className="flex items-center justify-between min-w-0">
                             <div className="flex items-center min-w-0 flex-1">
                                 <Button
                                     variant="ghost"
@@ -460,11 +458,11 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                                 >
                                     <Menu className="h-5 w-5" />
                                 </Button>
-                                <h1 className="text-lg md:text-xl font-semibold text-maroon-800 truncate">{title}</h1>
+                                <h1 className="text-lg md:text-xl font-semibold text-maroon-800 truncate min-w-0">{title}</h1>
                             </div>
 
-                            <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0">
-                                <span className="hidden sm:block text-sm text-gray-600 truncate max-w-32 md:max-w-none">
+                            <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0 ml-4">
+                                <span className="hidden sm:block text-sm text-gray-600 truncate max-w-32 md:max-w-48">
                                     Welcome, {currentUser?.email?.split('@')[0] || 'Admin'}
                                 </span>
                                 {/* Mobile User Avatar */}
@@ -476,9 +474,9 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                     </header>
 
                     {/* Page Content */}
-                    <main className="bg-beige-50">
-                        <div className="container mx-auto px-4 pt-4 pb-4 max-w-full">
-                            <div className="w-full">
+                    <main className="bg-beige-50 flex-1 min-h-0 overflow-auto">
+                        <div className="w-full h-full px-4 py-4">
+                            <div className="w-full max-w-none">
                                 {children}
                             </div>
                         </div>

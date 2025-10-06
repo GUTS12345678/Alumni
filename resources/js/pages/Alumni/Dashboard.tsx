@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Head, usePage, router } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +16,13 @@ import {
     Clock
 } from 'lucide-react';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
+import { PageProps as InertiaPageProps } from '@inertiajs/core';
+
+interface PageProps extends InertiaPageProps {
+    auth: {
+        user: User;
+    };
+}
 
 interface AlumniProfile {
     id: number;
@@ -32,7 +40,7 @@ interface AlumniProfile {
     survey_completed: boolean;
 }
 
-interface User {
+interface User { 
     id: number;
     email: string;
     role: string;
@@ -40,50 +48,27 @@ interface User {
 }
 
 export default function AlumniDashboard() {
+    const { auth } = usePage<PageProps>().props;
     const [profile, setProfile] = useState<AlumniProfile | null>(null);
-    const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // Get user info from localStorage
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-            setUser(JSON.parse(storedUser));
-        }
-
-        // Check if user is alumni
-        const userData = storedUser ? JSON.parse(storedUser) : null;
-        if (!userData || userData.role !== 'alumni') {
-            window.location.href = '/login';
-            return;
-        }
-
+        console.log('Alumni Dashboard - Auth state:', auth);
         fetchProfile();
     }, []);
 
     const fetchProfile = async () => {
         try {
-            const token = localStorage.getItem('auth_token');
-            if (!token) {
-                window.location.href = '/login';
-                return;
-            }
-
             const response = await fetch('/api/v1/alumni/profile', {
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',
+                    'Content-Type': 'application/json',
                 },
+                credentials: 'include',
             });
 
             if (!response.ok) {
-                if (response.status === 401) {
-                    localStorage.removeItem('auth_token');
-                    localStorage.removeItem('user');
-                    window.location.href = '/login';
-                    return;
-                }
                 throw new Error('Failed to fetch profile data');
             }
 
@@ -146,7 +131,7 @@ export default function AlumniDashboard() {
     }
 
     return (
-        <AlumniBaseLayout title="Alumni Dashboard" user={user || undefined}>
+        <AlumniBaseLayout title="Alumni Dashboard" user={auth.user}>
             {/* Welcome Banner */}
             <div className="mb-8">
                 <Card className="border-beige-200 shadow-lg bg-gradient-to-r from-maroon-50 to-beige-50">
@@ -299,7 +284,7 @@ export default function AlumniDashboard() {
                             <div className="pt-4 border-t border-beige-200">
                                 <Button
                                     className="bg-maroon-700 hover:bg-maroon-800 text-white"
-                                    onClick={() => window.location.href = '/alumni/profile/edit'}
+                                    onClick={() => router.visit('/alumni/profile/edit')}
                                 >
                                     <Settings className="h-4 w-4 mr-2" />
                                     Update Profile
@@ -318,7 +303,7 @@ export default function AlumniDashboard() {
                         <CardContent className="space-y-4">
                             <Button
                                 className="w-full bg-maroon-700 hover:bg-maroon-800 text-white justify-start"
-                                onClick={() => window.location.href = '/alumni/surveys'}
+                                onClick={() => router.visit('/alumni/surveys')}
                             >
                                 <FileText className="h-4 w-4 mr-2" />
                                 View Available Surveys
@@ -327,7 +312,7 @@ export default function AlumniDashboard() {
                             <Button
                                 variant="outline"
                                 className="w-full border-maroon-300 text-maroon-700 hover:bg-maroon-50 justify-start"
-                                onClick={() => window.location.href = '/alumni/profile/edit'}
+                                onClick={() => router.visit('/alumni/profile/edit')}
                             >
                                 <Settings className="h-4 w-4 mr-2" />
                                 Edit Profile
@@ -336,7 +321,7 @@ export default function AlumniDashboard() {
                             <Button
                                 variant="outline"
                                 className="w-full border-maroon-300 text-maroon-700 hover:bg-maroon-50 justify-start"
-                                onClick={() => window.location.href = '/alumni/help'}
+                                onClick={() => router.visit('/alumni/help')}
                             >
                                 <User className="h-4 w-4 mr-2" />
                                 Help & Support

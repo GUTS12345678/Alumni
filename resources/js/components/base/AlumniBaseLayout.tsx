@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Head } from '@inertiajs/react';
+import { Head, router, Link } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import {
     LayoutDashboard,
@@ -72,45 +72,17 @@ const alumniNavigation = [
 
 export default function AlumniBaseLayout({ children, title = "Alumni Portal", user }: AlumniBaseLayoutProps) {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
     const [currentUser, setCurrentUser] = useState<User | null>(user || null);
 
     useEffect(() => {
-        // Get user info from localStorage if not provided
-        if (!currentUser) {
-            const storedUser = localStorage.getItem('user');
-            if (storedUser) {
-                setCurrentUser(JSON.parse(storedUser));
-            }
+        // Set user from props - session-based auth
+        if (user) {
+            setCurrentUser(user);
         }
+    }, [user]);
 
-        // Check if user is alumni
-        const userData = currentUser || (localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')!) : null);
-        if (!userData || userData.role !== 'alumni') {
-            window.location.href = '/login';
-            return;
-        }
-    }, [currentUser]);
-
-    const handleLogout = async () => {
-        try {
-            const token = localStorage.getItem('auth_token');
-            if (token) {
-                await fetch('/api/v1/logout', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Accept': 'application/json',
-                    },
-                });
-            }
-        } catch (error) {
-            console.error('Logout error:', error);
-        } finally {
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('user');
-            window.location.href = '/login';
-        }
+    const handleLogout = () => {
+        router.post('/logout');
     };
 
     const isActivePath = (href: string) => {
@@ -148,7 +120,7 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal", us
                                 const isActive = isActivePath(item.href);
 
                                 return (
-                                    <a
+                                    <Link
                                         key={item.name}
                                         href={item.href}
                                         className={cn(
@@ -164,7 +136,7 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal", us
                                         {!sidebarCollapsed && (
                                             <span className="truncate">{item.name}</span>
                                         )}
-                                    </a>
+                                    </Link>
                                 );
                             })}
                         </nav>
@@ -240,9 +212,9 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal", us
                 {/* Mobile Sidebar - Simplified */}
 
                 {/* Main Content */}
-                <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 flex flex-col min-w-0">
                     {/* Header */}
-                    <header className="bg-white border-b border-beige-200 px-4 py-3">
+                    <header className="bg-white border-b border-beige-200 px-4 py-3 flex-shrink-0">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center">
                                 <Button
@@ -263,9 +235,9 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal", us
                         </div>
                     </header>
 
-                    {/* Page Content */}
-                    <main className="flex-1 overflow-auto bg-beige-50">
-                        <div className="container mx-auto px-4 py-6">
+                    {/* Page Content - Scrollable */}
+                    <main className="flex-1 overflow-y-auto bg-beige-50">
+                        <div className="container mx-auto px-4 py-6 max-w-7xl">
                             {children}
                         </div>
                     </main>

@@ -70,6 +70,35 @@ This folder contains comprehensive documentation for the Alumni Tracer System, i
 ## ✨ Feature Documentation
 
 ### Alumni Section
+- **[ALUMNI_PROFILE_IMPLEMENTATION.md](./ALUMNI_PROFILE_IMPLEMENTATION.md)** ✅ COMPLETED
+  - Complete Profile View and Edit functionality
+  - 50+ profile fields with comprehensive forms
+  - Profile completion tracking (weighted algorithm)
+  - Enhanced API endpoints (GET/PUT /api/v1/alumni/profile)
+  - Responsive design (desktop, tablet, mobile)
+  - Skills, certifications, and career goals management
+  - Networking preferences
+
+- **[ALUMNI_SURVEYS_IMPLEMENTATION.md](./ALUMNI_SURVEYS_IMPLEMENTATION.md)** ✅ COMPLETED (NEW)
+  - Complete Surveys section with My Surveys and Survey History pages
+  - Backend API methods: mySurveys() and myResponses()
+  - Survey status tracking (Not Started, In Progress, Completed, Draft)
+  - Progress monitoring with visual progress bars
+  - Stats dashboard showing survey counts
+  - Filter functionality (All, Available, In Progress, Completed)
+  - Response viewing with full details modal
+  - Survey continuation from history
+  - PDF export placeholder
+  - Responsive design with mobile support
+
+- **[ALUMNI_SECTION_IMPLEMENTATION_PLAN.md](./ALUMNI_SECTION_IMPLEMENTATION_PLAN.md)** ⭐ NEW
+  - Complete inventory of 17 alumni portal pages
+  - Page-by-page functionality specifications
+  - Database requirements for each feature
+  - API endpoint specifications (40+ endpoints)
+  - 5-phase implementation roadmap (8 weeks)
+  - Priority rankings and time estimates
+
 - **[ALUMNI_SECTION_MASTER_PLAN.md](./ALUMNI_SECTION_MASTER_PLAN.md)** ⭐ NEW
   - Complete alumni portal implementation plan
   - All 7 core features: Career Timeline, Education History, Surveys, Profile, Analytics, Networking, News
@@ -162,11 +191,59 @@ This folder contains comprehensive documentation for the Alumni Tracer System, i
   - Resolved permission assignment issues
   - Updated validation rules
 
+### Alumni Dashboard Fixes
+- **[ALUMNI_DASHBOARD_AUTH_FIX.md](./ALUMNI_DASHBOARD_AUTH_FIX.md)** ✅ NEW (October 16, 2025)
+  - Fixed 401 Unauthorized error on alumni dashboard
+  - Implemented proper Sanctum SPA authentication flow
+  - Added CSRF cookie fetch before API requests
+  - Added X-Requested-With header to all API calls
+  - Fixed Dashboard, MySurveys, and SurveyHistory pages
+  - Complete technical explanation and best practices
+
 ### Survey & Analytics Fixes
+- **[ANALYTICS_STATIC_VALUES_REMOVAL.md](./ANALYTICS_STATIC_VALUES_REMOVAL.md)** ⭐ NEW
+  - Removed all static/placeholder/fake data from analytics
+  - Ensured 100% database-driven analytics
+  - Removed rand(30, 180) response time placeholder
+  - Updated CSV export to remove static columns
+  - Verified all analytics use real data only
+
 - **[SURVEY_ANALYTICS_FIX.md](./SURVEY_ANALYTICS_FIX.md)**
   - Fixed survey analytics calculations
   - Resolved data visualization issues
   - Updated chart rendering
+
+- **[ANALYTICS_DATA_SOURCE_UPDATE.md](./ANALYTICS_DATA_SOURCE_UPDATE.md)** ⭐ NEW
+  - Updated analytics to use employments table as primary source
+  - Added fallback to alumni_profiles.employment_status
+  - Implemented dual-source query pattern
+  - 5 major analytics methods refactored
+  - Backwards compatible implementation
+
+### Survey Templates
+- **[JOB_MISMATCH_SURVEY_GUIDE.md](./JOB_MISMATCH_SURVEY_GUIDE.md)** ⭐ NEW
+  - Employment Quality & Job Satisfaction Survey template
+  - 13 questions with conditional logic
+  - Collects job mismatch, satisfaction, and relevance data
+  - Auto-maps responses to alumni profiles
+  - Complete usage and testing guide
+
+### Machine Learning & Automation
+- **[INTELLIGENT_JOB_CLASSIFIER_GUIDE.md](./INTELLIGENT_JOB_CLASSIFIER_GUIDE.md)** ⭐ NEW
+  - Rule-based intelligent job match classifier
+  - 40+ degree program-to-job field mappings
+  - Pattern matching for job level detection
+  - Command usage: `php artisan job-match:classify`
+  - 70-75% accuracy, completely FREE
+  - Classification examples and troubleshooting
+
+- **[ML_JOB_MATCHING_GUIDE.md](./ML_JOB_MATCHING_GUIDE.md)**
+  - ML-based job qualification matching
+  - Intelligent classification (overqualified, underqualified, unfit)
+  - 3 approaches: Rule-based, Pre-trained models, Custom ML
+  - GPT-4 integration guide
+  - Cost analysis and recommendations
+  - Implementation roadmap
 
 ### Security Fixes
 - **[CSRF_TOKEN_FIX.md](./CSRF_TOKEN_FIX.md)**
@@ -215,6 +292,24 @@ This folder contains comprehensive documentation for the Alumni Tracer System, i
 ## 🧪 Testing Guides
 
 ### Feature Testing
+- **[ALUMNI_PROFILE_TESTING_GUIDE.md](./ALUMNI_PROFILE_TESTING_GUIDE.md)**
+  - Profile View and Edit testing procedures
+  - Profile completion tracking verification
+  - API endpoint testing (GET/PUT)
+  - Form validation testing
+  - Responsive design testing
+  - Integration testing checklist
+
+- **[ALUMNI_SURVEYS_TESTING_GUIDE.md](./ALUMNI_SURVEYS_TESTING_GUIDE.md)** ✅ NEW
+  - My Surveys page testing procedures
+  - Survey History page testing procedures
+  - Backend API testing (mySurveys, myResponses)
+  - Frontend component testing
+  - Integration testing scenarios
+  - User acceptance testing (UAT)
+  - Performance and security testing
+  - 50+ detailed test cases
+
 - **[ALUMNI_BANK_TESTING_GUIDE.md](./ALUMNI_BANK_TESTING_GUIDE.md)**
   - Alumni Bank feature testing procedures
   - Test cases for alumni listing, search, filter
@@ -304,6 +399,8 @@ Each testing guide includes:
 |---------|--------|---------------|
 | User Management | ✅ Complete | [USER_MANAGEMENT_FEATURES.md](./USER_MANAGEMENT_FEATURES.md) |
 | Role Management | ✅ Complete | [ROLE_MANAGEMENT_FEATURES.md](./ROLE_MANAGEMENT_FEATURES.md) |
+| Alumni Profile | ✅ Complete | [ALUMNI_PROFILE_IMPLEMENTATION.md](./ALUMNI_PROFILE_IMPLEMENTATION.md) |
+| Alumni Surveys | ✅ Complete | [ALUMNI_SURVEYS_IMPLEMENTATION.md](./ALUMNI_SURVEYS_IMPLEMENTATION.md) |
 | Alumni Bank | ✅ Complete | [ALUMNI_BANK_TESTING_GUIDE.md](./ALUMNI_BANK_TESTING_GUIDE.md) |
 | Survey Bank | ✅ Complete | [SURVEY_BANK_TESTING_GUIDE.md](./SURVEY_BANK_TESTING_GUIDE.md) |
 | Dashboard | ✅ Complete | [DASHBOARD_ACTIVITYLOG_FIX.md](./DASHBOARD_ACTIVITYLOG_FIX.md) |

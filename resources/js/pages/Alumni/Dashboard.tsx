@@ -60,10 +60,17 @@ export default function AlumniDashboard() {
 
     const fetchProfile = async () => {
         try {
+            // First, get CSRF cookie for SPA authentication
+            await fetch('/sanctum/csrf-cookie', {
+                credentials: 'include',
+            });
+
+            // Now make the authenticated request
             const response = await fetch('/api/v1/alumni/profile', {
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
                 credentials: 'include',
             });
@@ -131,7 +138,7 @@ export default function AlumniDashboard() {
     }
 
     return (
-        <AlumniBaseLayout title="Alumni Dashboard" user={auth.user}>
+        <AlumniBaseLayout title="Alumni Dashboard">
             {/* Welcome Banner */}
             <div className="mb-8">
                 <Card className="border-beige-200 shadow-lg bg-gradient-to-r from-maroon-50 to-beige-50">

@@ -39,12 +39,19 @@ class HandleInertiaRequests extends Middleware
     {
         [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
 
+        $user = $request->user();
+        
+        // Load alumni profile if user is alumni
+        if ($user && $user->role === 'alumni') {
+            $user->load('alumniProfile');
+        }
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user,
             ],
             'ziggy' => fn (): array => [
                 ...(new Ziggy)->toArray(),

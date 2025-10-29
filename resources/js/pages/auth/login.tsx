@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Head, router } from '@inertiajs/react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
-import { GraduationCap, User, Shield, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { GraduationCap, User, Shield, ArrowLeft, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import axios from 'axios';
 
 type UserType = 'alumni' | 'admin' | null;
 
@@ -17,6 +18,15 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [csrfError, setCsrfError] = useState(false);
+
+    // Setup axios to include CSRF token from meta tag
+    useEffect(() => {
+        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (token) {
+            axios.defaults.headers.common['X-CSRF-TOKEN'] = token;
+        }
+    }, []);
 
     const handleUserTypeSelect = (type: UserType) => {
         setSelectedUserType(type);
@@ -47,29 +57,42 @@ export default function Login() {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleRefreshPage = () => {
+        window.location.reload();
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         if (!validateForm()) return;
 
         setIsSubmitting(true);
+        setCsrfError(false);
+        setErrors({}); // Clear previous errors
 
+        // Use Inertia router with proper error handling
         router.post('/login', {
             email: formData.email,
             password: formData.password,
             remember: false,
         }, {
-            onError: (errors) => {
-                setErrors(errors);
+            preserveState: false,
+            preserveScroll: false,
+            onError: (errors: any) => {
+                console.error('Login error:', errors);
+                if (errors.message && (errors.message.includes('419') || errors.message.includes('expired'))) {
+                    setCsrfError(true);
+                    setErrors({ general: 'Session expired. Refresh page.' });
+                } else {
+                    setErrors(errors);
+                    if (!errors.email && !errors.password && !errors.general) {
+                        setErrors({ ...errors, general: errors.message || 'Login failed.' });
+                    }
+                }
                 setIsSubmitting(false);
             },
-            onSuccess: () => {
-                // Login successful, Inertia will handle the redirect
-                setIsSubmitting(false);
-            },
-            onFinish: () => {
-                setIsSubmitting(false);
-            }
+            onSuccess: () => { console.log('Login successful'); },
+            onFinish: () => { console.log('Login finished'); },
         });
     };
 
@@ -186,6 +209,16 @@ export default function Login() {
                             {errors.general && (
                                 <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
                                     <p className="text-sm text-red-600">{errors.general}</p>
+                                    {csrfError && (
+                                        <Button
+                                            type="button"
+                                            onClick={handleRefreshPage}
+                                            className="mt-3 w-full bg-maroon-700 hover:bg-maroon-800 text-white"
+                                        >
+                                            <RefreshCw className="h-4 w-4 mr-2" />
+                                            Refresh Page
+                                        </Button>
+                                    )}
                                 </div>
                             )}
 

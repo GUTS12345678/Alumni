@@ -31,12 +31,20 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     // Authenticated survey routes
     Route::get('/my-surveys', [SurveyController::class, 'mySurveys']);
     Route::get('/my-responses', [SurveyController::class, 'myResponses']);
+    Route::get('/survey-response/{responseToken}/download', [SurveyController::class, 'downloadResponsePDF']);
+    
+    // Survey taking routes
+    Route::get('/surveys/{surveyId}/take', [SurveyController::class, 'getSurveyToTake']);
+    Route::post('/surveys/{surveyId}/start', [SurveyController::class, 'startSurvey']);
+    Route::post('/survey-responses/{responseId}/answer', [SurveyController::class, 'saveAnswer']);
+    Route::post('/survey-responses/{responseId}/submit', [SurveyController::class, 'submitSurvey']);
 });
 
 // Alumni-only routes (authentication + alumni role required)
 Route::prefix('v1/alumni')->middleware(['auth:sanctum', 'alumni'])->group(function () {
     // Alumni profile
     Route::get('/profile', [AuthController::class, 'alumniProfile']);
+    Route::put('/profile', [AuthController::class, 'updateAlumniProfile']);
 });
 
 // Admin-only routes (authentication + admin role required)

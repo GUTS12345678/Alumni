@@ -89,4 +89,68 @@ class User extends Authenticatable
     {
         return $this->hasMany(ActivityLog::class);
     }
+
+    /**
+     * Get the settings for this user
+     */
+    public function settings()
+    {
+        return $this->hasOne(UserSettings::class);
+    }
+
+    /**
+     * Get career history for this user
+     */
+    public function careerHistory()
+    {
+        return $this->hasMany(CareerHistory::class);
+    }
+
+    /**
+     * Get job postings created by this user
+     */
+    public function jobPostings()
+    {
+        return $this->hasMany(JobPosting::class);
+    }
+
+    /**
+     * Get connections where user is sender
+     */
+    public function sentConnections()
+    {
+        return $this->hasMany(AlumniConnection::class, 'sender_id');
+    }
+
+    /**
+     * Get connections where user is receiver
+     */
+    public function receivedConnections()
+    {
+        return $this->hasMany(AlumniConnection::class, 'receiver_id');
+    }
+
+    /**
+     * Get mentor profile
+     */
+    public function mentorProfile()
+    {
+        return $this->hasOne(MentorProfile::class);
+    }
+
+    /**
+     * Get mentorships where user is mentor
+     */
+    public function asMentor()
+    {
+        return $this->hasMany(Mentorship::class, 'mentor_id');
+    }
+
+    /**
+     * Get mentorships where user is mentee
+     */
+    public function asMentee()
+    {
+        return $this->hasMany(Mentorship::class, 'mentee_id');
+    }
 }

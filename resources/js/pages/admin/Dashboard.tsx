@@ -268,7 +268,7 @@ export default function AdminDashboard({ user }: Props) {
                                 <Button
                                     variant="outline"
                                     className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
-                                    onClick={() => router.visit('/admin/activity-logs')}
+                                    onClick={() => router.visit('/admin/activity')}
                                 >
                                     View Full Activity Log
                                 </Button>

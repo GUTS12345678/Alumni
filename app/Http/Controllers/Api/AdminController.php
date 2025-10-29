@@ -818,7 +818,7 @@ class AdminController extends Controller
                 'phone' => 'sometimes|nullable|string|max:20',
                 'degree_program' => 'sometimes|string|max:255',
                 'graduation_year' => 'sometimes|integer|min:1900|max:' . (date('Y') + 10),
-                'employment_status' => 'sometimes|in:employed,unemployed,self-employed,pursuing_education,not_specified',
+                'employment_status' => 'sometimes|in:employed_full_time,employed_part_time,self_employed,unemployed_seeking,unemployed_not_seeking,continuing_education,military_service,other',
                 'current_employer' => 'sometimes|nullable|string|max:255',
                 'current_job_title' => 'sometimes|nullable|string|max:255',
             ]);

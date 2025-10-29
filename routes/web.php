@@ -174,9 +174,18 @@ Route::middleware(['web', 'auth', 'alumni'])->group(function () {
         return Inertia::render('Alumni/Profile/Edit');
     })->name('alumni.profile.edit');
 
-    Route::get('/alumni/settings', function () {
-        return Inertia::render('Alumni/Settings');
-    })->name('alumni.settings');
+    Route::put('/alumni/profile', [App\Http\Controllers\Alumni\ProfileController::class, 'update'])
+        ->name('alumni.profile.update');
+
+    // Settings Routes
+    Route::get('/alumni/settings', [App\Http\Controllers\Alumni\SettingsController::class, 'index'])
+        ->name('alumni.settings');
+    Route::put('/alumni/settings/password', [App\Http\Controllers\Alumni\SettingsController::class, 'updatePassword'])
+        ->name('alumni.settings.password');
+    Route::put('/alumni/settings/notifications', [App\Http\Controllers\Alumni\SettingsController::class, 'updateNotifications'])
+        ->name('alumni.settings.notifications');
+    Route::put('/alumni/settings/privacy', [App\Http\Controllers\Alumni\SettingsController::class, 'updatePrivacy'])
+        ->name('alumni.settings.privacy');
 
     // Survey Routes
     Route::get('/alumni/surveys', function () {
@@ -191,18 +200,37 @@ Route::middleware(['web', 'auth', 'alumni'])->group(function () {
         return Inertia::render('Alumni/Surveys/SurveyHistory');
     })->name('alumni.survey.history');
 
+    Route::get('/alumni/surveys/{surveyId}/take', function ($surveyId) {
+        return Inertia::render('Alumni/Surveys/TakeSurvey', [
+            'surveyId' => $surveyId
+        ]);
+    })->name('alumni.surveys.take');
+
     Route::get('/alumni/certificates', function () {
         return Inertia::render('Alumni/Certificates');
     })->name('alumni.certificates');
 
     // Career Routes
-    Route::get('/alumni/career', function () {
-        return Inertia::render('Alumni/Career/Timeline');
-    })->name('alumni.career');
+    Route::get('/alumni/career', [App\Http\Controllers\Alumni\CareerController::class, 'index'])
+        ->name('alumni.career');
+    Route::post('/alumni/career', [App\Http\Controllers\Alumni\CareerController::class, 'store'])
+        ->name('alumni.career.store');
+    Route::put('/alumni/career/{id}', [App\Http\Controllers\Alumni\CareerController::class, 'update'])
+        ->name('alumni.career.update');
+    Route::delete('/alumni/career/{id}', [App\Http\Controllers\Alumni\CareerController::class, 'destroy'])
+        ->name('alumni.career.destroy');
 
-    Route::get('/alumni/jobs', function () {
-        return Inertia::render('Alumni/Jobs');
-    })->name('alumni.jobs');
+    // Job Board Routes
+    Route::get('/alumni/jobs', [App\Http\Controllers\Alumni\JobController::class, 'index'])
+        ->name('alumni.jobs');
+    Route::get('/alumni/jobs/{id}', [App\Http\Controllers\Alumni\JobController::class, 'show'])
+        ->name('alumni.jobs.show');
+    Route::post('/alumni/jobs', [App\Http\Controllers\Alumni\JobController::class, 'store'])
+        ->name('alumni.jobs.store');
+    Route::put('/alumni/jobs/{id}', [App\Http\Controllers\Alumni\JobController::class, 'update'])
+        ->name('alumni.jobs.update');
+    Route::delete('/alumni/jobs/{id}', [App\Http\Controllers\Alumni\JobController::class, 'destroy'])
+        ->name('alumni.jobs.destroy');
 
     // Education Routes
     Route::get('/alumni/education', function () {
@@ -210,21 +238,42 @@ Route::middleware(['web', 'auth', 'alumni'])->group(function () {
     })->name('alumni.education');
 
     // Network Routes
-    Route::get('/alumni/network', function () {
-        return Inertia::render('Alumni/Network/AlumniDirectory');
-    })->name('alumni.network');
-
-    Route::get('/alumni/connections', function () {
-        return Inertia::render('Alumni/Network/MyConnections');
-    })->name('alumni.connections');
+    Route::get('/alumni/network', [App\Http\Controllers\Alumni\NetworkController::class, 'index'])
+        ->name('alumni.network');
+    Route::get('/alumni/connections', [App\Http\Controllers\Alumni\NetworkController::class, 'connections'])
+        ->name('alumni.connections');
+    Route::get('/alumni/network/requests', [App\Http\Controllers\Alumni\NetworkController::class, 'requests'])
+        ->name('alumni.network.requests');
+    Route::post('/alumni/network/connect', [App\Http\Controllers\Alumni\NetworkController::class, 'sendRequest'])
+        ->name('alumni.network.connect');
+    Route::put('/alumni/network/{id}/accept', [App\Http\Controllers\Alumni\NetworkController::class, 'acceptRequest'])
+        ->name('alumni.network.accept');
+    Route::put('/alumni/network/{id}/reject', [App\Http\Controllers\Alumni\NetworkController::class, 'rejectRequest'])
+        ->name('alumni.network.reject');
+    Route::delete('/alumni/network/{id}', [App\Http\Controllers\Alumni\NetworkController::class, 'removeConnection'])
+        ->name('alumni.network.remove');
 
     Route::get('/alumni/messages', function () {
         return Inertia::render('Alumni/Network/Messages');
     })->name('alumni.messages');
 
-    Route::get('/alumni/mentorship', function () {
-        return Inertia::render('Alumni/Mentorship');
-    })->name('alumni.mentorship');
+    // Mentorship Routes
+    Route::get('/alumni/mentorship', [App\Http\Controllers\Alumni\MentorshipController::class, 'index'])
+        ->name('alumni.mentorship');
+    Route::post('/alumni/mentorship/profile', [App\Http\Controllers\Alumni\MentorshipController::class, 'createMentorProfile'])
+        ->name('alumni.mentorship.profile.create');
+    Route::put('/alumni/mentorship/profile', [App\Http\Controllers\Alumni\MentorshipController::class, 'updateMentorProfile'])
+        ->name('alumni.mentorship.profile.update');
+    Route::post('/alumni/mentorship/request', [App\Http\Controllers\Alumni\MentorshipController::class, 'requestMentorship'])
+        ->name('alumni.mentorship.request');
+    Route::put('/alumni/mentorship/{id}/accept', [App\Http\Controllers\Alumni\MentorshipController::class, 'acceptMentorship'])
+        ->name('alumni.mentorship.accept');
+    Route::put('/alumni/mentorship/{id}/reject', [App\Http\Controllers\Alumni\MentorshipController::class, 'rejectMentorship'])
+        ->name('alumni.mentorship.reject');
+    Route::put('/alumni/mentorship/{id}/complete', [App\Http\Controllers\Alumni\MentorshipController::class, 'completeMentorship'])
+        ->name('alumni.mentorship.complete');
+    Route::delete('/alumni/mentorship/{id}', [App\Http\Controllers\Alumni\MentorshipController::class, 'cancelMentorship'])
+        ->name('alumni.mentorship.cancel');
 
     // Resources
     Route::get('/alumni/documents', function () {

@@ -66,6 +66,26 @@ interface KPIMetrics {
     total_tracked_alumni: number;
 }
 
+interface JobMismatchStats {
+    total_employed: number;
+    overqualified_count: number;
+    overqualified_percentage: number;
+    unfit_count: number;
+    unfit_percentage: number;
+    underqualified_count: number;
+    underqualified_percentage: number;
+    good_match_count: number;
+    good_match_percentage: number;
+    avg_job_satisfaction: number;
+    job_related_to_degree: {
+        related_count: number;
+        unrelated_count: number;
+        related_percentage: number;
+        unrelated_percentage: number;
+    };
+    unemployment_reasons: Record<string, number>;
+}
+
 const COLORS = {
     primary: '#800000',    // Maroon
     secondary: '#D4AF37',  // Gold/Beige
@@ -79,6 +99,7 @@ const COLORS = {
 export default function TimeToJobAnalytics({ user }: Props) {
     const [data, setData] = useState<TimeToJobData[]>([]);
     const [kpiMetrics, setKpiMetrics] = useState<KPIMetrics | null>(null);
+    const [jobMismatchStats, setJobMismatchStats] = useState<JobMismatchStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
@@ -109,6 +130,7 @@ export default function TimeToJobAnalytics({ user }: Props) {
             if (result.success) {
                 setData(result.data.yearly_data);
                 setKpiMetrics(result.data.kpi_metrics);
+                setJobMismatchStats(result.data.job_mismatch_stats);
                 setLastRefresh(new Date());
             }
         } catch (err) {
@@ -452,6 +474,196 @@ export default function TimeToJobAnalytics({ user }: Props) {
                         </CardContent>
                     </Card>
                 </div>
+
+                {/* Job Mismatch & Qualification Statistics */}
+                {jobMismatchStats && (
+                    <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {/* Overqualified Card */}
+                            <Card className="border-beige-200 shadow-lg">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-maroon-800">Overqualified</CardTitle>
+                                    <TrendingUp className="h-4 w-4 text-orange-600" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-maroon-800">
+                                        {jobMismatchStats.overqualified_count}
+                                    </div>
+                                    <p className="text-xs text-maroon-600 mt-1">
+                                        {jobMismatchStats.overqualified_percentage}% of employed alumni
+                                    </p>
+                                    <Badge variant="outline" className="mt-2 text-orange-600 border-orange-300">
+                                        Job requires less education
+                                    </Badge>
+                                </CardContent>
+                            </Card>
+
+                            {/* Unfit/Mismatch Card */}
+                            <Card className="border-beige-200 shadow-lg">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-maroon-800">Unfit/Mismatch</CardTitle>
+                                    <Briefcase className="h-4 w-4 text-red-600" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-maroon-800">
+                                        {jobMismatchStats.unfit_count}
+                                    </div>
+                                    <p className="text-xs text-maroon-600 mt-1">
+                                        {jobMismatchStats.unfit_percentage}% of employed alumni
+                                    </p>
+                                    <Badge variant="outline" className="mt-2 text-red-600 border-red-300">
+                                        Job not related to degree
+                                    </Badge>
+                                </CardContent>
+                            </Card>
+
+                            {/* Underqualified Card */}
+                            <Card className="border-beige-200 shadow-lg">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-maroon-800">Underqualified</CardTitle>
+                                    <TrendingDown className="h-4 w-4 text-blue-600" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-maroon-800">
+                                        {jobMismatchStats.underqualified_count}
+                                    </div>
+                                    <p className="text-xs text-maroon-600 mt-1">
+                                        {jobMismatchStats.underqualified_percentage}% of employed alumni
+                                    </p>
+                                    <Badge variant="outline" className="mt-2 text-blue-600 border-blue-300">
+                                        Job requires more education
+                                    </Badge>
+                                </CardContent>
+                            </Card>
+
+                            {/* Good Match Card */}
+                            <Card className="border-beige-200 shadow-lg">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-maroon-800">Good Match</CardTitle>
+                                    <Users className="h-4 w-4 text-green-600" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-maroon-800">
+                                        {jobMismatchStats.good_match_count}
+                                    </div>
+                                    <p className="text-xs text-maroon-600 mt-1">
+                                        {jobMismatchStats.good_match_percentage}% of employed alumni
+                                    </p>
+                                    <Badge variant="outline" className="mt-2 text-green-600 border-green-300">
+                                        Perfect job match
+                                    </Badge>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        {/* Job Mismatch Distribution Chart */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <Card className="border-beige-200 shadow-lg">
+                                <CardHeader>
+                                    <CardTitle className="text-xl text-maroon-800">Job Qualification Match Distribution</CardTitle>
+                                    <CardDescription className="text-maroon-600">
+                                        Breakdown of job matches among employed alumni
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <BarChart
+                                            data={[
+                                                { name: 'Good Match', value: jobMismatchStats.good_match_count, color: COLORS.success },
+                                                { name: 'Overqualified', value: jobMismatchStats.overqualified_count, color: COLORS.warning },
+                                                { name: 'Unfit', value: jobMismatchStats.unfit_count, color: COLORS.danger },
+                                                { name: 'Underqualified', value: jobMismatchStats.underqualified_count, color: COLORS.info },
+                                            ]}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                            <XAxis dataKey="name" stroke={COLORS.primary} fontSize={12} />
+                                            <YAxis stroke={COLORS.primary} fontSize={12} />
+                                            <Tooltip content={<CustomTooltip />} />
+                                            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                                {[
+                                                    { name: 'Good Match', value: jobMismatchStats.good_match_count, color: COLORS.success },
+                                                    { name: 'Overqualified', value: jobMismatchStats.overqualified_count, color: COLORS.warning },
+                                                    { name: 'Unfit', value: jobMismatchStats.unfit_count, color: COLORS.danger },
+                                                    { name: 'Underqualified', value: jobMismatchStats.underqualified_count, color: COLORS.info },
+                                                ].map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-beige-200 shadow-lg">
+                                <CardHeader>
+                                    <CardTitle className="text-xl text-maroon-800">Job Satisfaction & Relevance</CardTitle>
+                                    <CardDescription className="text-maroon-600">
+                                        How well jobs align with alumni degrees
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-6">
+                                    {/* Job Satisfaction Score */}
+                                    <div>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-sm font-medium text-maroon-800">Average Job Satisfaction</span>
+                                            <span className="text-2xl font-bold text-maroon-800">
+                                                {jobMismatchStats.avg_job_satisfaction}/5.0
+                                            </span>
+                                        </div>
+                                        <div className="w-full bg-beige-200 rounded-full h-3">
+                                            <div
+                                                className="bg-maroon-600 h-3 rounded-full transition-all duration-300"
+                                                style={{ width: `${(jobMismatchStats.avg_job_satisfaction / 5) * 100}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+
+                                    {/* Job Related to Degree */}
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-maroon-800 mb-3">Job Related to Degree</h4>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-sm text-gray-600">Related to Degree</span>
+                                                <span className="font-semibold text-green-600">
+                                                    {jobMismatchStats.job_related_to_degree.related_count} ({jobMismatchStats.job_related_to_degree.related_percentage}%)
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-beige-200 rounded-full h-2">
+                                                <div
+                                                    className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                                                    style={{ width: `${jobMismatchStats.job_related_to_degree.related_percentage}%` }}
+                                                ></div>
+                                            </div>
+
+                                            <div className="flex justify-between items-center mt-3">
+                                                <span className="text-sm text-gray-600">Not Related to Degree</span>
+                                                <span className="font-semibold text-red-600">
+                                                    {jobMismatchStats.job_related_to_degree.unrelated_count} ({jobMismatchStats.job_related_to_degree.unrelated_percentage}%)
+                                                </span>
+                                            </div>
+                                            <div className="w-full bg-beige-200 rounded-full h-2">
+                                                <div
+                                                    className="bg-red-600 h-2 rounded-full transition-all duration-300"
+                                                    style={{ width: `${jobMismatchStats.job_related_to_degree.unrelated_percentage}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Total Employed */}
+                                    <div className="pt-4 border-t border-beige-200">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-sm font-medium text-gray-600">Total Employed Alumni Analyzed</span>
+                                            <span className="text-lg font-bold text-maroon-800">
+                                                {jobMismatchStats.total_employed.toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </>
+                )}
 
                 {/* Program Comparison */}
                 {data.length > 0 && data[0].program_breakdown && (

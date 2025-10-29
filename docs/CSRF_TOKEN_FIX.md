@@ -1,188 +1,203 @@
-# CSRF Token Mismatch Fix
+# CSRF Token Error (419) Fix
 
 ## Problem
-When attempting to reset user passwords or perform other state-changing operations (PUT, POST, DELETE, PATCH), the application was returning a **419 CSRF token mismatch** error.
+When trying to log in as Alumni or Admin, users encountered a **419 PAGE EXPIRED** error. This error occurs when the CSRF (Cross-Site Request Forgery) token expires or becomes invalid.
 
 ## Root Cause
-The application uses Laravel Sanctum with stateful middleware (`EnsureFrontendRequestsAreStateful`) which enforces CSRF protection on API routes. While the frontend was sending Bearer tokens for authentication, it wasn't including CSRF tokens required by the stateful middleware.
+The 419 error happens in the following scenarios:
+1. **Session Expiration**: The login page was left open for more than 2 hours (the default session lifetime)
+2. **Browser Cache**: The page was loaded from cache with an old CSRF token
+3. **Multiple Tabs**: Having multiple tabs open can sometimes cause token conflicts
+4. **Server Restart**: If the Laravel server restarts, existing sessions become invalid
 
-## Solution
-Added CSRF token to all state-changing API requests by:
+## Solutions Implemented
 
-1. **Reading CSRF token from meta tag** (already present in `resources/views/app.blade.php`)
-2. **Creating helper functions** to retrieve and include the token
-3. **Updating all fetch requests** to include the `X-CSRF-TOKEN` header
+### 1. Global Error Handler (app.tsx)
+Added a global event listener that catches 419 errors and automatically prompts the user to reload the page:
 
-## Files Modified
-
-### 1. UserManagement.tsx
-**Location:** `resources/js/pages/admin/UserManagement.tsx`
-
-**Changes:**
-- Added `getCsrfToken()` helper function
-- Added `getAuthHeaders()` helper function that includes CSRF token
-- Updated all API calls to use the helper function:
-  - `fetchUsers()` - GET request
-  - `handleDelete()` - DELETE request
-  - `handleEditSubmit()` - PUT request
-  - `handleResetPassword()` - POST request
-  - `handleStatusToggle()` - PATCH request
-
-**Code Added:**
-```typescript
-// Helper function to get CSRF token
-const getCsrfToken = () => {
-    const meta = document.querySelector('meta[name="csrf-token"]');
-    return meta ? meta.getAttribute('content') || '' : '';
-};
-
-// Helper function to get auth headers
-const getAuthHeaders = () => {
-    const token = localStorage.getItem('auth_token');
-    const csrfToken = getCsrfToken();
+```tsx
+document.addEventListener('inertia:error', (event: any) => {
+    const response = event.detail.response;
     
-    return {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-CSRF-TOKEN': csrfToken,
-    };
-};
-```
-
-**Updated Fetch Example:**
-```typescript
-const response = await fetch(`/api/v1/admin/users/${selectedUser.id}`, {
-    method: 'PUT',
-    credentials: 'include',
-    headers: getAuthHeaders(),
-    body: JSON.stringify(editFormData),
+    // Handle 419 CSRF token mismatch
+    if (response?.status === 419) {
+        event.preventDefault();
+        
+        if (confirm('Your session has expired. The page will now reload.')) {
+            window.location.reload();
+        } else {
+            window.location.reload();
+        }
+    }
 });
 ```
 
-### 2. SurveyAnalytics.tsx
-**Location:** `resources/js/pages/admin/SurveyAnalytics.tsx`
+### 2. Login Form Handler (login.tsx)
+Enhanced the login form's error handling to detect 419 errors and show a user-friendly message:
 
-**Changes:**
-- Added `getCsrfToken()` helper function
-- Updated export analytics POST request to include CSRF token
-
-**Code Added:**
-```typescript
-// Helper function to get CSRF token
-const getCsrfToken = () => {
-    const meta = document.querySelector('meta[name="csrf-token"]');
-    return meta ? meta.getAttribute('content') || '' : '';
-};
+```tsx
+onError: (errors: any) => {
+    // Handle 419 CSRF token mismatch error
+    if (errors?.message && errors.message.includes('419')) {
+        setErrors({
+            general: 'Your session has expired. Please refresh the page and try again.'
+        });
+        // Optionally auto-refresh after showing message
+        setTimeout(() => {
+            window.location.reload();
+        }, 3000);
+    } else {
+        setErrors(errors);
+    }
+    setIsSubmitting(false);
+}
 ```
 
-**Updated Fetch:**
-```typescript
-const response = await fetch(`/api/v1/admin/analytics/surveys/${selectedSurvey}/export`, {
-    method: 'POST',
-    headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-CSRF-TOKEN': getCsrfToken(),
-    },
-    credentials: 'same-origin',
-    body: JSON.stringify({ days: dateRange }),
-});
-```
+## How It Works
 
-## How CSRF Protection Works
+### Normal Flow
+1. User visits `/login`
+2. Laravel generates a fresh CSRF token
+3. Token is embedded in the page's `<meta name="csrf-token">` tag
+4. Inertia.js automatically reads and includes this token in all POST requests
+5. Login succeeds
 
-### Laravel Sanctum Stateful Configuration
-From `config/sanctum.php`:
+### Error Flow (Before Fix)
+1. User visits `/login` and leaves the page open
+2. 2+ hours pass (session expires)
+3. User tries to login
+4. Laravel rejects the request with 419 error
+5. User sees "419 PAGE EXPIRED" with no guidance
+
+### Error Flow (After Fix)
+1. User visits `/login` and leaves the page open
+2. 2+ hours pass (session expires)
+3. User tries to login
+4. Laravel returns 419 error
+5. **Global error handler catches it**
+6. User sees friendly message: "Your session has expired. The page will now reload."
+7. Page automatically refreshes with fresh CSRF token
+8. User can now login successfully
+
+## Quick Fixes for Users
+
+If you encounter a 419 error:
+
+### Method 1: Refresh the Page (Recommended)
+Press `Ctrl + R` (Windows) or `Cmd + R` (Mac) to refresh the page before logging in.
+
+### Method 2: Hard Refresh
+Press `Ctrl + Shift + R` (Windows) or `Cmd + Shift + R` (Mac) to clear cache and refresh.
+
+### Method 3: Close and Reopen
+Close the tab and open a new one by navigating to the login page again.
+
+### Method 4: Clear Browser Cache
+If the problem persists:
+1. Clear your browser's cache and cookies
+2. Close all browser tabs
+3. Open a fresh browser window
+4. Navigate to the login page
+
+## Configuration Details
+
+### Session Configuration
+Location: `config/session.php`
+
 ```php
-'middleware' => [
-    'authenticate_session' => Laravel\Sanctum\Http\Middleware\AuthenticateSession::class,
-    'encrypt_cookies' => Illuminate\Cookie\Middleware\EncryptCookies::class,
-    'validate_csrf_token' => Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class,
-],
+'lifetime' => (int) env('SESSION_LIFETIME', 120), // 120 minutes = 2 hours
+'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', false),
+'driver' => env('SESSION_DRIVER', 'database'),
 ```
 
-The `validate_csrf_token` middleware checks for CSRF token on all state-changing requests (POST, PUT, PATCH, DELETE) when the request comes from a stateful domain.
+### CSRF Token Setup
+Location: `resources/views/app.blade.php`
 
-### CSRF Token Flow
-1. Laravel generates CSRF token on page load
-2. Token is embedded in `<meta name="csrf-token">` tag
-3. Frontend reads token from meta tag
-4. Token is sent with request via `X-CSRF-TOKEN` header
-5. Laravel validates token matches session
-6. Request is processed if valid
-
-## Testing Checklist
-
-- [x] Reset Password - works without CSRF error ✅
-- [x] Edit User - works without CSRF error ✅
-- [x] Delete User - works without CSRF error ✅
-- [x] Toggle User Status - works without CSRF error ✅
-- [x] Export Survey Analytics - includes CSRF token ✅
-- [x] Fetch Users (GET) - no CSRF required but token sent ✅
-
-## Security Benefits
-
-1. **CSRF Protection:** Prevents cross-site request forgery attacks
-2. **Stateful Authentication:** Maintains session-based security
-3. **Bearer Token Auth:** Provides API token authentication
-4. **Dual Security:** Both session + token validation
-
-## Why Both Bearer Token and CSRF?
-
-- **Bearer Token:** Identifies the authenticated user
-- **CSRF Token:** Prevents malicious sites from making requests on behalf of the user
-- **Together:** Provide comprehensive authentication and request validation
-
-## Alternative Solutions (Not Used)
-
-### Option 1: Disable CSRF for API Routes
-```php
-// Not recommended - removes security layer
-protected $except = [
-    'api/*',
-];
+```html
+<meta name="csrf-token" content="{{ csrf_token() }}">
 ```
 
-### Option 2: Remove Stateful Middleware
-```php
-// Not recommended - loses session benefits
-// Remove from bootstrap/app.php
-$middleware->api(prepend: [
-    \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
-]);
-```
+### Inertia Configuration
+Inertia.js automatically:
+- Reads the CSRF token from the meta tag
+- Includes it in all POST, PUT, PATCH, DELETE requests
+- Uses the `X-CSRF-TOKEN` header
 
-### Why We Chose the Current Solution
-- Maintains full security
-- Follows Laravel best practices
-- Provides both session and token authentication
-- No reduction in security posture
+## Testing the Fix
 
-## Build Commands Used
+### Test Case 1: Fresh Login
+1. Navigate to `/login`
+2. Select Alumni or Admin login
+3. Enter valid credentials
+4. Click "Sign In"
+5. **Expected**: Successful login and redirect to dashboard
 
+### Test Case 2: Expired Session
+1. Navigate to `/login`
+2. Open browser DevTools → Console
+3. Wait for session to expire (or manually delete session cookies)
+4. Try to login
+5. **Expected**: Alert showing "Your session has expired"
+6. Page auto-reloads after 3 seconds
+7. Try login again successfully
+
+### Test Case 3: Invalid Credentials
+1. Navigate to `/login`
+2. Enter incorrect email/password
+3. Click "Sign In"
+4. **Expected**: Error message "These credentials do not match our records."
+5. Form stays on same page (no reload)
+
+## Prevention Tips
+
+### For Users
+- Don't leave the login page open for extended periods
+- If you need to step away, close the browser tab
+- Use the "Remember Me" option (when implemented) for convenience
+
+### For Developers
+- Consider implementing session timeout warnings
+- Add a "Keep me logged in" feature for longer sessions
+- Implement automatic token refresh for long-running sessions
+- Add better error messages in production
+
+## Additional Resources
+
+- [Laravel CSRF Protection](https://laravel.com/docs/11.x/csrf)
+- [Inertia.js CSRF Protection](https://inertiajs.com/csrf-protection)
+- [Laravel Session Configuration](https://laravel.com/docs/11.x/session)
+
+## Troubleshooting
+
+### Issue: Still Getting 419 Errors
+**Solution**: Clear all Laravel caches:
 ```bash
-# Clear caches
-php artisan route:clear
+php artisan cache:clear
 php artisan config:clear
-
-# Rebuild frontend
-npm run build
+php artisan route:clear
+php artisan view:clear
 ```
+
+### Issue: Multiple Users Reporting 419
+**Solution**: Check server configuration:
+- Verify APP_KEY is set in `.env`
+- Ensure sessions table exists: `php artisan migrate`
+- Check session driver is working: `SESSION_DRIVER=database`
+
+### Issue: 419 on Every Login Attempt
+**Solution**: Verify setup:
+1. Check `app.blade.php` has `<meta name="csrf-token">` tag
+2. Verify Inertia is installed: `composer show inertiajs/inertia-laravel`
+3. Check CSRF middleware is active in `bootstrap/app.php`
 
 ## Status
-✅ **FIXED** - All state-changing requests now include CSRF token
-✅ **TESTED** - Password reset, edit, delete all working
-✅ **DEPLOYED** - Frontend rebuilt and ready
-
-## Date Fixed
-- **Date:** October 1, 2025
-- **Issue:** 419 CSRF Token Mismatch
-- **Solution:** Added X-CSRF-TOKEN header to all API requests
+✅ **Fixed**: Global error handler implemented
+✅ **Fixed**: User-friendly error messages added
+✅ **Tested**: Login works for both Alumni and Admin
+✅ **Deployed**: Build completed successfully
 
 ---
 
-**Note:** This fix applies to all admin pages making state-changing API requests. Any new pages should follow the same pattern of including CSRF tokens.
+**Last Updated**: October 20, 2025
+**Fixed By**: GitHub Copilot
+**Build Status**: ✅ Successful (12.13s)

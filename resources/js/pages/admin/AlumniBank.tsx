@@ -197,7 +197,7 @@ export default function AlumniBank({ user }: Props) {
             await axios.get('/sanctum/csrf-cookie');
             const token = document.head.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
-            const response = await axios.put(`/api/v1/alumni/${editFormData.id}`, editFormData, {
+            const response = await axios.put(`/api/v1/admin/alumni/${editFormData.id}`, editFormData, {
                 headers: {
                     'X-CSRF-TOKEN': token,
                     'Accept': 'application/json',
@@ -886,10 +886,14 @@ export default function AlumniBank({ user }: Props) {
                                         className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-maroon-500 focus:ring-maroon-500"
                                     >
                                         <option value="">Select Status</option>
-                                        <option value="employed">Employed</option>
-                                        <option value="unemployed">Unemployed</option>
-                                        <option value="self-employed">Self-Employed</option>
-                                        <option value="pursuing_education">Pursuing Education</option>
+                                        <option value="employed_full_time">Employed (Full-Time)</option>
+                                        <option value="employed_part_time">Employed (Part-Time)</option>
+                                        <option value="self_employed">Self-Employed</option>
+                                        <option value="unemployed_seeking">Unemployed (Seeking)</option>
+                                        <option value="unemployed_not_seeking">Unemployed (Not Seeking)</option>
+                                        <option value="continuing_education">Continuing Education</option>
+                                        <option value="military_service">Military Service</option>
+                                        <option value="other">Other</option>
                                     </select>
                                 </div>
                             </div>

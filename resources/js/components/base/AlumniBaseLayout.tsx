@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Head, router, Link } from '@inertiajs/react';
+import { Head, router, Link, usePage } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import {
     LayoutDashboard,
@@ -22,17 +22,21 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface User {
+interface UserData {
     id: number;
     email: string;
     role: string;
     status: string;
+    alumniProfile?: {
+        first_name: string;
+        last_name: string;
+        middle_name?: string;
+    };
 }
 
 interface AlumniBaseLayoutProps {
     children: React.ReactNode;
     title?: string;
-    user?: User;
 }
 
 const alumniNavigation = [
@@ -48,7 +52,7 @@ const alumniNavigation = [
         section: "Surveys & Forms",
         items: [
             { name: "Available Surveys", href: "/alumni/surveys", icon: ClipboardList },
-            { name: "Survey History", href: "/alumni/survey-history", icon: History },
+            { name: "Survey History", href: "/alumni/surveys/history", icon: History },
             { name: "Certificates", href: "/alumni/certificates", icon: Award }
         ]
     },
@@ -70,16 +74,13 @@ const alumniNavigation = [
     }
 ];
 
-export default function AlumniBaseLayout({ children, title = "Alumni Portal", user }: AlumniBaseLayoutProps) {
+export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: AlumniBaseLayoutProps) {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const [currentUser, setCurrentUser] = useState<User | null>(user || null);
-
-    useEffect(() => {
-        // Set user from props - session-based auth
-        if (user) {
-            setCurrentUser(user);
-        }
-    }, [user]);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    
+    // Get user from Inertia's shared props
+    const { auth } = usePage<{ auth: { user: UserData } }>().props;
+    const currentUser = auth?.user;
 
     const handleLogout = () => {
         router.post('/logout');
@@ -105,8 +106,8 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal", us
                 )}
             </div>
 
-            {/* Navigation */}
-            <div className="flex-1 overflow-y-auto py-4">
+            {/* Navigation - Scrollable */}
+            <div className="flex-1 overflow-y-auto py-4 scrollbar-thin scrollbar-thumb-beige-300 scrollbar-track-transparent hover:scrollbar-thumb-beige-400">
                 {alumniNavigation.map((section) => (
                     <div key={section.section} className="mb-6">
                         {!sidebarCollapsed && (
@@ -159,7 +160,9 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal", us
                     {!sidebarCollapsed && (
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-gray-900 truncate">
-                                {currentUser?.email || 'Alumni User'}
+                                {currentUser?.alumniProfile?.first_name && currentUser?.alumniProfile?.last_name 
+                                    ? `${currentUser.alumniProfile.first_name} ${currentUser.alumniProfile.last_name}`
+                                    : currentUser?.email?.split('@')[0] || 'Alumni User'}
                             </p>
                             <p className="text-xs text-gray-500">Alumni Member</p>
                         </div>
@@ -185,12 +188,12 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal", us
             <Head title={title} />
 
             <div className="flex h-screen bg-beige-50">
-                {/* Desktop Sidebar */}
+                {/* Desktop Sidebar - Fixed Height Container */}
                 <div className={cn(
-                    "hidden md:flex md:flex-col bg-white border-r border-beige-200 transition-all duration-300",
+                    "hidden md:flex md:flex-col bg-white border-r border-beige-200 transition-all duration-300 h-screen",
                     sidebarCollapsed ? "md:w-16" : "md:w-64"
                 )}>
-                    <div className="relative flex-1">
+                    <div className="relative flex-1 flex flex-col min-h-0">
                         <SidebarContent />
 
                         {/* Collapse Toggle */}
@@ -209,17 +212,32 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal", us
                     </div>
                 </div>
 
-                {/* Mobile Sidebar - Simplified */}
+                {/* Mobile Sidebar Overlay */}
+                {mobileMenuOpen && (
+                    <div
+                        className="fixed inset-0 bg-gray-900/20 backdrop-blur-sm z-40 md:hidden"
+                        onClick={() => setMobileMenuOpen(false)}
+                    />
+                )}
+
+                {/* Mobile Sidebar */}
+                <div className={cn(
+                    "fixed inset-y-0 left-0 z-50 w-64 bg-white transform transition-transform duration-300 ease-in-out md:hidden",
+                    mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+                )}>
+                    <SidebarContent />
+                </div>
 
                 {/* Main Content */}
-                <div className="flex-1 flex flex-col min-w-0">
+                <div className="flex-1 flex flex-col min-w-0 bg-white">
                     {/* Header */}
-                    <header className="bg-white border-b border-beige-200 px-4 py-3 flex-shrink-0">
+                    <header className="bg-white border-b border-beige-200 px-4 py-3 flex-shrink-0 shadow-sm">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center">
                                 <Button
                                     variant="ghost"
                                     size="sm"
+                                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                                     className="md:hidden text-gray-700 hover:text-maroon-700 hover:bg-beige-50"
                                 >
                                     <Menu className="h-5 w-5" />
@@ -229,7 +247,7 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal", us
 
                             <div className="flex items-center space-x-4">
                                 <span className="hidden sm:block text-sm text-gray-600">
-                                    Welcome, {currentUser?.email?.split('@')[0] || 'Alumni'}
+                                    Welcome, {currentUser?.alumniProfile?.first_name || currentUser?.email?.split('@')[0] || 'Alumni'}
                                 </span>
                             </div>
                         </div>

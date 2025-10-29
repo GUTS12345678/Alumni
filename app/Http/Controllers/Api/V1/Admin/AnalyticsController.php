@@ -34,12 +34,16 @@ class AnalyticsController extends Controller
             
             // Get KPI metrics
             $kpiMetrics = $this->getKPIMetrics($yearFilter);
+            
+            // Get job mismatch statistics
+            $mismatchStats = $this->getJobMismatchStatistics($yearFilter);
 
             return response()->json([
                 'success' => true,
                 'data' => [
                     'yearly_data' => $yearlyData,
-                    'kpi_metrics' => $kpiMetrics
+                    'kpi_metrics' => $kpiMetrics,
+                    'job_mismatch_stats' => $mismatchStats
                 ]
             ]);
 
@@ -91,40 +95,72 @@ class AnalyticsController extends Controller
 
     /**
      * Get yearly time-to-job data
+     * Uses employments table for actual job data, falls back to alumni_profiles
      */
     private function getYearlyTimeToJobData($yearFilter = null): array
     {
-        $query = DB::table('alumni_profiles')
+        // Get data from employments table (first job after graduation)
+        $queryFromJobs = DB::table('alumni_profiles as ap')
+            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+            ->select(
+                'ap.graduation_year',
+                DB::raw('AVG(DATEDIFF(e.start_date, ap.graduation_date)) as avg_days_to_job'),
+                DB::raw('COUNT(DISTINCT ap.id) as total_alumni_with_jobs')
+            )
+            ->whereNotNull('ap.graduation_date')
+            ->whereNotNull('ap.graduation_year')
+            ->whereNotNull('e.start_date')
+            ->when($yearFilter, function ($q) use ($yearFilter) {
+                return $q->whereIn('ap.graduation_year', $yearFilter);
+            })
+            ->groupBy('ap.graduation_year')
+            ->orderBy('ap.graduation_year')
+            ->get()
+            ->keyBy('graduation_year');
+
+        // Get total alumni count and employment status from profiles
+        $queryFromProfiles = DB::table('alumni_profiles')
             ->select(
                 DB::raw('graduation_year'),
-                DB::raw('AVG(DATEDIFF(job_start_date, graduation_date)) as avg_days_to_job'),
                 DB::raw('COUNT(id) as total_alumni'),
                 DB::raw('SUM(CASE WHEN employment_status IN ("employed_full_time", "employed_part_time", "self_employed") THEN 1 ELSE 0 END) as employed_alumni'),
-                DB::raw('(SUM(CASE WHEN employment_status IN ("employed_full_time", "employed_part_time", "self_employed") THEN 1 ELSE 0 END) / COUNT(id)) * 100 as employment_rate')
+                DB::raw('AVG(DATEDIFF(job_start_date, graduation_date)) as avg_days_from_profile')
             )
             ->whereNotNull('graduation_date')
             ->whereNotNull('graduation_year')
-            ->groupBy('graduation_year');
-
-        if ($yearFilter) {
-            $query->whereIn('graduation_year', $yearFilter);
-        }
-
-        $yearlyResults = $query->orderBy('graduation_year')->get();
+            ->when($yearFilter, function ($q) use ($yearFilter) {
+                return $q->whereIn('graduation_year', $yearFilter);
+            })
+            ->groupBy('graduation_year')
+            ->orderBy('graduation_year')
+            ->get();
 
         $data = [];
-        foreach ($yearlyResults as $year) {
+        foreach ($queryFromProfiles as $yearData) {
+            $year = $yearData->graduation_year;
+            $jobData = $queryFromJobs->get($year);
+            
+            // Prefer data from employments table, fallback to profiles
+            $avgDays = $jobData && $jobData->total_alumni_with_jobs > 0 
+                ? $jobData->avg_days_to_job 
+                : $yearData->avg_days_from_profile;
+            
+            $employmentRate = $yearData->total_alumni > 0
+                ? ($yearData->employed_alumni / $yearData->total_alumni) * 100
+                : 0;
+            
             // Get program breakdown for this year
-            $programBreakdown = $this->getProgramBreakdownForYear($year->graduation_year);
+            $programBreakdown = $this->getProgramBreakdownForYear($year);
             
             $data[] = [
-                'graduation_year' => (int) $year->graduation_year,
-                'avg_days_to_job' => round((float) ($year->avg_days_to_job ?? 0), 1),
-                'total_alumni' => (int) $year->total_alumni,
-                'employed_alumni' => (int) $year->employed_alumni,
-                'employment_rate' => round((float) $year->employment_rate, 1),
-                'median_days' => $this->getMedianDaysForYear($year->graduation_year),
-                'program_breakdown' => $programBreakdown
+                'graduation_year' => (int) $year,
+                'avg_days_to_job' => round((float) ($avgDays ?? 0), 1),
+                'total_alumni' => (int) $yearData->total_alumni,
+                'employed_alumni' => (int) $yearData->employed_alumni,
+                'employment_rate' => round((float) $employmentRate, 1),
+                'median_days' => $this->getMedianDaysForYear($year),
+                'program_breakdown' => $programBreakdown,
+                'data_source' => $jobData && $jobData->total_alumni_with_jobs > 0 ? 'employments_table' : 'profiles_only'
             ];
         }
 
@@ -133,10 +169,28 @@ class AnalyticsController extends Controller
 
     /**
      * Get program breakdown for a specific year
+     * Uses employments table + alumni_profiles
      */
     private function getProgramBreakdownForYear($year): array
     {
-        $programs = DB::table('alumni_profiles')
+        // Get data from employments table (actual job records)
+        $programsFromJobs = DB::table('alumni_profiles as ap')
+            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+            ->select(
+                'ap.degree_program as program',
+                DB::raw('AVG(DATEDIFF(e.start_date, ap.graduation_date)) as avg_days'),
+                DB::raw('COUNT(DISTINCT ap.id) as alumni_count')
+            )
+            ->where('ap.graduation_year', $year)
+            ->whereNotNull('ap.graduation_date')
+            ->whereNotNull('e.start_date')
+            ->groupBy('ap.degree_program')
+            ->having('alumni_count', '>', 0)
+            ->get()
+            ->keyBy('program');
+            
+        // Get data from profiles (fallback for alumni without employment records)
+        $programsFromProfiles = DB::table('alumni_profiles')
             ->select(
                 'degree_program as program',
                 DB::raw('AVG(DATEDIFF(job_start_date, graduation_date)) as avg_days'),
@@ -146,40 +200,101 @@ class AnalyticsController extends Controller
             ->whereNotNull('graduation_date')
             ->whereNotNull('job_start_date')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->whereNotExists(function ($query) use ($year) {
+                $query->select(DB::raw(1))
+                      ->from('employments')
+                      ->whereColumn('employments.alumni_id', 'alumni_profiles.id');
+            })
             ->groupBy('degree_program')
             ->having('alumni_count', '>', 0)
-            ->orderBy('avg_days')
             ->get();
-
-        $colors = ['#800000', '#B22222', '#D4AF37', '#DAA520', '#CD853F', '#8B4513'];
-        $data = [];
         
-        foreach ($programs as $index => $program) {
-            $data[] = [
-                'program' => $program->program,
-                'avg_days' => round((float) ($program->avg_days ?? 0), 1),
-                'alumni_count' => (int) $program->alumni_count,
-                'color' => $colors[$index % count($colors)]
+        // Combine both sources
+        $combinedPrograms = [];
+        
+        // Add programs from jobs
+        foreach ($programsFromJobs as $program => $data) {
+            $combinedPrograms[$program] = [
+                'avg_days' => $data->avg_days,
+                'alumni_count' => $data->alumni_count,
             ];
         }
+        
+        // Add programs from profiles (if not already in jobs)
+        foreach ($programsFromProfiles as $data) {
+            if (!isset($combinedPrograms[$data->program])) {
+                $combinedPrograms[$data->program] = [
+                    'avg_days' => $data->avg_days,
+                    'alumni_count' => $data->alumni_count,
+                ];
+            } else {
+                // Merge counts if program exists in both
+                $existingData = $combinedPrograms[$data->program];
+                $totalCount = $existingData['alumni_count'] + $data->alumni_count;
+                $combinedPrograms[$data->program] = [
+                    'avg_days' => (($existingData['avg_days'] * $existingData['alumni_count']) + 
+                                  ($data->avg_days * $data->alumni_count)) / $totalCount,
+                    'alumni_count' => $totalCount,
+                ];
+            }
+        }
+        
+        // Sort by avg_days (ascending)
+        uasort($combinedPrograms, function ($a, $b) {
+            return $a['avg_days'] <=> $b['avg_days'];
+        });
 
-        return $data;
+        $colors = ['#800000', '#B22222', '#D4AF37', '#DAA520', '#CD853F', '#8B4513'];
+        $result = [];
+        $index = 0;
+        
+        foreach ($combinedPrograms as $program => $data) {
+            $result[] = [
+                'program' => $program,
+                'avg_days' => round((float) ($data['avg_days'] ?? 0), 1),
+                'alumni_count' => (int) $data['alumni_count'],
+                'color' => $colors[$index % count($colors)]
+            ];
+            $index++;
+        }
+
+        return $result;
     }
 
     /**
      * Get median days for a specific year
+     * Uses employments table + alumni_profiles
      */
     private function getMedianDaysForYear($year): float
     {
-        $days = DB::table('alumni_profiles')
+        // Get days from employments table
+        $daysFromJobs = DB::table('alumni_profiles as ap')
+            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+            ->select(DB::raw('DATEDIFF(e.start_date, ap.graduation_date) as days_to_job'))
+            ->where('ap.graduation_year', $year)
+            ->whereNotNull('ap.graduation_date')
+            ->whereNotNull('e.start_date')
+            ->pluck('days_to_job')
+            ->toArray();
+            
+        // Get days from profiles (for alumni without employment records)
+        $daysFromProfiles = DB::table('alumni_profiles')
             ->select(DB::raw('DATEDIFF(job_start_date, graduation_date) as days_to_job'))
             ->where('graduation_year', $year)
             ->whereNotNull('graduation_date')
             ->whereNotNull('job_start_date')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
-            ->orderBy('days_to_job')
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                      ->from('employments')
+                      ->whereColumn('employments.alumni_id', 'alumni_profiles.id');
+            })
             ->pluck('days_to_job')
             ->toArray();
+        
+        // Combine and sort
+        $days = array_merge($daysFromJobs, $daysFromProfiles);
+        sort($days);
 
         if (empty($days)) {
             return 0;
@@ -197,38 +312,83 @@ class AnalyticsController extends Controller
 
     /**
      * Get KPI metrics
+     * Uses employments table + alumni_profiles for comprehensive tracking
      */
     private function getKPIMetrics($yearFilter = null): array
     {
-        // Overall average days
-        $overallQuery = DB::table('alumni_profiles')
+        // Overall average days from employments table
+        $overallFromJobs = DB::table('alumni_profiles as ap')
+            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+            ->whereNotNull('ap.graduation_date')
+            ->whereNotNull('e.start_date')
+            ->when($yearFilter, function ($q) use ($yearFilter) {
+                return $q->whereIn('ap.graduation_year', $yearFilter);
+            })
+            ->avg(DB::raw('DATEDIFF(e.start_date, ap.graduation_date)'));
+            
+        // Overall average days from profiles (fallback)
+        $overallFromProfiles = DB::table('alumni_profiles')
             ->whereNotNull('graduation_date')
             ->whereNotNull('job_start_date')
-            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed']);
-
-        if ($yearFilter) {
-            $overallQuery->whereIn('graduation_year', $yearFilter);
-        }
-
-        $overallAvg = $overallQuery->avg(DB::raw('DATEDIFF(job_start_date, graduation_date)')) ?? 0;
+            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                      ->from('employments')
+                      ->whereColumn('employments.alumni_id', 'alumni_profiles.id');
+            })
+            ->when($yearFilter, function ($q) use ($yearFilter) {
+                return $q->whereIn('graduation_year', $yearFilter);
+            })
+            ->avg(DB::raw('DATEDIFF(job_start_date, graduation_date)'));
+        
+        // Weighted average
+        $overallAvg = ($overallFromJobs ?? 0) ?: ($overallFromProfiles ?? 0);
 
         // Current year average
         $currentYear = date('Y');
-        $currentYearAvg = DB::table('alumni_profiles')
+        $currentYearFromJobs = DB::table('alumni_profiles as ap')
+            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+            ->where('ap.graduation_year', $currentYear)
+            ->whereNotNull('ap.graduation_date')
+            ->whereNotNull('e.start_date')
+            ->avg(DB::raw('DATEDIFF(e.start_date, ap.graduation_date)'));
+            
+        $currentYearFromProfiles = DB::table('alumni_profiles')
             ->where('graduation_year', $currentYear)
             ->whereNotNull('graduation_date')
             ->whereNotNull('job_start_date')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
-            ->avg(DB::raw('DATEDIFF(job_start_date, graduation_date)')) ?? 0;
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                      ->from('employments')
+                      ->whereColumn('employments.alumni_id', 'alumni_profiles.id');
+            })
+            ->avg(DB::raw('DATEDIFF(job_start_date, graduation_date)'));
+        
+        $currentYearAvg = ($currentYearFromJobs ?? 0) ?: ($currentYearFromProfiles ?? 0);
 
         // Previous year for improvement calculation
         $previousYear = $currentYear - 1;
-        $previousYearAvg = DB::table('alumni_profiles')
+        $previousYearFromJobs = DB::table('alumni_profiles as ap')
+            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+            ->where('ap.graduation_year', $previousYear)
+            ->whereNotNull('ap.graduation_date')
+            ->whereNotNull('e.start_date')
+            ->avg(DB::raw('DATEDIFF(e.start_date, ap.graduation_date)'));
+            
+        $previousYearFromProfiles = DB::table('alumni_profiles')
             ->where('graduation_year', $previousYear)
             ->whereNotNull('graduation_date')
             ->whereNotNull('job_start_date')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
-            ->avg(DB::raw('DATEDIFF(job_start_date, graduation_date)')) ?? 0;
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                      ->from('employments')
+                      ->whereColumn('employments.alumni_id', 'alumni_profiles.id');
+            })
+            ->avg(DB::raw('DATEDIFF(job_start_date, graduation_date)'));
+        
+        $previousYearAvg = ($previousYearFromJobs ?? 0) ?: ($previousYearFromProfiles ?? 0);
 
         // Calculate improvement rate (negative means faster employment, which is better)
         $improvementRate = 0;
@@ -236,8 +396,20 @@ class AnalyticsController extends Controller
             $improvementRate = (($previousYearAvg - $currentYearAvg) / $previousYearAvg) * 100;
         }
 
-        // Fastest employment program
-        $fastestProgram = DB::table('alumni_profiles')
+        // Fastest employment program (from both sources)
+        $fastestFromJobs = DB::table('alumni_profiles as ap')
+            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+            ->select(
+                'ap.degree_program as name',
+                DB::raw('AVG(DATEDIFF(e.start_date, ap.graduation_date)) as avg_days')
+            )
+            ->whereNotNull('ap.graduation_date')
+            ->whereNotNull('e.start_date')
+            ->groupBy('ap.degree_program')
+            ->orderBy('avg_days')
+            ->first();
+            
+        $fastestFromProfiles = DB::table('alumni_profiles')
             ->select(
                 'degree_program as name',
                 DB::raw('AVG(DATEDIFF(job_start_date, graduation_date)) as avg_days')
@@ -248,13 +420,28 @@ class AnalyticsController extends Controller
             ->groupBy('degree_program')
             ->orderBy('avg_days')
             ->first();
+        
+        $fastestProgram = $fastestFromJobs ?? $fastestFromProfiles;
 
-        // Total tracked alumni
-        $totalTracked = DB::table('alumni_profiles')
+        // Total tracked alumni (from both sources)
+        $totalFromJobs = DB::table('alumni_profiles as ap')
+            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+            ->whereNotNull('ap.graduation_date')
+            ->whereNotNull('e.start_date')
+            ->count(DB::raw('DISTINCT ap.id'));
+            
+        $totalFromProfiles = DB::table('alumni_profiles')
             ->whereNotNull('graduation_date')
             ->whereNotNull('job_start_date')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                      ->from('employments')
+                      ->whereColumn('employments.alumni_id', 'alumni_profiles.id');
+            })
             ->count();
+        
+        $totalTracked = $totalFromJobs + $totalFromProfiles;
 
         return [
             'overall_avg_days' => round((float) $overallAvg, 1),
@@ -550,8 +737,7 @@ class AnalyticsController extends Controller
                         'question_type' => $question->question_type,
                         'total_responses' => (int) $question->total_responses,
                         'skip_rate' => round($skipRate, 1),
-                        'response_distribution' => [], // Could be enhanced with actual distribution data
-                        'avg_response_time' => rand(30, 180) // Placeholder - would need actual timing data
+                        'response_distribution' => [] // Could be enhanced with actual distribution data
                     ];
                 })
                 ->toArray();
@@ -662,14 +848,13 @@ class AnalyticsController extends Controller
         // Question Analytics
         if (!empty($data['question_analytics'])) {
             fputcsv($handle, ['Question Analytics']);
-            fputcsv($handle, ['Question', 'Type', 'Total Responses', 'Skip Rate (%)', 'Avg Response Time (seconds)']);
+            fputcsv($handle, ['Question', 'Type', 'Total Responses', 'Skip Rate (%)']);
             foreach ($data['question_analytics'] as $question) {
                 fputcsv($handle, [
                     $question['question_text'],
                     $question['question_type'],
                     $question['total_responses'],
-                    $question['skip_rate'],
-                    $question['avg_response_time']
+                    $question['skip_rate']
                 ]);
             }
         }
@@ -679,5 +864,198 @@ class AnalyticsController extends Controller
         fclose($handle);
         
         return $content;
+    }
+
+    /**
+     * Get job mismatch statistics (Overqualified/Unfit)
+     * Uses employments table for job history, falls back to alumni_profiles status
+     */
+    private function getJobMismatchStatistics($yearFilter = null): array
+    {
+        // Get employed alumni from employments table (with current jobs)
+        $employedQuery = DB::table('alumni_profiles as ap')
+            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+            ->where('e.is_current', true);
+            
+        if ($yearFilter) {
+            $employedQuery->whereIn('ap.graduation_year', $yearFilter);
+        }
+        
+        $totalEmployedFromJobs = $employedQuery->count();
+        
+        // Get alumni with employment status but no job records
+        $employedFromStatusQuery = DB::table('alumni_profiles')
+            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                      ->from('employments')
+                      ->whereColumn('employments.alumni_id', 'alumni_profiles.id')
+                      ->where('employments.is_current', true);
+            });
+            
+        if ($yearFilter) {
+            $employedFromStatusQuery->whereIn('graduation_year', $yearFilter);
+        }
+        
+        $totalEmployedFromStatus = $employedFromStatusQuery->count();
+        $totalEmployed = $totalEmployedFromJobs + $totalEmployedFromStatus;
+        
+        // Job mismatch breakdown (from employments table with job_mismatch_reason)
+        $mismatchBreakdownFromJobs = DB::table('alumni_profiles as ap')
+            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+            ->select('ap.job_mismatch_reason', DB::raw('COUNT(*) as count'))
+            ->where('e.is_current', true)
+            ->whereNotNull('ap.job_mismatch_reason')
+            ->when($yearFilter, function ($q) use ($yearFilter) {
+                return $q->whereIn('ap.graduation_year', $yearFilter);
+            })
+            ->groupBy('ap.job_mismatch_reason')
+            ->get();
+            
+        // Job mismatch from profiles without employment records
+        $mismatchBreakdownFromStatus = DB::table('alumni_profiles')
+            ->select('job_mismatch_reason', DB::raw('COUNT(*) as count'))
+            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->whereNotNull('job_mismatch_reason')
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                      ->from('employments')
+                      ->whereColumn('employments.alumni_id', 'alumni_profiles.id')
+                      ->where('employments.is_current', true);
+            })
+            ->when($yearFilter, function ($q) use ($yearFilter) {
+                return $q->whereIn('graduation_year', $yearFilter);
+            })
+            ->groupBy('job_mismatch_reason')
+            ->get();
+        
+        // Combine both sources
+        $mismatchCombined = collect($mismatchBreakdownFromJobs)
+            ->concat($mismatchBreakdownFromStatus)
+            ->groupBy('job_mismatch_reason')
+            ->map(function ($group) {
+                return $group->sum('count');
+            });
+        
+        $mismatchBreakdown = $mismatchCombined->mapWithKeys(function ($count, $reason) use ($totalEmployed) {
+            return [
+                $reason => [
+                    'count' => (int) $count,
+                    'percentage' => $totalEmployed > 0 ? round(($count / $totalEmployed) * 100, 1) : 0
+                ]
+            ];
+        })->toArray();
+        
+        // Unemployment reasons breakdown
+        $unemploymentReasons = DB::table('alumni_profiles')
+            ->select('unemployment_reason', DB::raw('COUNT(*) as count'))
+            ->whereIn('employment_status', ['unemployed_seeking', 'unemployed_not_seeking'])
+            ->whereNotNull('unemployment_reason')
+            ->when($yearFilter, function ($q) use ($yearFilter) {
+                return $q->whereIn('graduation_year', $yearFilter);
+            })
+            ->groupBy('unemployment_reason')
+            ->get()
+            ->mapWithKeys(function ($item) {
+                return [
+                    $item->unemployment_reason => (int) $item->count
+                ];
+            })
+            ->toArray();
+        
+        // Job satisfaction average (from profiles with current employment)
+        $avgJobSatisfactionFromJobs = DB::table('alumni_profiles as ap')
+            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+            ->where('e.is_current', true)
+            ->whereNotNull('ap.job_satisfaction')
+            ->when($yearFilter, function ($q) use ($yearFilter) {
+                return $q->whereIn('ap.graduation_year', $yearFilter);
+            })
+            ->avg('ap.job_satisfaction');
+            
+        $avgJobSatisfactionFromStatus = DB::table('alumni_profiles')
+            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->whereNotNull('job_satisfaction')
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                      ->from('employments')
+                      ->whereColumn('employments.alumni_id', 'alumni_profiles.id')
+                      ->where('employments.is_current', true);
+            })
+            ->when($yearFilter, function ($q) use ($yearFilter) {
+                return $q->whereIn('graduation_year', $yearFilter);
+            })
+            ->avg('job_satisfaction');
+        
+        // Weighted average
+        $avgJobSatisfaction = 0;
+        if ($totalEmployedFromJobs > 0 && $totalEmployedFromStatus > 0) {
+            $avgJobSatisfaction = (($avgJobSatisfactionFromJobs ?? 0) * $totalEmployedFromJobs + 
+                                   ($avgJobSatisfactionFromStatus ?? 0) * $totalEmployedFromStatus) / 
+                                  $totalEmployed;
+        } elseif ($totalEmployedFromJobs > 0) {
+            $avgJobSatisfaction = $avgJobSatisfactionFromJobs ?? 0;
+        } elseif ($totalEmployedFromStatus > 0) {
+            $avgJobSatisfaction = $avgJobSatisfactionFromStatus ?? 0;
+        }
+        
+        // Job-related to degree statistics (from employments + profiles)
+        $jobRelatedFromJobs = DB::table('alumni_profiles as ap')
+            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+            ->select(
+                DB::raw('SUM(CASE WHEN ap.job_related_to_degree = 1 THEN 1 ELSE 0 END) as related_count'),
+                DB::raw('SUM(CASE WHEN ap.job_related_to_degree = 0 THEN 1 ELSE 0 END) as unrelated_count')
+            )
+            ->where('e.is_current', true)
+            ->whereNotNull('ap.job_related_to_degree')
+            ->when($yearFilter, function ($q) use ($yearFilter) {
+                return $q->whereIn('ap.graduation_year', $yearFilter);
+            })
+            ->first();
+            
+        $jobRelatedFromStatus = DB::table('alumni_profiles')
+            ->select(
+                DB::raw('SUM(CASE WHEN job_related_to_degree = 1 THEN 1 ELSE 0 END) as related_count'),
+                DB::raw('SUM(CASE WHEN job_related_to_degree = 0 THEN 1 ELSE 0 END) as unrelated_count')
+            )
+            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->whereNotNull('job_related_to_degree')
+            ->whereNotExists(function ($query) {
+                $query->select(DB::raw(1))
+                      ->from('employments')
+                      ->whereColumn('employments.alumni_id', 'alumni_profiles.id')
+                      ->where('employments.is_current', true);
+            })
+            ->when($yearFilter, function ($q) use ($yearFilter) {
+                return $q->whereIn('graduation_year', $yearFilter);
+            })
+            ->first();
+        
+        $relatedCount = ($jobRelatedFromJobs->related_count ?? 0) + ($jobRelatedFromStatus->related_count ?? 0);
+        $unrelatedCount = ($jobRelatedFromJobs->unrelated_count ?? 0) + ($jobRelatedFromStatus->unrelated_count ?? 0);
+        $totalWithData = $relatedCount + $unrelatedCount;
+        
+        return [
+            'total_employed' => (int) $totalEmployed,
+            'employed_with_jobs' => (int) $totalEmployedFromJobs,
+            'employed_from_status' => (int) $totalEmployedFromStatus,
+            'job_mismatch_breakdown' => $mismatchBreakdown,
+            'overqualified_count' => $mismatchBreakdown['overqualified']['count'] ?? 0,
+            'overqualified_percentage' => $mismatchBreakdown['overqualified']['percentage'] ?? 0,
+            'unfit_count' => $mismatchBreakdown['unfit']['count'] ?? 0,
+            'unfit_percentage' => $mismatchBreakdown['unfit']['percentage'] ?? 0,
+            'underqualified_count' => $mismatchBreakdown['underqualified']['count'] ?? 0,
+            'underqualified_percentage' => $mismatchBreakdown['underqualified']['percentage'] ?? 0,
+            'good_match_count' => $mismatchBreakdown['none']['count'] ?? 0,
+            'good_match_percentage' => $mismatchBreakdown['none']['percentage'] ?? 0,
+            'unemployment_reasons' => $unemploymentReasons,
+            'avg_job_satisfaction' => round((float) $avgJobSatisfaction, 1),
+            'job_related_to_degree' => [
+                'related_count' => (int) $relatedCount,
+                'unrelated_count' => (int) $unrelatedCount,
+                'related_percentage' => $totalWithData > 0 ? round(($relatedCount / $totalWithData) * 100, 1) : 0,
+                'unrelated_percentage' => $totalWithData > 0 ? round(($unrelatedCount / $totalWithData) * 100, 1) : 0
+            ]
+        ];
     }
 }

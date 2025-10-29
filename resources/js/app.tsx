@@ -18,6 +18,22 @@ createInertiaApp({
     progress: {
         color: '#4B5563',
     },
+}).then(() => {
+    // Handle CSRF token mismatch errors globally
+    document.addEventListener('inertia:error', (event: any) => {
+        const response = event.detail.response;
+        
+        // Handle 419 CSRF token mismatch
+        if (response?.status === 419) {
+            event.preventDefault();
+            
+            if (confirm('Your session has expired. The page will now reload.')) {
+                window.location.reload();
+            } else {
+                window.location.reload();
+            }
+        }
+    });
 });
 
 // This will set light / dark mode on load...

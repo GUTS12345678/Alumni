@@ -171,28 +171,30 @@ export default function SurveyBank({ user }: Props) {
                 return;
             }
 
-            const response = await axios.get('/api/v1/admin/surveys/export', {
+            const params = new URLSearchParams();
+            if (searchTerm) params.append('search', searchTerm);
+
+            const response = await axios.get(`/api/v1/admin/surveys/export?${params}`, {
                 headers: {
-                    'Accept': 'application/json',
+                    'Accept': 'text/csv',
                     'Authorization': `Bearer ${token}`,
                     'X-Requested-With': 'XMLHttpRequest',
-                }
+                },
+                responseType: 'blob'
             });
 
-            if (response.data.success && response.data.data.csv_content) {
-                const csvContent = atob(response.data.data.csv_content);
-                const blob = new Blob([csvContent], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = `surveys-export-${new Date().toISOString().split('T')[0]}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                alert('Surveys data exported successfully!');
-            }
+            // Create blob from response
+            const blob = new Blob([response.data], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `surveys-export-${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            alert('Surveys data exported successfully!');
         } catch (error) {
             console.error('Export error:', error);
             alert('Failed to export surveys data. Please try again.');
@@ -970,8 +972,8 @@ export default function SurveyBank({ user }: Props) {
 
                 {/* Questions Management Modal */}
                 <Dialog open={questionsModalOpen} onOpenChange={setQuestionsModalOpen}>
-                    <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-                        <DialogHeader>
+                    <DialogContent className="max-w-[98vw] w-[98vw] max-h-[85vh] p-6">
+                        <DialogHeader className="pb-4">
                             <DialogTitle className="text-xl text-maroon-800 flex items-center">
                                 <List className="h-5 w-5 mr-2" />
                                 Manage Questions: {selectedSurvey?.title}
@@ -981,16 +983,18 @@ export default function SurveyBank({ user }: Props) {
                             </DialogDescription>
                         </DialogHeader>
 
-                        {selectedSurvey && (
-                            <QuestionsManager
-                                surveyId={selectedSurvey.id.toString()}
-                                onClose={() => setQuestionsModalOpen(false)}
-                                onQuestionsUpdated={() => {
-                                    // Refresh surveys list to update question count
-                                    fetchSurveys();
-                                }}
-                            />
-                        )}
+                        <div className="overflow-auto max-h-[calc(85vh-140px)]">
+                            {selectedSurvey && (
+                                <QuestionsManager
+                                    surveyId={selectedSurvey.id.toString()}
+                                    onClose={() => setQuestionsModalOpen(false)}
+                                    onQuestionsUpdated={() => {
+                                        // Refresh surveys list to update question count
+                                        fetchSurveys();
+                                    }}
+                                />
+                            )}
+                        </div>
                     </DialogContent>
                 </Dialog>
             </div>

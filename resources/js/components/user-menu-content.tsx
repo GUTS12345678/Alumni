@@ -4,6 +4,7 @@ import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { type User } from '@/types';
 import { Link, router } from '@inertiajs/react';
 import { LogOut, Settings } from 'lucide-react';
+import axios from 'axios';
 
 interface UserMenuContentProps {
     user: User;
@@ -14,10 +15,13 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
 
     const handleLogout = () => {
         cleanup();
-        router.flushAll();
-    };
-
-    return (
+        // Create and submit a form (logout is CSRF-exempt)
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/logout';
+        document.body.appendChild(form);
+        form.submit();
+    };    return (
         <>
             <DropdownMenuLabel className="p-0 font-normal">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
@@ -35,10 +39,10 @@ export function UserMenuContent({ user }: UserMenuContentProps) {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-                <Link className="block w-full" method="post" href={route('logout')} as="button" onClick={handleLogout}>
+                <button className="flex w-full items-center" onClick={handleLogout}>
                     <LogOut className="mr-2" />
                     Log out
-                </Link>
+                </button>
             </DropdownMenuItem>
         </>
     );

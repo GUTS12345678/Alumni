@@ -477,7 +477,7 @@ export default function ActivityLogs({ user }: Props) {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-purple-600">
-                                {new Set(activities.map(a => a.user.id)).size}
+                                {new Set(activities.filter(a => a.user).map(a => a.user.id)).size}
                             </div>
                             <p className="text-xs text-maroon-600 mt-1">Active users</p>
                         </CardContent>

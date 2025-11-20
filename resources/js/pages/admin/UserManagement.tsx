@@ -28,7 +28,7 @@ import {
     Trash2,
     Shield,
     Mail,
-
+    Crown,
     RefreshCw,
     UserCheck,
     UserX,
@@ -40,7 +40,7 @@ interface User {
     id: number;
     name: string;
     email: string;
-    role: 'admin' | 'alumni';
+    role: 'super_admin' | 'admin' | 'alumni';
     status: 'active' | 'inactive' | 'pending';
     email_verified_at?: string;
     last_login_at?: string;
@@ -61,7 +61,18 @@ interface UsersResponse {
     total: number;
 }
 
-export default function UserManagement() {
+interface UserProps {
+    id: number;
+    email: string;
+    role: string;
+    status: string;
+}
+
+interface Props {
+    user: UserProps;
+}
+
+export default function UserManagement({ user }: Props) {
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -78,6 +89,10 @@ export default function UserManagement() {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showResetPasswordDialog, setShowResetPasswordDialog] = useState(false);
     const [showAddUserDialog, setShowAddUserDialog] = useState(false);
+    const [showRoleChangeDialog, setShowRoleChangeDialog] = useState(false);
+    const [newRole, setNewRole] = useState<string>('');
+    const [roleChangeReason, setRoleChangeReason] = useState('');
+    const [requiresConfirmation, setRequiresConfirmation] = useState(false);
     const [editFormData, setEditFormData] = useState({
         name: '',
         email: '',
@@ -103,7 +118,7 @@ export default function UserManagement() {
     const getAuthHeaders = () => {
         const token = localStorage.getItem('auth_token');
         const csrfToken = getCsrfToken();
-        
+
         return {
             'Accept': 'application/json',
             'Content-Type': 'application/json',
@@ -391,15 +406,102 @@ export default function UserManagement() {
         }
     };
 
+    const handleRoleChange = async () => {
+        if (!selectedUser || !newRole) return;
+
+        try {
+            setSaving(true);
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const payload: { role: string; reason?: string; confirm_super_admin?: boolean } = {
+                role: newRole,
+                reason: roleChangeReason || undefined,
+            };
+
+            // Add confirmation flag for super_admin
+            if (newRole === 'super_admin' && requiresConfirmation) {
+                payload.confirm_super_admin = true;
+            }
+
+            const response = await fetch(`/api/v1/admin/users/${selectedUser.id}/change-role`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: getAuthHeaders(),
+                body: JSON.stringify(payload),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                setShowRoleChangeDialog(false);
+                setSelectedUser(null);
+                setNewRole('');
+                setRoleChangeReason('');
+                setRequiresConfirmation(false);
+                alert(data.message || 'Role changed successfully!');
+                fetchUsers(); // Refresh the list
+                setError(null);
+            } else if (response.status === 422 && data.requires_confirmation) {
+                // Super admin requires confirmation
+                setRequiresConfirmation(true);
+                alert(data.message);
+            } else if (response.status === 401) {
+                localStorage.removeItem('auth_token');
+                window.location.href = '/login';
+            } else {
+                setError(data.message || 'Failed to change role');
+                alert(data.message || 'Failed to change role');
+            }
+        } catch (error) {
+            console.error('Role change error:', error);
+            setError('Failed to change role');
+            alert('Failed to change role. Please try again.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const openRoleChangeDialog = (targetUser: User) => {
+        if (targetUser.role === 'super_admin' && user.role !== 'super_admin') {
+            alert('Only Super Admins can change roles of other Super Admins');
+            return;
+        }
+        setSelectedUser(targetUser);
+        setNewRole(targetUser.role);
+        setRoleChangeReason('');
+        setRequiresConfirmation(false);
+        setShowRoleChangeDialog(true);
+    };
+
     const getRoleBadge = (role: string) => {
-        const roleColors = {
-            'admin': 'bg-blue-100 text-blue-800',
-            'alumni': 'bg-green-100 text-green-800',
+        const roleConfig = {
+            'super_admin': {
+                color: 'bg-purple-100 text-purple-800 border-purple-300',
+                icon: <Crown className="h-3 w-3 mr-1" />,
+                label: 'SUPER ADMIN'
+            },
+            'admin': {
+                color: 'bg-blue-100 text-blue-800 border-blue-300',
+                icon: <Shield className="h-3 w-3 mr-1" />,
+                label: 'ADMIN'
+            },
+            'alumni': {
+                color: 'bg-green-100 text-green-800 border-green-300',
+                icon: <Users className="h-3 w-3 mr-1" />,
+                label: 'ALUMNI'
+            },
         };
 
+        const config = roleConfig[role as keyof typeof roleConfig] || roleConfig.alumni;
+
         return (
-            <Badge className={roleColors[role as keyof typeof roleColors] || roleColors.alumni}>
-                {role.replace('_', ' ').toUpperCase()}
+            <Badge className={`${config.color} border flex items-center w-fit`}>
+                {config.icon}
+                {config.label}
             </Badge>
         );
     };
@@ -430,7 +532,7 @@ export default function UserManagement() {
 
     if (loading) {
         return (
-            <AdminBaseLayout title="User Management">
+            <AdminBaseLayout title="User Management" user={user}>
                 <div className="flex items-center justify-center min-h-96">
                     <div className="flex items-center space-x-2">
                         <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
@@ -443,7 +545,7 @@ export default function UserManagement() {
 
     if (error) {
         return (
-            <AdminBaseLayout title="User Management">
+            <AdminBaseLayout title="User Management" user={user}>
                 <Card className="border-red-200">
                     <CardContent className="p-6">
                         <div className="text-center">
@@ -460,7 +562,7 @@ export default function UserManagement() {
     }
 
     return (
-        <AdminBaseLayout title="User Management">
+        <AdminBaseLayout title="User Management" user={user}>
             <div className="space-y-6">
                 {/* Header with Actions */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -520,8 +622,9 @@ export default function UserManagement() {
                                 onChange={(e) => setRoleFilter(e.target.value)}
                                 className="border border-beige-300 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
                             >
-                                <option value="admin">Admin Only</option>
                                 <option value="all">All Roles</option>
+                                <option value="super_admin">Super Admin</option>
+                                <option value="admin">Admin</option>
                                 <option value="alumni">Alumni</option>
                             </select>
 
@@ -614,38 +717,38 @@ export default function UserManagement() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {users.map((user) => (
-                                        <TableRow key={user.id} className="hover:bg-beige-50">
+                                    {users.map((targetUser) => (
+                                        <TableRow key={targetUser.id} className="hover:bg-beige-50">
                                             <TableCell>
                                                 <div className="space-y-1">
                                                     <div className="font-medium text-maroon-800">
-                                                        {user.profile?.first_name && user.profile?.last_name
-                                                            ? `${user.profile.first_name} ${user.profile.last_name}`
-                                                            : user.name
+                                                        {targetUser.profile?.first_name && targetUser.profile?.last_name
+                                                            ? `${targetUser.profile.first_name} ${targetUser.profile.last_name}`
+                                                            : targetUser.name
                                                         }
                                                     </div>
                                                     <div className="flex items-center text-sm text-gray-600">
                                                         <Mail className="h-3 w-3 mr-1 text-gray-400" />
-                                                        {user.email}
+                                                        {targetUser.email}
                                                     </div>
                                                     <div className="text-xs text-gray-500">
-                                                        ID: {user.id}
+                                                        ID: {targetUser.id}
                                                     </div>
                                                 </div>
                                             </TableCell>
                                             <TableCell>
-                                                {getRoleBadge(user.role)}
+                                                {getRoleBadge(targetUser.role)}
                                             </TableCell>
                                             <TableCell>
                                                 <div className="space-y-1">
-                                                    {getStatusBadge(user.status)}
+                                                    {getStatusBadge(targetUser.status)}
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        onClick={() => handleStatusToggle(user.id, user.status)}
+                                                        onClick={() => handleStatusToggle(targetUser.id, targetUser.status)}
                                                         className="text-xs p-1 h-6"
                                                     >
-                                                        {user.status === 'active' ? (
+                                                        {targetUser.status === 'active' ? (
                                                             <UserX className="h-3 w-3 text-red-600" />
                                                         ) : (
                                                             <UserCheck className="h-3 w-3 text-green-600" />
@@ -655,7 +758,7 @@ export default function UserManagement() {
                                             </TableCell>
                                             <TableCell>
                                                 <div className="text-center">
-                                                    {user.email_verified_at ? (
+                                                    {targetUser.email_verified_at ? (
                                                         <div className="text-green-600 text-sm">
                                                             ✓ Verified
                                                         </div>
@@ -668,9 +771,9 @@ export default function UserManagement() {
                                             </TableCell>
                                             <TableCell>
                                                 <div className="space-y-1">
-                                                    {user.last_login_at ? (
+                                                    {targetUser.last_login_at ? (
                                                         <div className="text-sm">
-                                                            {formatDate(user.last_login_at)}
+                                                            {formatDate(targetUser.last_login_at)}
                                                         </div>
                                                     ) : (
                                                         <div className="text-sm text-gray-500">
@@ -678,7 +781,7 @@ export default function UserManagement() {
                                                         </div>
                                                     )}
                                                     <div className="text-xs text-gray-500">
-                                                        Joined: {formatDate(user.created_at)}
+                                                        Joined: {formatDate(targetUser.created_at)}
                                                     </div>
                                                 </div>
                                             </TableCell>
@@ -690,24 +793,35 @@ export default function UserManagement() {
                                                         className="text-maroon-700 hover:text-maroon-800 hover:bg-maroon-50"
                                                         title="View Details"
                                                         onClick={() => {
-                                                            setSelectedUser(user);
+                                                            setSelectedUser(targetUser);
                                                             setShowViewDialog(true);
                                                         }}
                                                     >
                                                         <Eye className="h-4 w-4" />
                                                     </Button>
+                                                    {user.role === 'super_admin' && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="text-purple-700 hover:text-purple-800 hover:bg-purple-50"
+                                                            title="Change Role (Super Admin Only)"
+                                                            onClick={() => openRoleChangeDialog(targetUser)}
+                                                        >
+                                                            <Crown className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
                                                         className="text-blue-700 hover:text-blue-800 hover:bg-blue-50"
                                                         title="Edit User"
                                                         onClick={() => {
-                                                            setSelectedUser(user);
+                                                            setSelectedUser(targetUser);
                                                             setEditFormData({
-                                                                name: user.name,
-                                                                email: user.email,
-                                                                role: user.role,
-                                                                status: user.status,
+                                                                name: targetUser.name,
+                                                                email: targetUser.email,
+                                                                role: targetUser.role,
+                                                                status: targetUser.status,
                                                             });
                                                             setShowEditDialog(true);
                                                         }}
@@ -720,7 +834,7 @@ export default function UserManagement() {
                                                         className="text-orange-700 hover:text-orange-800 hover:bg-orange-50"
                                                         title="Reset Password"
                                                         onClick={() => {
-                                                            setSelectedUser(user);
+                                                            setSelectedUser(targetUser);
                                                             setShowResetPasswordDialog(true);
                                                         }}
                                                     >
@@ -732,7 +846,7 @@ export default function UserManagement() {
                                                         className="text-red-700 hover:text-red-800 hover:bg-red-50"
                                                         title="Delete User"
                                                         onClick={() => {
-                                                            setSelectedUser(user);
+                                                            setSelectedUser(targetUser);
                                                             setShowDeleteDialog(true);
                                                         }}
                                                     >
@@ -926,7 +1040,7 @@ export default function UserManagement() {
                             >
                                 Cancel
                             </Button>
-                            <Button 
+                            <Button
                                 className="bg-maroon-700 hover:bg-maroon-800"
                                 onClick={handleEditSubmit}
                                 disabled={saving}
@@ -1128,7 +1242,7 @@ export default function UserManagement() {
                             >
                                 Cancel
                             </Button>
-                            <Button 
+                            <Button
                                 className="bg-maroon-700 hover:bg-maroon-800"
                                 onClick={handleAddUser}
                                 disabled={saving}
@@ -1140,6 +1254,104 @@ export default function UserManagement() {
                                     </>
                                 ) : (
                                     'Create User'
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Role Change Dialog */}
+                <Dialog open={showRoleChangeDialog} onOpenChange={setShowRoleChangeDialog}>
+                    <DialogContent className="max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="text-maroon-800 flex items-center">
+                                <Crown className="h-5 w-5 mr-2 text-purple-600" />
+                                Change User Role
+                            </DialogTitle>
+                            <DialogDescription>
+                                Change the role for this user. This action will be logged.
+                            </DialogDescription>
+                        </DialogHeader>
+                        {selectedUser && (
+                            <div className="space-y-4 py-4">
+                                <div className="p-3 bg-beige-50 rounded-lg space-y-2">
+                                    <div className="font-medium text-maroon-800">{selectedUser.name}</div>
+                                    <div className="text-sm text-gray-600">{selectedUser.email}</div>
+                                    <div className="flex items-center space-x-2">
+                                        <span className="text-sm text-gray-500">Current Role:</span>
+                                        {getRoleBadge(selectedUser.role)}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        New Role *
+                                    </label>
+                                    <select
+                                        value={newRole}
+                                        onChange={(e) => setNewRole(e.target.value)}
+                                        className="w-full border border-beige-300 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
+                                    >
+                                        <option value="alumni">Alumni - Regular user access</option>
+                                        <option value="admin">Admin - Management access</option>
+                                        <option value="super_admin">Super Admin - Full system access</option>
+                                    </select>
+                                </div>
+
+                                {newRole === 'super_admin' && (
+                                    <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                                        <p className="text-sm text-purple-800 font-medium flex items-center">
+                                            <Crown className="h-4 w-4 mr-2" />
+                                            Super Admin Warning
+                                        </p>
+                                        <p className="text-xs text-purple-700 mt-1">
+                                            This user will have full system access including the ability to manage other admins.
+                                        </p>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Reason (Optional)
+                                    </label>
+                                    <textarea
+                                        value={roleChangeReason}
+                                        onChange={(e) => setRoleChangeReason(e.target.value)}
+                                        placeholder="Why is this role change being made?"
+                                        rows={3}
+                                        className="w-full border border-beige-300 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
+                                    />
+                                </div>
+                            </div>
+                        )}
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setShowRoleChangeDialog(false);
+                                    setNewRole('');
+                                    setRoleChangeReason('');
+                                    setRequiresConfirmation(false);
+                                }}
+                                disabled={saving}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                className="bg-purple-600 hover:bg-purple-700 text-white"
+                                onClick={handleRoleChange}
+                                disabled={saving || !newRole}
+                            >
+                                {saving ? (
+                                    <>
+                                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                        Changing Role...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Crown className="h-4 w-4 mr-2" />
+                                        {requiresConfirmation ? 'Confirm Change' : 'Change Role'}
+                                    </>
                                 )}
                             </Button>
                         </DialogFooter>

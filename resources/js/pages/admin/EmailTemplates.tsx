@@ -48,7 +48,18 @@ interface EmailStats {
     recent_activity: { date: string; sent_count: number }[];
 }
 
-export default function EmailTemplatesManagement() {
+interface User {
+    id: number;
+    email: string;
+    role: string;
+    status: string;
+}
+
+interface Props {
+    user: User;
+}
+
+export default function EmailTemplatesManagement({ user }: Props) {
     const [templates, setTemplates] = useState<EmailTemplate[]>([]);
     const [stats, setStats] = useState<EmailStats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -290,7 +301,7 @@ export default function EmailTemplatesManagement() {
 
     if (loading) {
         return (
-            <AdminBaseLayout title="Email Templates">
+            <AdminBaseLayout title="Email Templates" user={user}>
                 <div className="flex items-center justify-center min-h-96">
                     <div className="flex items-center space-x-2">
                         <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
@@ -303,7 +314,7 @@ export default function EmailTemplatesManagement() {
 
     if (error) {
         return (
-            <AdminBaseLayout title="Email Templates">
+            <AdminBaseLayout title="Email Templates" user={user}>
                 <Card className="border-red-200">
                     <CardContent className="p-6">
                         <div className="text-center">
@@ -322,7 +333,7 @@ export default function EmailTemplatesManagement() {
     const categories = stats?.categories || [];
 
     return (
-        <AdminBaseLayout title="Email Templates">
+        <AdminBaseLayout title="Email Templates" user={user}>
             <div className="space-y-6">
                 {/* Header with Actions */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

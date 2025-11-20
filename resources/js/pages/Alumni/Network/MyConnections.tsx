@@ -2,7 +2,7 @@ import React from 'react';
 import { Head } from '@inertiajs/react';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { UserPlus, Users, UserCheck, UserX } from 'lucide-react';
+import { Users } from 'lucide-react';
 
 export default function MyConnections() {
     return (

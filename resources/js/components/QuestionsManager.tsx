@@ -4,14 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
     Edit,
     Trash2,
     Plus,
@@ -272,102 +264,101 @@ export default function QuestionsManager({ surveyId, onClose, onQuestionsUpdated
                     </CardContent>
                 </Card>
             ) : (
-                <Card className="border-beige-200">
-                    <CardContent className="p-0">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="text-maroon-800">Order</TableHead>
-                                    <TableHead className="text-maroon-800">Question</TableHead>
-                                    <TableHead className="text-maroon-800">Type</TableHead>
-                                    <TableHead className="text-maroon-800">Required</TableHead>
-                                    <TableHead className="text-maroon-800">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {questions.map((question, index) => {
-                                    const typeInfo = getQuestionTypeInfo(question.question_type);
-                                    const TypeIcon = typeInfo.icon;
+                <div className="space-y-3">
+                    {questions.map((question, index) => {
+                        const typeInfo = getQuestionTypeInfo(question.question_type);
+                        const TypeIcon = typeInfo.icon;
 
-                                    return (
-                                        <TableRow key={question.id} className="hover:bg-beige-50">
-                                            <TableCell className="font-medium">
-                                                <div className="flex items-center space-x-1">
-                                                    <span className="text-sm text-gray-600">#{question.order}</span>
-                                                    <div className="flex flex-col">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => moveQuestion(question.id, 'up')}
-                                                            disabled={index === 0}
-                                                            className="h-4 w-4 p-0 hover:bg-gray-200"
-                                                        >
-                                                            <ChevronUp className="h-3 w-3" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => moveQuestion(question.id, 'down')}
-                                                            disabled={index === questions.length - 1}
-                                                            className="h-4 w-4 p-0 hover:bg-gray-200"
-                                                        >
-                                                            <ChevronDown className="h-3 w-3" />
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div>
-                                                    <p className="font-medium text-gray-900 line-clamp-2">
+                        return (
+                            <Card key={question.id} className="border-beige-200 hover:shadow-md transition-shadow">
+                                <CardContent className="p-4">
+                                    <div className="flex items-start gap-4">
+                                        {/* Order and Reorder Controls */}
+                                        <div className="flex flex-col items-center space-y-1 flex-shrink-0">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => moveQuestion(question.id, 'up')}
+                                                disabled={index === 0}
+                                                className="h-6 w-6 p-0 hover:bg-gray-200"
+                                                title="Move Up"
+                                            >
+                                                <ChevronUp className="h-4 w-4" />
+                                            </Button>
+                                            <div className="px-2 py-1 bg-maroon-100 text-maroon-800 rounded text-sm font-semibold">
+                                                #{question.order}
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => moveQuestion(question.id, 'down')}
+                                                disabled={index === questions.length - 1}
+                                                className="h-6 w-6 p-0 hover:bg-gray-200"
+                                                title="Move Down"
+                                            >
+                                                <ChevronDown className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+
+                                        {/* Question Content */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-start justify-between gap-3 mb-2">
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-semibold text-gray-900 text-base mb-1">
                                                         {question.question_text}
                                                     </p>
                                                     {question.description && (
-                                                        <p className="text-sm text-gray-500 line-clamp-1 mt-1">
+                                                        <p className="text-sm text-gray-600">
                                                             {question.description}
                                                         </p>
                                                     )}
                                                 </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center space-x-2">
+                                            </div>
+
+                                            {/* Meta Information */}
+                                            <div className="flex flex-wrap items-center gap-3 mt-3">
+                                                <div className="flex items-center space-x-2 bg-gray-50 px-3 py-1 rounded">
                                                     <TypeIcon className="h-4 w-4 text-maroon-600" />
-                                                    <span className="text-sm">{typeInfo.label}</span>
+                                                    <span className="text-sm font-medium text-gray-700">{typeInfo.label}</span>
                                                 </div>
-                                            </TableCell>
-                                            <TableCell>
+                                                
                                                 {question.is_required ? (
-                                                    <Badge className="bg-red-100 text-red-800">Required</Badge>
+                                                    <Badge className="bg-red-100 text-red-800 px-3 py-1">Required</Badge>
                                                 ) : (
-                                                    <Badge className="bg-gray-100 text-gray-800">Optional</Badge>
+                                                    <Badge className="bg-gray-100 text-gray-600 px-3 py-1">Optional</Badge>
                                                 )}
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center space-x-1">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleEditQuestion(question)}
-                                                        className="hover:bg-blue-100 text-blue-700"
-                                                    >
-                                                        <Edit className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleDeleteQuestion(question.id)}
-                                                        className="hover:bg-red-100 text-red-700"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
+                                            </div>
+                                        </div>
+
+                                        {/* Action Buttons */}
+                                        <div className="flex flex-col gap-2 flex-shrink-0">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleEditQuestion(question)}
+                                                className="hover:bg-blue-50 border-blue-300 text-blue-700 h-9 px-3"
+                                                title="Edit Question"
+                                            >
+                                                <Edit className="h-4 w-4 mr-1" />
+                                                Edit
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleDeleteQuestion(question.id)}
+                                                className="hover:bg-red-50 border-red-300 text-red-700 h-9 px-3"
+                                                title="Delete Question"
+                                            >
+                                                <Trash2 className="h-4 w-4 mr-1" />
+                                                Delete
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
+                </div>
             )}
 
             {/* Edit Question Modal */}

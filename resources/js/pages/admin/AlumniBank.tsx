@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
-import axios from 'axios';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
+import { Checkbox } from '../../components/ui/checkbox';
 import {
     Table,
     TableBody,
@@ -42,6 +42,7 @@ import {
     MessageCircle
 } from 'lucide-react';
 import AdminBaseLayout from '../../components/base/AdminBaseLayout';
+import { useMultiSelect, BulkActionBar, SelectAllCheckbox } from '../../components/ui/multi-select';
 
 interface User {
     id: number;
@@ -96,7 +97,11 @@ export default function AlumniBank({ user }: Props) {
     // Filter states
     const [filterStatus, setFilterStatus] = useState<string>('');
     const [filterYear, setFilterYear] = useState<string>('');
-    const [filtersOpen, setFiltersOpen] = useState(false); const fetchAlumniCallback = React.useCallback(async () => {
+    const [filtersOpen, setFiltersOpen] = useState(false);
+
+    // Multi-select state
+    const multiSelect = useMultiSelect<number>();
+    const [isDeleting, setIsDeleting] = useState(false); const fetchAlumniCallback = React.useCallback(async () => {
         try {
             setLoading(currentPage === 1);
             setRefreshing(currentPage !== 1);
@@ -194,40 +199,40 @@ export default function AlumniBank({ user }: Props) {
 
         setUpdating(true);
         try {
-            await axios.get('/sanctum/csrf-cookie');
-            const token = document.head.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
-            const response = await axios.put(`/api/v1/admin/alumni/${editFormData.id}`, editFormData, {
+            const response = await fetch(`/api/v1/admin/alumni/${editFormData.id}`, {
+                method: 'PUT',
                 headers: {
-                    'X-CSRF-TOKEN': token,
+                    'Content-Type': 'application/json',
                     'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
+                    'X-CSRF-TOKEN': csrfToken || ''
+                },
+                body: JSON.stringify(editFormData)
             });
 
-            if (response.data.success) {
+            const data = await response.json();
+
+            if (response.ok && data.success) {
                 // Update the alumni in the local state
                 setAlumni((prevAlumni: AlumniProfile[]) =>
                     prevAlumni.map((alumni: AlumniProfile) =>
                         alumni.id === editFormData.id
-                            ? { ...alumni, ...response.data.data }
+                            ? { ...alumni, ...data.data }
                             : alumni
                     )
                 );
                 setEditModalOpen(false);
                 setEditFormData({});
+                setSelectedAlumni(null);
                 alert('Alumni profile updated successfully!');
+                fetchAlumniCallback();
             } else {
-                alert('Failed to update alumni profile: ' + response.data.message);
+                alert('Failed to update alumni profile: ' + (data.message || 'Unknown error'));
             }
         } catch (error: unknown) {
             console.error('Error updating alumni:', error);
-            const axiosError = error as { response?: { data?: { message?: string } } };
-            if (axiosError.response?.data?.message) {
-                alert('Error: ' + axiosError.response.data.message);
-            } else {
-                alert('Failed to update alumni profile. Please try again.');
-            }
+            alert('Failed to update alumni profile. Please try again.');
         } finally {
             setUpdating(false);
         }
@@ -239,31 +244,69 @@ export default function AlumniBank({ user }: Props) {
         }
 
         try {
-            const token = localStorage.getItem('auth_token');
-            if (!token) {
-                window.location.href = '/login';
-                return;
-            }
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
             const response = await fetch(`/api/v1/admin/alumni/${alumni.id}`, {
                 method: 'DELETE',
                 headers: {
+                    'Content-Type': 'application/json',
                     'Accept': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
+                    'X-CSRF-TOKEN': csrfToken || ''
+                }
             });
 
-            if (response.ok) {
-                // Refresh alumni list
-                fetchAlumniCallback();
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                // Remove from local state
+                setAlumni((prevAlumni: AlumniProfile[]) =>
+                    prevAlumni.filter((a: AlumniProfile) => a.id !== alumni.id)
+                );
                 alert('Alumni deleted successfully');
+                fetchAlumniCallback();
             } else {
-                alert('Failed to delete alumni');
+                alert('Failed to delete alumni: ' + (data.message || 'Unknown error'));
             }
         } catch (error) {
             console.error('Delete error:', error);
-            alert('Failed to delete alumni');
+            alert('Failed to delete alumni. Please try again.');
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (!confirm(`Are you sure you want to delete ${multiSelect.selectedCount} alumni?`)) {
+            return;
+        }
+
+        setIsDeleting(true);
+        try {
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch('/api/v1/admin/alumni/bulk-delete', {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({
+                    ids: Array.from(multiSelect.selectedItems)
+                }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                multiSelect.clearSelection();
+                fetchAlumniCallback();
+                alert(`Successfully deleted ${data.deleted_count} alumni`);
+            } else {
+                throw new Error(data.message || 'Failed to delete');
+            }
+        } catch (error) {
+            console.error('Bulk delete error:', error);
+            alert('Failed to delete alumni. Please try again.');
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -320,11 +363,11 @@ export default function AlumniBank({ user }: Props) {
 
     const getEmploymentStatusBadge = (status: string) => {
         const statusColors = {
-            'employed': 'bg-green-100 text-green-800',
-            'unemployed': 'bg-red-100 text-red-800',
-            'self-employed': 'bg-blue-100 text-blue-800',
-            'pursuing_education': 'bg-purple-100 text-purple-800',
-            'not_specified': 'bg-gray-100 text-gray-800',
+            'employed': 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+            'unemployed': 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+            'self-employed': 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+            'pursuing_education': 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+            'not_specified': 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
         };
 
         return (
@@ -339,8 +382,8 @@ export default function AlumniBank({ user }: Props) {
             <AdminBaseLayout title="Alumni Bank" user={user}>
                 <div className="flex items-center justify-center min-h-96">
                     <div className="flex items-center space-x-2">
-                        <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
-                        <span className="text-maroon-800 font-medium">Loading alumni data...</span>
+                        <RefreshCw className="h-8 w-8 text-maroon-600 dark:text-maroon-400 animate-spin" />
+                        <span className="text-maroon-800 dark:text-maroon-200 font-medium">Loading alumni data...</span>
                     </div>
                 </div>
             </AdminBaseLayout>
@@ -350,10 +393,10 @@ export default function AlumniBank({ user }: Props) {
     if (error) {
         return (
             <AdminBaseLayout title="Alumni Bank" user={user}>
-                <Card className="border-red-200">
+                <Card className="border-red-200 dark:border-red-800">
                     <CardContent className="p-6">
                         <div className="text-center">
-                            <p className="text-red-600 mb-4">{error}</p>
+                            <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
                             <Button onClick={() => fetchAlumniCallback()} className="bg-maroon-700 hover:bg-maroon-800">
                                 <RefreshCw className="h-4 w-4 mr-2" />
                                 Retry
@@ -371,8 +414,8 @@ export default function AlumniBank({ user }: Props) {
                 {/* Header with Actions */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h2 className="text-2xl font-bold text-maroon-800">Alumni Management</h2>
-                        <p className="text-maroon-600">Manage and view all registered alumni profiles</p>
+                        <h2 className="text-2xl font-bold text-maroon-800 dark:text-maroon-200">Alumni Management</h2>
+                        <p className="text-maroon-600 dark:text-maroon-400">Manage and view all registered alumni profiles</p>
                     </div>
 
                     <div className="flex items-center space-x-2">
@@ -381,7 +424,7 @@ export default function AlumniBank({ user }: Props) {
                             variant="outline"
                             size="sm"
                             disabled={refreshing}
-                            className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="border-maroon-300 dark:border-maroon-700 text-maroon-700 dark:text-maroon-300 hover:bg-maroon-50 dark:hover:bg-maroon-900/30"
                         >
                             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
                             Refresh
@@ -391,7 +434,7 @@ export default function AlumniBank({ user }: Props) {
                             onClick={handleExport}
                             variant="outline"
                             size="sm"
-                            className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="border-maroon-300 dark:border-maroon-700 text-maroon-700 dark:text-maroon-300 hover:bg-maroon-50 dark:hover:bg-maroon-900/30"
                         >
                             <Download className="h-4 w-4 mr-2" />
                             Export CSV
@@ -400,9 +443,9 @@ export default function AlumniBank({ user }: Props) {
                 </div>
 
                 {/* Search and Filters */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-lg text-maroon-800 flex items-center">
+                        <CardTitle className="text-lg text-maroon-800 dark:text-maroon-200 flex items-center">
                             <Search className="h-5 w-5 mr-2" />
                             Search & Filter
                         </CardTitle>
@@ -411,12 +454,12 @@ export default function AlumniBank({ user }: Props) {
                         <div className="flex flex-col sm:flex-row gap-4">
                             <div className="flex-1">
                                 <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 h-4 w-4" />
                                     <Input
                                         placeholder="Search by name, email, or company..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="pl-10 border-beige-300 focus:border-maroon-500 focus:ring-maroon-500"
+                                        className="pl-10 border-beige-300 dark:border-gray-700 focus:border-maroon-500 focus:ring-maroon-500"
                                     />
                                 </div>
                                 {/* Active Filters Display */}
@@ -457,7 +500,7 @@ export default function AlumniBank({ user }: Props) {
                                 <DropdownMenuTrigger asChild>
                                     <Button
                                         variant="outline"
-                                        className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                        className="border-maroon-300 dark:border-maroon-700 text-maroon-700 dark:text-maroon-300 hover:bg-maroon-50 dark:hover:bg-maroon-900/30"
                                     >
                                         <Filter className="h-4 w-4 mr-2" />
                                         More Filters
@@ -502,23 +545,23 @@ export default function AlumniBank({ user }: Props) {
 
                 {/* Alumni Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Total Alumni</CardTitle>
-                            <Users className="h-4 w-4 text-maroon-600" />
+                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-maroon-200">Total Alumni</CardTitle>
+                            <Users className="h-4 w-4 text-maroon-600 dark:text-maroon-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-maroon-800">{total}</div>
-                            <p className="text-xs text-maroon-600 mt-1">Registered profiles</p>
+                            <div className="text-2xl font-bold text-maroon-800 dark:text-maroon-200">{total}</div>
+                            <p className="text-xs text-maroon-600 dark:text-maroon-400 mt-1">Registered profiles</p>
                         </CardContent>
                     </Card>
                 </div>
 
                 {/* Alumni Table */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800">Alumni Directory</CardTitle>
-                        <CardDescription className="text-maroon-600">
+                        <CardTitle className="text-xl text-maroon-800 dark:text-maroon-200">Alumni Directory</CardTitle>
+                        <CardDescription className="text-maroon-600 dark:text-maroon-400">
                             Showing {alumni.length} of {total} alumni
                         </CardDescription>
                     </CardHeader>
@@ -526,33 +569,47 @@ export default function AlumniBank({ user }: Props) {
                         <div className="overflow-x-auto">
                             <Table>
                                 <TableHeader>
-                                    <TableRow className="bg-beige-50">
-                                        <TableHead className="text-maroon-800 font-semibold">Name</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Contact</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Education</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Employment</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Status</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Actions</TableHead>
+                                    <TableRow className="bg-beige-50 dark:bg-gray-800/50">
+                                        <TableHead className="w-12">
+                                            <SelectAllCheckbox
+                                                checked={multiSelect.isAllSelected(alumni.map(a => a.id))}
+                                                indeterminate={multiSelect.isIndeterminate(alumni.map(a => a.id))}
+                                                onCheckedChange={() => multiSelect.toggleAll(alumni.map(a => a.id))}
+                                                label=""
+                                            />
+                                        </TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-maroon-200 font-semibold">Name</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-maroon-200 font-semibold">Contact</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-maroon-200 font-semibold">Education</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-maroon-200 font-semibold">Employment</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-maroon-200 font-semibold">Status</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-maroon-200 font-semibold">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {alumni.map((alumnus) => (
-                                        <TableRow key={alumnus.id} className="hover:bg-beige-50">
+                                        <TableRow key={alumnus.id} className="hover:bg-beige-50 dark:hover:bg-gray-800/50">
                                             <TableCell>
-                                                <div className="font-medium text-maroon-800">
+                                                <Checkbox
+                                                    checked={multiSelect.isSelected(alumnus.id)}
+                                                    onCheckedChange={() => multiSelect.toggleItem(alumnus.id)}
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="font-medium text-maroon-800 dark:text-maroon-200">
                                                     {alumnus.first_name} {alumnus.last_name}
                                                 </div>
-                                                <div className="text-sm text-gray-600">ID: {alumnus.id}</div>
+                                                <div className="text-sm text-gray-600 dark:text-gray-400">ID: {alumnus.id}</div>
                                             </TableCell>
                                             <TableCell>
                                                 <div className="space-y-1">
-                                                    <div className="flex items-center text-sm">
-                                                        <Mail className="h-3 w-3 mr-1 text-gray-400" />
+                                                    <div className="flex items-center text-sm dark:text-gray-300">
+                                                        <Mail className="h-3 w-3 mr-1 text-gray-400 dark:text-gray-500" />
                                                         {alumnus.email}
                                                     </div>
                                                     {alumnus.phone && (
-                                                        <div className="flex items-center text-sm text-gray-600">
-                                                            <Phone className="h-3 w-3 mr-1 text-gray-400" />
+                                                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                                                            <Phone className="h-3 w-3 mr-1 text-gray-400 dark:text-gray-500" />
                                                             {alumnus.phone}
                                                         </div>
                                                     )}
@@ -560,11 +617,11 @@ export default function AlumniBank({ user }: Props) {
                                             </TableCell>
                                             <TableCell>
                                                 <div className="space-y-1">
-                                                    <div className="flex items-center text-sm font-medium">
-                                                        <GraduationCap className="h-3 w-3 mr-1 text-gray-400" />
+                                                    <div className="flex items-center text-sm font-medium dark:text-gray-200">
+                                                        <GraduationCap className="h-3 w-3 mr-1 text-gray-400 dark:text-gray-500" />
                                                         {alumnus.degree_program}
                                                     </div>
-                                                    <div className="text-sm text-gray-600">
+                                                    <div className="text-sm text-gray-600 dark:text-gray-400">
                                                         Class of {alumnus.graduation_year}
                                                     </div>
                                                 </div>
@@ -572,13 +629,13 @@ export default function AlumniBank({ user }: Props) {
                                             <TableCell>
                                                 <div className="space-y-1">
                                                     {alumnus.current_job_title && (
-                                                        <div className="text-sm font-medium">
+                                                        <div className="text-sm font-medium dark:text-gray-200">
                                                             {alumnus.current_job_title}
                                                         </div>
                                                     )}
                                                     {alumnus.current_employer && (
-                                                        <div className="flex items-center text-sm text-gray-600">
-                                                            <Building className="h-3 w-3 mr-1 text-gray-400" />
+                                                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                                                            <Building className="h-3 w-3 mr-1 text-gray-400 dark:text-gray-500" />
                                                             {alumnus.current_employer}
                                                         </div>
                                                     )}
@@ -593,7 +650,7 @@ export default function AlumniBank({ user }: Props) {
                                                         variant="ghost"
                                                         size="sm"
                                                         onClick={() => handleViewAlumni(alumnus)}
-                                                        className="text-maroon-700 hover:text-maroon-800 hover:bg-maroon-50"
+                                                        className="text-maroon-700 dark:text-maroon-300 hover:text-maroon-800 dark:hover:text-maroon-200 hover:bg-maroon-50 dark:hover:bg-maroon-900/30"
                                                         title="View Details"
                                                     >
                                                         <Eye className="h-4 w-4" />
@@ -604,7 +661,7 @@ export default function AlumniBank({ user }: Props) {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
-                                                                className="text-gray-700 hover:text-maroon-800 hover:bg-maroon-50"
+                                                                className="text-gray-700 dark:text-gray-300 hover:text-maroon-800 dark:hover:text-maroon-200 hover:bg-maroon-50 dark:hover:bg-maroon-900/30"
                                                             >
                                                                 <MoreVertical className="h-4 w-4" />
                                                             </Button>
@@ -643,8 +700,8 @@ export default function AlumniBank({ user }: Props) {
 
                         {/* Pagination */}
                         {totalPages > 1 && (
-                            <div className="flex items-center justify-between px-6 py-4 border-t border-beige-200">
-                                <div className="text-sm text-gray-700">
+                            <div className="flex items-center justify-between px-6 py-4 border-t border-beige-200 dark:border-gray-700">
+                                <div className="text-sm text-gray-700 dark:text-gray-300">
                                     Showing page {currentPage} of {totalPages}
                                 </div>
                                 <div className="space-x-2">
@@ -653,7 +710,7 @@ export default function AlumniBank({ user }: Props) {
                                         size="sm"
                                         onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                                         disabled={currentPage === 1}
-                                        className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                        className="border-maroon-300 dark:border-maroon-700 text-maroon-700 dark:text-maroon-300 hover:bg-maroon-50 dark:hover:bg-maroon-900/30"
                                     >
                                         Previous
                                     </Button>
@@ -662,7 +719,7 @@ export default function AlumniBank({ user }: Props) {
                                         size="sm"
                                         onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                                         disabled={currentPage === totalPages}
-                                        className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                        className="border-maroon-300 dark:border-maroon-700 text-maroon-700 dark:text-maroon-300 hover:bg-maroon-50 dark:hover:bg-maroon-900/30"
                                     >
                                         Next
                                     </Button>
@@ -677,10 +734,10 @@ export default function AlumniBank({ user }: Props) {
             <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
                 <DialogContent className="max-w-2xl">
                     <DialogHeader>
-                        <DialogTitle className="text-xl text-maroon-800">
+                        <DialogTitle className="text-xl text-maroon-800 dark:text-maroon-200">
                             Alumni Profile Details
                         </DialogTitle>
-                        <DialogDescription>
+                        <DialogDescription className="dark:text-gray-400">
                             Detailed information about the selected alumni
                         </DialogDescription>
                     </DialogHeader>
@@ -689,31 +746,31 @@ export default function AlumniBank({ user }: Props) {
                         <div className="space-y-6">
                             {/* Personal Information */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <Card className="border-beige-200">
+                                <Card className="border-beige-200 dark:border-gray-700">
                                     <CardHeader className="pb-3">
-                                        <CardTitle className="text-lg text-maroon-800 flex items-center">
+                                        <CardTitle className="text-lg text-maroon-800 dark:text-maroon-200 flex items-center">
                                             <Users className="h-5 w-5 mr-2" />
                                             Personal Information
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="space-y-3">
                                         <div>
-                                            <label className="text-sm font-medium text-gray-600">Full Name</label>
-                                            <p className="text-sm text-gray-900">
+                                            <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Full Name</label>
+                                            <p className="text-sm text-gray-900 dark:text-gray-200">
                                                 {selectedAlumni.first_name} {selectedAlumni.last_name}
                                             </p>
                                         </div>
                                         <div>
-                                            <label className="text-sm font-medium text-gray-600">Email</label>
-                                            <p className="text-sm text-gray-900 flex items-center">
+                                            <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Email</label>
+                                            <p className="text-sm text-gray-900 dark:text-gray-200 flex items-center">
                                                 <Mail className="h-3 w-3 mr-1" />
                                                 {selectedAlumni.email}
                                             </p>
                                         </div>
                                         {selectedAlumni.phone && (
                                             <div>
-                                                <label className="text-sm font-medium text-gray-600">Phone</label>
-                                                <p className="text-sm text-gray-900 flex items-center">
+                                                <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Phone</label>
+                                                <p className="text-sm text-gray-900 dark:text-gray-200 flex items-center">
                                                     <Phone className="h-3 w-3 mr-1" />
                                                     {selectedAlumni.phone}
                                                 </p>
@@ -937,6 +994,14 @@ export default function AlumniBank({ user }: Props) {
                     )}
                 </DialogContent>
             </Dialog>
+
+            <BulkActionBar
+                selectedCount={multiSelect.selectedCount}
+                onDelete={handleBulkDelete}
+                onClear={multiSelect.clearSelection}
+                isDeleting={isDeleting}
+                totalCount={total}
+            />
         </AdminBaseLayout>
     );
 }

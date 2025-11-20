@@ -18,6 +18,11 @@ class AuthenticatedSessionController extends Controller
      */
     public function create(Request $request): Response
     {
+        // If accessing login directly, clear any stale intended URL
+        if (!$request->session()->has('url.intended')) {
+            $request->session()->forget('url.intended');
+        }
+        
         return Inertia::render('auth/login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => $request->session()->get('status'),
@@ -30,6 +35,16 @@ class AuthenticatedSessionController extends Controller
     public function store(LoginRequest $request): RedirectResponse
     {
         $request->authenticate();
+
+        // Check if user has 2FA enabled
+        $user = $request->user();
+        if ($user && $user->google2fa_secret) {
+            // Don't log in yet, store user ID for 2FA verification
+            Auth::guard('web')->logout();
+            session(['2fa:user:id' => $user->id]);
+            
+            return redirect()->route('two-factor.challenge');
+        }
 
         $request->session()->regenerate();
 

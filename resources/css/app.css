@@ -122,38 +122,50 @@
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.145 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.145 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.985 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.396 0.141 25.723);
-    --destructive-foreground: oklch(0.637 0.237 25.331);
-    --border: oklch(0.269 0 0);
-    --input: oklch(0.269 0 0);
-    --ring: oklch(0.439 0 0);
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
-    --chart-3: oklch(0.769 0.188 70.08);
-    --chart-4: oklch(0.627 0.265 303.9);
-    --chart-5: oklch(0.645 0.246 16.439);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.985 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(0.269 0 0);
-    --sidebar-ring: oklch(0.439 0 0);
+    /* Improved dark mode with better contrast and visual hierarchy */
+    --background: oklch(0.11 0 0);
+    /* Darker background (gray-950) */
+    --foreground: oklch(0.96 0 0);
+    /* Brighter text */
+    --card: oklch(0.18 0 0);
+    /* Slightly lighter card (gray-900) */
+    --card-foreground: oklch(0.96 0 0);
+    --popover: oklch(0.18 0 0);
+    --popover-foreground: oklch(0.96 0 0);
+    --primary: oklch(0.96 0 0);
+    --primary-foreground: oklch(0.18 0 0);
+    --secondary: oklch(0.24 0 0);
+    /* Better contrast (gray-800) */
+    --secondary-foreground: oklch(0.96 0 0);
+    --muted: oklch(0.24 0 0);
+    --muted-foreground: oklch(0.65 0 0);
+    /* Improved muted text */
+    --accent: oklch(0.24 0 0);
+    --accent-foreground: oklch(0.96 0 0);
+    --destructive: oklch(0.50 0.20 25);
+    /* Better red */
+    --destructive-foreground: oklch(0.96 0 0);
+    --border: oklch(0.24 0 0);
+    /* Subtle borders (gray-800) */
+    --input: oklch(0.24 0 0);
+    --ring: oklch(0.42 0.175 25);
+    /* Maroon-600 for focus rings */
+    --chart-1: oklch(0.55 0.20 264);
+    --chart-2: oklch(0.70 0.17 162);
+    --chart-3: oklch(0.77 0.19 70);
+    --chart-4: oklch(0.63 0.27 304);
+    --chart-5: oklch(0.65 0.25 16);
+    --sidebar: oklch(0.18 0 0);
+    /* Dark sidebar (gray-900) */
+    --sidebar-foreground: oklch(0.96 0 0);
+    --sidebar-primary: oklch(0.42 0.175 25);
+    /* Maroon accent */
+    --sidebar-primary-foreground: oklch(0.96 0 0);
+    --sidebar-accent: oklch(0.24 0 0);
+    /* Hover state */
+    --sidebar-accent-foreground: oklch(0.96 0 0);
+    --sidebar-border: oklch(0.24 0 0);
+    --sidebar-ring: oklch(0.42 0.175 25);
 }
 
 @layer base {
@@ -163,5 +175,67 @@
 
     body {
         @apply bg-background text-foreground;
+    }
+
+    /* iOS Safari Input Fix - Force light mode styling */
+    input,
+    textarea,
+    select {
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+    }
+
+    /* Fix iOS autofill dark background */
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus,
+    input:-webkit-autofill:active {
+        -webkit-box-shadow: 0 0 0 30px white inset !important;
+        -webkit-text-fill-color: rgb(17 24 39) !important;
+        background-color: white !important;
+    }
+
+    /* Dark mode autofill */
+    .dark input:-webkit-autofill,
+    .dark input:-webkit-autofill:hover,
+    .dark input:-webkit-autofill:focus,
+    .dark input:-webkit-autofill:active {
+        -webkit-box-shadow: 0 0 0 30px rgb(31 41 55) inset !important;
+        -webkit-text-fill-color: white !important;
+        background-color: rgb(31 41 55) !important;
+    }
+
+    /* Force correct text color on iOS */
+    input:not([type="checkbox"]):not([type="radio"]),
+    textarea,
+    select {
+        color: rgb(17 24 39) !important;
+        background-color: white !important;
+    }
+
+    .dark input:not([type="checkbox"]):not([type="radio"]),
+    .dark textarea,
+    .dark select {
+        color: white !important;
+        background-color: rgb(31 41 55) !important;
+    }
+}
+
+@layer utilities {
+    @keyframes fade-in {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .animate-fade-in {
+        animation: fade-in 0.5s ease-out;
     }
 }

@@ -37,7 +37,18 @@ interface SystemInfo {
     backup_directory: string;
 }
 
-export default function BackupManagement() {
+interface User {
+    id: number;
+    email: string;
+    role: string;
+    status: string;
+}
+
+interface Props {
+    user: User;
+}
+
+export default function BackupManagement({ user }: Props) {
     const [backups, setBackups] = useState<BackupFile[]>([]);
     const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
     const [loading, setLoading] = useState(true);
@@ -248,7 +259,7 @@ export default function BackupManagement() {
 
     if (loading) {
         return (
-            <AdminBaseLayout title="Backup Management">
+            <AdminBaseLayout title="Backup Management" user={user}>
                 <div className="flex items-center justify-center min-h-96">
                     <div className="flex items-center space-x-2">
                         <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
@@ -261,7 +272,7 @@ export default function BackupManagement() {
 
     if (error) {
         return (
-            <AdminBaseLayout title="Backup Management">
+            <AdminBaseLayout title="Backup Management" user={user}>
                 <Card className="border-red-200">
                     <CardContent className="p-6">
                         <div className="text-center">
@@ -278,7 +289,7 @@ export default function BackupManagement() {
     }
 
     return (
-        <AdminBaseLayout title="Backup Management">
+        <AdminBaseLayout title="Backup Management" user={user}>
             <div className="space-y-6">
                 {/* Header with Actions */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

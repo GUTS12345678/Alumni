@@ -157,7 +157,7 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
                 return;
             }
 
-            const url = mode === 'create' 
+            const url = mode === 'create'
                 ? '/api/v1/admin/email-templates'
                 : `/api/v1/admin/email-templates/${templateId}`;
 
@@ -266,7 +266,7 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
                                 {mode === 'create' ? 'Create New Template' : 'Edit Template'}
                             </h2>
                             <p className="text-maroon-600">
-                                {mode === 'create' 
+                                {mode === 'create'
                                     ? 'Design a new email template'
                                     : 'Update template details and content'
                                 }
@@ -360,7 +360,7 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
                                             <select
                                                 id="type"
                                                 value={formData.type}
-                                                onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                                                onChange={(e) => setFormData({ ...formData, type: e.target.value as 'notification' | 'reminder' | 'announcement' | 'survey' | 'system' })}
                                                 required
                                                 className="w-full px-3 py-2 border border-beige-300 rounded-md focus:border-maroon-400 focus:ring-maroon-200"
                                             >
@@ -379,7 +379,7 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
                                             <select
                                                 id="status"
                                                 value={formData.status}
-                                                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                                                onChange={(e) => setFormData({ ...formData, status: e.target.value as 'draft' | 'active' | 'inactive' })}
                                                 required
                                                 className="w-full px-3 py-2 border border-beige-300 rounded-md focus:border-maroon-400 focus:ring-maroon-200"
                                             >

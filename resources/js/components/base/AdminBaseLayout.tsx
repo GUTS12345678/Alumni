@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Head, router, Link } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import {
     LayoutDashboard,
     TrendingUp,
     Users,
     GraduationCap,
-    UserCheck,
     ClipboardList,
     Plus,
     BarChart3,
@@ -19,10 +18,24 @@ import {
     Menu,
     ChevronLeft,
     ChevronRight,
+    Server,
+    BookOpen,
     LogOut,
-    User
+    User,
+    Building,
+    Lock,
+    UserCircle,
+    ChevronDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface User {
     id: number;
@@ -50,7 +63,6 @@ const adminNavigation = [
         items: [
             { name: "Alumni Bank", href: "/admin/alumni", icon: Users },
             { name: "Batch Management", href: "/admin/batches", icon: GraduationCap },
-            { name: "Profile Reviews", href: "/admin/profiles", icon: UserCheck }
         ]
     },
     {
@@ -65,16 +77,26 @@ const adminNavigation = [
         section: "User Management",
         items: [
             { name: "Admin Users", href: "/admin/users", icon: Shield },
-            { name: "Permissions", href: "/admin/permissions", icon: Key },
             { name: "Activity Logs", href: "/admin/activity", icon: Activity }
         ]
+    },
+    {
+        section: "Super Admin",
+        items: [
+            { name: "Departments", href: "/super-admin/departments", icon: Building },
+            { name: "Course Management", href: "/super-admin/courses", icon: BookOpen },
+            { name: "Permission Matrix", href: "/super-admin/permissions", icon: Lock },
+            { name: "System Metrics", href: "/super-admin/metrics", icon: Server },
+            { name: "System Settings", href: "/super-admin/settings", icon: Settings }
+        ],
+        requiredRole: 'super_admin' // Only show to super admins
     },
     {
         section: "System",
         items: [
             { name: "Email Templates", href: "/admin/email-templates", icon: Mail },
-            { name: "Settings", href: "/admin/settings", icon: Settings },
-            { name: "Backup & Export", href: "/admin/backup", icon: Download }
+            { name: "Backup & Export", href: "/admin/backup", icon: Download },
+            { name: "2FA Settings", href: "/admin/2fa/settings", icon: Key }
         ]
     }
 ];
@@ -201,7 +223,12 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
     };
 
     const handleLogout = () => {
-        router.post('/logout');
+        // Create and submit a form (logout is CSRF-exempt)
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/logout';
+        document.body.appendChild(form);
+        form.submit();
     };
 
     const isActivePath = (href: string) => {
@@ -211,81 +238,109 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
 
     // Desktop Sidebar Content (without header)
     const DesktopSidebarContent = () => (
-        <div className="flex flex-col max-h-screen">
+        <div className="flex flex-col h-screen">
             {/* Logo */}
             <div className={cn(
-                "flex items-center px-6 py-4 border-b border-beige-200",
+                "flex items-center px-6 py-4 border-b border-beige-200 dark:border-gray-800 flex-shrink-0",
                 sidebarCollapsed && "px-4"
             )}>
-                <GraduationCap className="h-8 w-8 text-maroon-600 flex-shrink-0" />
+                <GraduationCap className="h-8 w-8 text-maroon-600 dark:text-maroon-400 flex-shrink-0" />
                 {!sidebarCollapsed && (
                     <div className="ml-3">
-                        <h1 className="text-lg font-bold text-maroon-800">Alumni Tracer</h1>
-                        <p className="text-xs text-maroon-600">Admin Panel</p>
+                        <h1 className="text-lg font-bold text-maroon-800 dark:text-maroon-300">Alumni Tracer</h1>
+                        <p className="text-xs text-maroon-600 dark:text-maroon-400">Admin Panel</p>
                     </div>
                 )}
             </div>
 
             {/* Navigation */}
-            <div className="overflow-y-auto py-4 scrollbar-thin scrollbar-thumb-maroon-300 scrollbar-track-beige-100">
-                {adminNavigation.map((section) => (
-                    <div key={section.section} className="mb-6">
-                        {!sidebarCollapsed && (
-                            <h3 className="px-6 mb-2 text-xs font-semibold text-maroon-600 uppercase tracking-wider">
-                                {section.section}
-                            </h3>
-                        )}
-                        <nav className="space-y-1">
-                            {section.items.map((item) => {
-                                const Icon = item.icon;
-                                const isActive = isActivePath(item.href);
+            <div className="flex-1 overflow-y-auto py-4 scrollbar-thin scrollbar-thumb-maroon-300 dark:scrollbar-thumb-maroon-700 scrollbar-track-beige-100 dark:scrollbar-track-gray-800">
+                {adminNavigation.map((section) => {
+                    // Skip Super Admin section if user is not super_admin
+                    if (section.requiredRole === 'super_admin' && currentUser?.role !== 'super_admin') {
+                        return null;
+                    }
 
-                                return (
-                                    <Link
-                                        key={item.name}
-                                        href={item.href}
-                                        className={cn(
-                                            "flex items-center px-6 py-3 text-sm font-medium transition-colors duration-200",
-                                            sidebarCollapsed && "px-4 justify-center",
-                                            isActive
-                                                ? "bg-maroon-100 text-maroon-800 border-r-2 border-maroon-600"
-                                                : "text-gray-700 hover:bg-beige-50 hover:text-maroon-700"
-                                        )}
-                                        title={sidebarCollapsed ? item.name : undefined}
-                                    >
-                                        <Icon className={cn("h-5 w-5 flex-shrink-0", !sidebarCollapsed && "mr-3")} />
-                                        {!sidebarCollapsed && (
-                                            <span className="truncate">{item.name}</span>
-                                        )}
-                                    </Link>
-                                );
-                            })}
-                        </nav>
-                    </div>
-                ))}
+                    return (
+                        <div key={section.section} className="mb-6">
+                            {!sidebarCollapsed && (
+                                <h3 className="px-6 mb-2 text-xs font-semibold text-maroon-600 dark:text-maroon-300 uppercase tracking-wider">
+                                    {section.section}
+                                </h3>
+                            )}
+                            <nav className="space-y-1">
+                                {section.items.map((item) => {
+                                    const Icon = item.icon;
+                                    const isActive = isActivePath(item.href);
+
+                                    return (
+                                        <Link
+                                            key={item.name}
+                                            href={item.href}
+                                            className={cn(
+                                                "flex items-center px-6 py-3 text-sm font-medium transition-colors duration-200",
+                                                sidebarCollapsed && "px-4 justify-center",
+                                                isActive
+                                                    ? "bg-maroon-100 dark:bg-maroon-900/30 text-maroon-800 dark:text-maroon-200 border-r-2 border-maroon-600 dark:border-maroon-400"
+                                                    : "text-gray-700 dark:text-gray-200 hover:bg-beige-50 dark:hover:bg-gray-800 hover:text-maroon-700 dark:hover:text-maroon-300"
+                                            )}
+                                            title={sidebarCollapsed ? item.name : undefined}
+                                        >
+                                            <Icon className={cn("h-5 w-5 flex-shrink-0", !sidebarCollapsed && "mr-3")} />
+                                            {!sidebarCollapsed && (
+                                                <span className="truncate">{item.name}</span>
+                                            )}
+                                        </Link>
+                                    );
+                                })}
+                            </nav>
+                        </div>
+                    );
+                })}
             </div>
 
             {/* User Profile */}
             <div className={cn(
-                "border-t border-beige-200 p-4 mt-auto",
+                "border-t border-beige-200 dark:border-gray-800 p-4 flex-shrink-0",
                 sidebarCollapsed && "px-2"
             )}>
-                <div className={cn(
-                    "flex items-center",
-                    sidebarCollapsed ? "justify-center" : "space-x-3"
-                )}>
-                    <div className="h-8 w-8 bg-maroon-600 rounded-full flex items-center justify-center flex-shrink-0">
-                        <User className="h-4 w-4 text-white" />
-                    </div>
-                    {!sidebarCollapsed && (
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">
-                                {currentUser?.email || 'Admin User'}
-                            </p>
-                            <p className="text-xs text-gray-500">Administrator</p>
+                {currentUser ? (
+                    <div className={cn(
+                        "flex items-center",
+                        sidebarCollapsed ? "justify-center" : "space-x-3"
+                    )}>
+                        <div className="h-8 w-8 bg-maroon-600 rounded-full flex items-center justify-center flex-shrink-0">
+                            <User className="h-4 w-4 text-white" />
                         </div>
-                    )}
-                </div>
+                        {!sidebarCollapsed && (
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 dark:text-gray-50 truncate">
+                                    {currentUser.email}
+                                </p>
+                                <p className="text-xs text-gray-500 dark:text-gray-300 capitalize">
+                                    {currentUser.role === 'super_admin' ? 'Super Admin' :
+                                        currentUser.role === 'admin' ? 'Administrator' :
+                                            currentUser.role}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className={cn(
+                        "flex items-center",
+                        sidebarCollapsed ? "justify-center" : "space-x-3"
+                    )}>
+                        <div className="h-8 w-8 bg-gray-300 rounded-full flex items-center justify-center flex-shrink-0 animate-pulse">
+                            <User className="h-4 w-4 text-gray-500" />
+                        </div>
+                        {!sidebarCollapsed && (
+                            <div className="flex-1 min-w-0">
+                                <div className="h-4 bg-gray-200 rounded animate-pulse mb-1"></div>
+                                <div className="h-3 bg-gray-200 rounded animate-pulse w-20"></div>
+                            </div>
+                        )}
+                    </div>
+                )}
                 {!sidebarCollapsed && (
                     <Button
                         onClick={handleLogout}
@@ -304,59 +359,84 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
     // Mobile Sidebar Content (navigation only, no header)
     const MobileSidebarContent = () => (
         <div className="py-4">
-            {adminNavigation.map((section) => (
-                <div key={section.section} className="mb-6">
-                    <h3 className="px-6 mb-2 text-xs font-semibold text-maroon-600 uppercase tracking-wider">
-                        {section.section}
-                    </h3>
-                    <nav className="space-y-1">
-                        {section.items.map((item) => {
-                            const Icon = item.icon;
-                            const isActive = isActivePath(item.href);
+            {adminNavigation.map((section) => {
+                // Skip Super Admin section if user is not super_admin
+                if (section.requiredRole === 'super_admin' && currentUser?.role !== 'super_admin') {
+                    return null;
+                }
 
-                            return (
-                                <Link
-                                    key={item.name}
-                                    href={item.href}
-                                    className={cn(
-                                        "flex items-center px-6 py-3 text-sm font-medium transition-colors duration-200",
-                                        isActive
-                                            ? "bg-maroon-100 text-maroon-800 border-r-2 border-maroon-600"
-                                            : "text-gray-700 hover:bg-beige-50 hover:text-maroon-700"
-                                    )}
-                                    onClick={() => setMobileMenuOpen(false)} // Close mobile menu on navigation
-                                >
-                                    <Icon className="h-5 w-5 flex-shrink-0 mr-3" />
-                                    <span className="truncate">{item.name}</span>
-                                </Link>
-                            );
-                        })}
-                    </nav>
-                </div>
-            ))}
+                return (
+                    <div key={section.section} className="mb-6">
+                        <h3 className="px-6 mb-2 text-xs font-semibold text-maroon-600 dark:text-maroon-300 uppercase tracking-wider">
+                            {section.section}
+                        </h3>
+                        <nav className="space-y-1">
+                            {section.items.map((item) => {
+                                const Icon = item.icon;
+                                const isActive = isActivePath(item.href);
+
+                                return (
+                                    <Link
+                                        key={item.name}
+                                        href={item.href}
+                                        className={cn(
+                                            "flex items-center px-6 py-3 text-sm font-medium transition-colors duration-200",
+                                            isActive
+                                                ? "bg-maroon-100 dark:bg-maroon-900/30 text-maroon-800 dark:text-maroon-200 border-r-2 border-maroon-600 dark:border-maroon-400"
+                                                : "text-gray-700 dark:text-gray-200 hover:bg-beige-50 dark:hover:bg-gray-800 hover:text-maroon-700 dark:hover:text-maroon-300"
+                                        )}
+                                        onClick={() => setMobileMenuOpen(false)} // Close mobile menu on navigation
+                                    >
+                                        <Icon className="h-5 w-5 flex-shrink-0 mr-3" />
+                                        <span className="truncate">{item.name}</span>
+                                    </Link>
+                                );
+                            })}
+                        </nav>
+                    </div>
+                );
+            })}
 
             {/* Mobile User Profile */}
-            <div className="border-t border-beige-200 p-4 mt-4">
-                <div className="flex items-center space-x-3 mb-4">
-                    <div className="h-8 w-8 bg-maroon-600 rounded-full flex items-center justify-center flex-shrink-0">
-                        <User className="h-4 w-4 text-white" />
+            <div className="border-t border-beige-200 dark:border-gray-800 p-4 mt-4">
+                {currentUser ? (
+                    <>
+                        <div className="flex items-center space-x-3 mb-4">
+                            <div className="h-8 w-8 bg-maroon-600 dark:bg-maroon-700 rounded-full flex items-center justify-center flex-shrink-0">
+                                <User className="h-4 w-4 text-white" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                    {currentUser.email}
+                                </p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+                                    {currentUser.role === 'super_admin' ? 'Super Admin' :
+                                        currentUser.role === 'admin' ? 'Administrator' :
+                                            currentUser.role}
+                                </p>
+                            </div>
+                        </div>
+                        <Button
+                            onClick={handleLogout}
+                            variant="ghost"
+                            size="sm"
+                            className="w-full text-gray-700 dark:text-gray-200 hover:text-maroon-700 dark:hover:text-maroon-300 hover:bg-beige-50 dark:hover:bg-gray-800 justify-start"
+                        >
+                            <LogOut className="h-4 w-4 mr-2" />
+                            Logout
+                        </Button>
+                    </>
+                ) : (
+                    <div className="flex items-center space-x-3 mb-4">
+                        <div className="h-8 w-8 bg-gray-300 dark:bg-gray-700 rounded-full flex items-center justify-center flex-shrink-0 animate-pulse">
+                            <User className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded animate-pulse mb-1"></div>
+                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded animate-pulse w-20"></div>
+                        </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                            {currentUser?.email || 'Admin User'}
-                        </p>
-                        <p className="text-xs text-gray-500">Administrator</p>
-                    </div>
-                </div>
-                <Button
-                    onClick={handleLogout}
-                    variant="ghost"
-                    size="sm"
-                    className="w-full text-gray-700 hover:text-maroon-700 hover:bg-beige-50 justify-start"
-                >
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Logout
-                </Button>
+                )}
             </div>
         </div>
     );
@@ -366,10 +446,10 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
         return (
             <>
                 <Head title={title} />
-                <div className="min-h-screen bg-gradient-to-br from-beige-50 to-beige-100 flex items-center justify-center">
+                <div className="min-h-screen bg-gradient-to-br from-beige-50 to-beige-100 dark:from-gray-950 dark:to-gray-900 flex items-center justify-center">
                     <div className="flex items-center space-x-2">
                         <div className="h-8 w-8 border-4 border-maroon-600 border-t-transparent rounded-full animate-spin"></div>
-                        <span className="text-maroon-800 font-medium">Loading...</span>
+                        <span className="text-maroon-800 dark:text-maroon-300 font-medium">Loading...</span>
                     </div>
                 </div>
             </>
@@ -380,29 +460,27 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
         <>
             <Head title={title} />
 
-            <div className="md:flex bg-beige-50 min-h-screen w-full overflow-hidden">
-                {/* Desktop Sidebar */}
+            <div className="md:flex bg-beige-50 dark:bg-gray-950 h-screen w-full overflow-hidden">
+                {/* Desktop Sidebar - Fixed Position */}
                 <div className={cn(
-                    "hidden md:flex md:flex-col bg-white border-r border-beige-200 transition-all duration-300 self-start sticky top-0",
+                    "hidden md:flex md:flex-col bg-white dark:bg-gray-900 border-r border-beige-200 dark:border-gray-800 transition-all duration-300 fixed left-0 top-0 bottom-0 z-20",
                     sidebarCollapsed ? "md:w-16" : "md:w-64"
                 )}>
-                    <div className="relative">
-                        <DesktopSidebarContent />
+                    <DesktopSidebarContent />
 
-                        {/* Collapse Toggle */}
-                        <Button
-                            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                            variant="ghost"
-                            size="sm"
-                            className="absolute -right-3 top-4 h-6 w-6 p-0 border border-beige-200 bg-white shadow-sm hover:bg-beige-50"
-                        >
-                            {sidebarCollapsed ? (
-                                <ChevronRight className="h-3 w-3" />
-                            ) : (
-                                <ChevronLeft className="h-3 w-3" />
-                            )}
-                        </Button>
-                    </div>
+                    {/* Collapse Toggle */}
+                    <Button
+                        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                        variant="ghost"
+                        size="sm"
+                        className="absolute -right-3 top-4 h-6 w-6 p-0 border border-beige-200 bg-white shadow-sm hover:bg-beige-50 z-30"
+                    >
+                        {sidebarCollapsed ? (
+                            <ChevronRight className="h-3 w-3" />
+                        ) : (
+                            <ChevronLeft className="h-3 w-3" />
+                        )}
+                    </Button>
                 </div>
 
                 {/* Mobile Sidebar Overlay - Only show on mobile when menu is open */}
@@ -414,29 +492,29 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                             onClick={() => setMobileMenuOpen(false)}
                         />
                         {/* Sidebar */}
-                        <div className="fixed left-0 top-0 bottom-0 w-64 bg-white shadow-2xl z-[10000]">
+                        <div className="fixed left-0 top-0 bottom-0 w-64 bg-white dark:bg-gray-900 shadow-2xl z-[10000]">
                             <div className="flex flex-col h-full">
                                 {/* Mobile Header with Close Button */}
-                                <div className="flex items-center justify-between p-4 border-b border-beige-200 bg-white">
+                                <div className="flex items-center justify-between p-4 border-b border-beige-200 dark:border-gray-800 bg-white dark:bg-gray-900">
                                     <div className="flex items-center">
-                                        <GraduationCap className="h-8 w-8 text-maroon-600" />
+                                        <GraduationCap className="h-8 w-8 text-maroon-600 dark:text-maroon-300" />
                                         <div className="ml-3">
-                                            <h1 className="text-lg font-bold text-maroon-800">Alumni Tracer</h1>
-                                            <p className="text-xs text-maroon-600">Admin Panel</p>
+                                            <h1 className="text-lg font-bold text-maroon-800 dark:text-maroon-300">Alumni Tracer</h1>
+                                            <p className="text-xs text-maroon-600 dark:text-maroon-400">Admin Panel</p>
                                         </div>
                                     </div>
                                     <Button
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => setMobileMenuOpen(false)}
-                                        className="text-gray-500 hover:text-maroon-700 hover:bg-gray-100"
+                                        className="text-gray-500 dark:text-gray-300 hover:text-maroon-700 dark:hover:text-maroon-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                                     >
                                         <ChevronLeft className="h-5 w-5" />
                                     </Button>
                                 </div>
 
                                 {/* Mobile Navigation Content */}
-                                <div className="flex-1 overflow-y-auto bg-white scrollbar-thin scrollbar-thumb-maroon-300 scrollbar-track-beige-100">
+                                <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-900 scrollbar-thin scrollbar-thumb-maroon-300 scrollbar-track-beige-100 dark:scrollbar-track-gray-800">
                                     <MobileSidebarContent />
                                 </div>
                             </div>
@@ -444,41 +522,82 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                     </div>
                 )}
 
-                {/* Main Content */}
-                <div className="flex-1 min-w-0 flex flex-col">
-                    {/* Header */}
-                    <header className="bg-white border-b border-beige-200 px-4 py-3 relative z-10 flex-shrink-0">
+                {/* Main Content - Add margin to account for fixed sidebar */}
+                <div className={cn(
+                    "flex-1 min-w-0 flex flex-col h-screen transition-all duration-300",
+                    sidebarCollapsed ? "md:ml-16" : "md:ml-64"
+                )}>
+                    {/* Header - Fixed at top */}
+                    <header className="bg-white dark:bg-gray-900 border-b border-beige-200 dark:border-gray-800 px-4 py-3 relative z-10 flex-shrink-0">
                         <div className="flex items-center justify-between min-w-0">
                             <div className="flex items-center min-w-0 flex-1">
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="md:hidden text-gray-700 hover:text-maroon-700 hover:bg-beige-50 mr-2 flex-shrink-0"
+                                    className="md:hidden text-gray-700 dark:text-gray-200 hover:text-maroon-700 dark:hover:text-maroon-300 hover:bg-beige-50 dark:hover:bg-gray-800 mr-2 flex-shrink-0"
                                     onClick={() => setMobileMenuOpen(true)}
                                 >
                                     <Menu className="h-5 w-5" />
                                 </Button>
-                                <h1 className="text-lg md:text-xl font-semibold text-maroon-800 truncate min-w-0">{title}</h1>
+                                <h1 className="text-lg md:text-xl font-semibold text-maroon-800 dark:text-maroon-300 truncate min-w-0">{title}</h1>
                             </div>
 
                             <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0 ml-4">
-                                <span className="hidden sm:block text-sm text-gray-600 truncate max-w-32 md:max-w-48">
-                                    Welcome, {currentUser?.email?.split('@')[0] || 'Admin'}
-                                </span>
-                                {/* Mobile User Avatar */}
-                                <div className="sm:hidden h-8 w-8 bg-maroon-600 rounded-full flex items-center justify-center flex-shrink-0">
-                                    <User className="h-4 w-4 text-white" />
-                                </div>
+                                {/* User Profile Dropdown */}
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" className="flex items-center space-x-2 hover:bg-beige-50 dark:hover:bg-gray-800">
+                                            <div className="h-8 w-8 bg-maroon-600 dark:bg-maroon-700 rounded-full flex items-center justify-center flex-shrink-0">
+                                                <User className="h-4 w-4 text-white" />
+                                            </div>
+                                            <span className="hidden sm:block text-sm text-gray-600 dark:text-gray-200 truncate max-w-32 md:max-w-48">
+                                                {currentUser?.email?.split('@')[0] || 'Admin'}
+                                            </span>
+                                            <ChevronDown className="hidden sm:block h-4 w-4 text-gray-500 dark:text-gray-400" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-56">
+                                        <DropdownMenuLabel>
+                                            <div className="flex flex-col space-y-1">
+                                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                                    {currentUser?.email?.split('@')[0] || 'Admin'}
+                                                </p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                    {currentUser?.email || ''}
+                                                </p>
+                                                <p className="text-xs text-maroon-600 dark:text-maroon-400 capitalize">
+                                                    {currentUser?.role?.replace('_', ' ') || 'Administrator'}
+                                                </p>
+                                            </div>
+                                        </DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem asChild>
+                                            <Link href="/admin/profile" className="flex items-center cursor-pointer">
+                                                <UserCircle className="mr-2 h-4 w-4" />
+                                                <span>Profile Settings</span>
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem asChild>
+                                            <Link href="/admin/2fa/settings" className="flex items-center cursor-pointer">
+                                                <Shield className="mr-2 h-4 w-4" />
+                                                <span>Security & 2FA</span>
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600 dark:text-red-400 focus:text-red-700 dark:focus:text-red-300">
+                                            <LogOut className="mr-2 h-4 w-4" />
+                                            <span>Logout</span>
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </div>
                         </div>
                     </header>
 
-                    {/* Page Content */}
-                    <main className="bg-beige-50 flex-1 min-h-0 overflow-auto">
-                        <div className="w-full h-full px-4 py-4">
-                            <div className="w-full max-w-none">
-                                {children}
-                            </div>
+                    {/* Page Content - Scrollable content area */}
+                    <main className="bg-beige-50 dark:bg-gray-950 flex-1 overflow-y-auto">
+                        <div className="px-4 py-6 max-w-full">
+                            {children}
                         </div>
                     </main>
                 </div>

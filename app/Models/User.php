@@ -47,13 +47,30 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'last_login_at' => 'datetime',
         ];
     }
 
     /**
-     * Check if user is admin
+     * Check if user is super admin
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === 'super_admin';
+    }
+
+    /**
+     * Check if user is admin (includes super_admin)
      */
     public function isAdmin(): bool
+    {
+        return in_array($this->role, ['super_admin', 'admin']);
+    }
+
+    /**
+     * Check if user is regular admin (not super admin)
+     */
+    public function isRegularAdmin(): bool
     {
         return $this->role === 'admin';
     }
@@ -64,6 +81,14 @@ class User extends Authenticatable
     public function isAlumni(): bool
     {
         return $this->role === 'alumni';
+    }
+
+    /**
+     * Check if user has admin privileges (super_admin or admin)
+     */
+    public function hasAdminPrivileges(): bool
+    {
+        return in_array($this->role, ['super_admin', 'admin']);
     }
 
     /**
@@ -153,4 +178,5 @@ class User extends Authenticatable
     {
         return $this->hasMany(Mentorship::class, 'mentee_id');
     }
+
 }

@@ -51,7 +51,7 @@ export default function RoleForm({ roleId, mode }: Props) {
     const [loading, setLoading] = useState(mode === 'edit');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
+    const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({});
 
     useEffect(() => {
         fetchPermissions();
@@ -92,7 +92,7 @@ export default function RoleForm({ roleId, mode }: Props) {
         try {
             setLoading(true);
             const token = localStorage.getItem('auth_token');
-            
+
             const response = await fetch(`/api/v1/admin/roles/${roleId}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -151,9 +151,9 @@ export default function RoleForm({ roleId, mode }: Props) {
         const categoryPermissions = availablePermissions
             .filter(p => p.category === category)
             .map(p => p.id);
-        
+
         const allSelected = categoryPermissions.every(id => selectedPermissions.has(id));
-        
+
         setSelectedPermissions(prev => {
             const newSet = new Set(prev);
             if (allSelected) {
@@ -166,7 +166,7 @@ export default function RoleForm({ roleId, mode }: Props) {
     };
 
     const validateForm = (): boolean => {
-        const errors: {[key: string]: string} = {};
+        const errors: { [key: string]: string } = {};
 
         if (!formData.display_name.trim()) {
             errors.display_name = 'Display name is required';
@@ -198,10 +198,10 @@ export default function RoleForm({ roleId, mode }: Props) {
 
         try {
             const token = localStorage.getItem('auth_token');
-            const url = mode === 'create' 
+            const url = mode === 'create'
                 ? '/api/v1/admin/roles'
                 : `/api/v1/admin/roles/${roleId}`;
-            
+
             const method = mode === 'create' ? 'POST' : 'PUT';
 
             const response = await fetch(url, {
@@ -246,14 +246,14 @@ export default function RoleForm({ roleId, mode }: Props) {
 
     const groupPermissionsByCategory = (permissions: Permission[]) => {
         const grouped: { [key: string]: Permission[] } = {};
-        
+
         permissions.forEach(permission => {
             if (!grouped[permission.category]) {
                 grouped[permission.category] = [];
             }
             grouped[permission.category].push(permission);
         });
-        
+
         return grouped;
     };
 
@@ -292,8 +292,8 @@ export default function RoleForm({ roleId, mode }: Props) {
                                 {mode === 'create' ? 'Create New Role' : 'Edit Role'}
                             </h2>
                             <p className="text-maroon-600">
-                                {mode === 'create' 
-                                    ? 'Define a new role with specific permissions' 
+                                {mode === 'create'
+                                    ? 'Define a new role with specific permissions'
                                     : 'Update role details and permissions'}
                             </p>
                         </div>
@@ -350,9 +350,8 @@ export default function RoleForm({ roleId, mode }: Props) {
                                 value={formData.display_name}
                                 onChange={(e) => handleInputChange('display_name', e.target.value)}
                                 placeholder="e.g., Content Manager"
-                                className={`border-beige-300 focus:border-maroon-400 focus:ring-maroon-200 ${
-                                    validationErrors.display_name ? 'border-red-500' : ''
-                                }`}
+                                className={`border-beige-300 focus:border-maroon-400 focus:ring-maroon-200 ${validationErrors.display_name ? 'border-red-500' : ''
+                                    }`}
                             />
                             {validationErrors.display_name && (
                                 <p className="text-red-500 text-sm mt-1">{validationErrors.display_name}</p>
@@ -371,9 +370,8 @@ export default function RoleForm({ roleId, mode }: Props) {
                                 value={formData.name}
                                 onChange={(e) => handleInputChange('name', e.target.value)}
                                 placeholder="e.g., content_manager"
-                                className={`border-beige-300 focus:border-maroon-400 focus:ring-maroon-200 ${
-                                    validationErrors.name ? 'border-red-500' : ''
-                                }`}
+                                className={`border-beige-300 focus:border-maroon-400 focus:ring-maroon-200 ${validationErrors.name ? 'border-red-500' : ''
+                                    }`}
                                 disabled={mode === 'edit' && formData.is_default}
                             />
                             {validationErrors.name && (
@@ -394,11 +392,10 @@ export default function RoleForm({ roleId, mode }: Props) {
                                 onChange={(e) => handleInputChange('description', e.target.value)}
                                 rows={3}
                                 placeholder="Describe what this role can do..."
-                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
-                                    validationErrors.description 
-                                        ? 'border-red-500' 
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${validationErrors.description
+                                        ? 'border-red-500'
                                         : 'border-beige-300 focus:border-maroon-400 focus:ring-maroon-200'
-                                }`}
+                                    }`}
                             />
                             {validationErrors.description && (
                                 <p className="text-red-500 text-sm mt-1">{validationErrors.description}</p>
@@ -481,11 +478,10 @@ export default function RoleForm({ roleId, mode }: Props) {
                                                         <div
                                                             key={permission.id}
                                                             onClick={() => togglePermission(permission.id)}
-                                                            className={`border rounded-lg p-3 cursor-pointer transition-colors ${
-                                                                isSelected
+                                                            className={`border rounded-lg p-3 cursor-pointer transition-colors ${isSelected
                                                                     ? 'border-maroon-500 bg-maroon-50'
                                                                     : 'border-beige-200 hover:bg-beige-50'
-                                                            }`}
+                                                                }`}
                                                         >
                                                             <div className="flex items-start space-x-2">
                                                                 <div className="mt-0.5">
@@ -496,9 +492,8 @@ export default function RoleForm({ roleId, mode }: Props) {
                                                                     )}
                                                                 </div>
                                                                 <div className="flex-1 min-w-0">
-                                                                    <p className={`font-medium text-sm ${
-                                                                        isSelected ? 'text-maroon-800' : 'text-gray-800'
-                                                                    }`}>
+                                                                    <p className={`font-medium text-sm ${isSelected ? 'text-maroon-800' : 'text-gray-800'
+                                                                        }`}>
                                                                         {permission.display_name}
                                                                     </p>
                                                                     <p className="text-xs text-gray-600 mt-1">

@@ -2,7 +2,7 @@ import React from 'react';
 import { Head } from '@inertiajs/react';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, Search, Filter, UserPlus } from 'lucide-react';
+import { Users, Search, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -27,8 +27,8 @@ export default function AlumniDirectory() {
                     <CardContent>
                         <div className="flex gap-4 mb-6">
                             <div className="flex-1">
-                                <Input 
-                                    placeholder="Search by name, company, industry..." 
+                                <Input
+                                    placeholder="Search by name, company, industry..."
                                     className="border-beige-300"
                                 />
                             </div>

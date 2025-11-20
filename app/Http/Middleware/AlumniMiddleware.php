@@ -27,8 +27,8 @@ class AlumniMiddleware
                 ], 401);
             }
             
-            // For web requests, redirect to login
-            return redirect('/login');
+            // For web requests, redirect to login with intended URL
+            return redirect()->guest(route('login'));
         }
 
         // Check if user has alumni role

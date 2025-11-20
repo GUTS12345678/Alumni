@@ -83,6 +83,7 @@ export default function Batches({ user }: Props) {
     // Modal states
     const [addModalOpen, setAddModalOpen] = useState(false);
     const [editModalOpen, setEditModalOpen] = useState(false);
+    const [viewModalOpen, setViewModalOpen] = useState(false);
     const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
     const [formData, setFormData] = useState({
         name: '',
@@ -180,6 +181,11 @@ export default function Batches({ user }: Props) {
         });
         setSelectedBatch(null);
         setAddModalOpen(true);
+    };
+
+    const handleViewBatch = (batch: Batch) => {
+        setSelectedBatch(batch);
+        setViewModalOpen(true);
     };
 
     const handleEditBatch = (batch: Batch) => {
@@ -491,6 +497,7 @@ export default function Batches({ user }: Props) {
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
+                                                        onClick={() => handleViewBatch(batch)}
                                                         className="text-maroon-700 hover:text-maroon-800 hover:bg-maroon-50"
                                                         title="View Details"
                                                     >
@@ -723,6 +730,93 @@ export default function Batches({ user }: Props) {
                                 </Button>
                             </div>
                         </div>
+                    </DialogContent>
+                </Dialog>
+
+                {/* View Batch Modal */}
+                <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
+                    <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle className="text-xl text-maroon-800 flex items-center">
+                                <Eye className="h-5 w-5 mr-2" />
+                                Batch Details
+                            </DialogTitle>
+                            <DialogDescription>
+                                Detailed information about this batch
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        {selectedBatch && (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-500">Batch Name</label>
+                                        <p className="text-base font-semibold text-maroon-800 mt-1">
+                                            {selectedBatch.name}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-500">Graduation Year</label>
+                                        <p className="text-base font-semibold text-maroon-800 mt-1 flex items-center">
+                                            <Calendar className="h-4 w-4 mr-2 text-maroon-600" />
+                                            {selectedBatch.graduation_year}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-500">Status</label>
+                                        <div className="mt-1">{getStatusBadge(selectedBatch.status)}</div>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-500">Alumni Count</label>
+                                        <p className="text-base font-semibold text-blue-800 mt-1 flex items-center">
+                                            <Users className="h-4 w-4 mr-2 text-blue-600" />
+                                            {selectedBatch.alumni_count || 0}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-sm font-medium text-gray-500">Description</label>
+                                    <p className="text-base text-gray-700 mt-1">
+                                        {selectedBatch.description || 'No description provided'}
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-500">Created At</label>
+                                        <p className="text-sm text-gray-700 mt-1">
+                                            {formatDate(selectedBatch.created_at)}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-500">Last Updated</label>
+                                        <p className="text-sm text-gray-700 mt-1">
+                                            {formatDate(selectedBatch.updated_at)}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end space-x-2 pt-4 border-t">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => setViewModalOpen(false)}
+                                    >
+                                        Close
+                                    </Button>
+                                    <Button
+                                        onClick={() => {
+                                            setViewModalOpen(false);
+                                            handleEditBatch(selectedBatch);
+                                        }}
+                                        className="bg-blue-600 hover:bg-blue-700"
+                                    >
+                                        <Edit className="h-4 w-4 mr-2" />
+                                        Edit Batch
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
                     </DialogContent>
                 </Dialog>
             </div>

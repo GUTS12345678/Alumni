@@ -29,7 +29,7 @@ interface Survey {
     created_at: string;
     responses_count: number;
     completion_rate: number;
-    avg_completion_time: number;
+    avg_completion_time: number | null;
     target_audience: string[];
 }
 
@@ -69,7 +69,18 @@ interface AnalyticsStats {
     recent_activity: { date: string; responses: number }[];
 }
 
-export default function SurveyAnalytics() {
+interface User {
+    id: number;
+    email: string;
+    role: string;
+    status: string;
+}
+
+interface Props {
+    user: User;
+}
+
+export default function SurveyAnalytics({ user }: Props) {
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [selectedSurvey, setSelectedSurvey] = useState<string>('');
     const [analytics, setAnalytics] = useState<SurveyAnalytics | null>(null);
@@ -255,9 +266,52 @@ export default function SurveyAnalytics() {
                 document.body.appendChild(a);
                 a.click();
                 window.URL.revokeObjectURL(url);
+            } else {
+                alert('Failed to export analytics. Please try again.');
             }
         } catch (error) {
             console.error('Export error:', error);
+            alert('An error occurred while exporting. Please try again.');
+        }
+    };
+
+    const exportAllSurveys = async () => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const response = await fetch(`/api/v1/admin/analytics/surveys/export-all`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': getCsrfToken(),
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ days: dateRange }),
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `all_surveys_analytics_${new Date().toISOString().split('T')[0]}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+            } else {
+                alert('Failed to export all surveys. Please try again.');
+            }
+        } catch (error) {
+            console.error('Export all error:', error);
+            alert('An error occurred while exporting. Please try again.');
         }
     };
 
@@ -288,7 +342,11 @@ export default function SurveyAnalytics() {
         });
     };
 
-    const formatTime = (minutes: number) => {
+    const formatTime = (minutes: number | null | undefined) => {
+        // Handle null, undefined, NaN, or 0
+        if (!minutes || isNaN(minutes) || minutes === 0) {
+            return 'N/A';
+        }
         if (minutes < 60) {
             return `${Math.round(minutes)}m`;
         }
@@ -309,7 +367,7 @@ export default function SurveyAnalytics() {
 
     if (loading) {
         return (
-            <AdminBaseLayout title="Survey Analytics">
+            <AdminBaseLayout title="Survey Analytics" user={user}>
                 <div className="flex items-center justify-center min-h-96">
                     <div className="flex items-center space-x-2">
                         <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
@@ -322,7 +380,7 @@ export default function SurveyAnalytics() {
 
     if (error) {
         return (
-            <AdminBaseLayout title="Survey Analytics">
+            <AdminBaseLayout title="Survey Analytics" user={user}>
                 <Card className="border-red-200">
                     <CardContent className="p-6">
                         <div className="text-center">
@@ -339,7 +397,7 @@ export default function SurveyAnalytics() {
     }
 
     return (
-        <AdminBaseLayout title="Survey Analytics">
+        <AdminBaseLayout title="Survey Analytics" user={user}>
             <div className="space-y-6">
                 {/* Header with Actions */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -366,6 +424,16 @@ export default function SurveyAnalytics() {
                             </label>
                         </div>
 
+                        <Button
+                            onClick={exportAllSurveys}
+                            variant="outline"
+                            size="sm"
+                            className="border-green-300 text-green-700 hover:bg-green-50"
+                        >
+                            <Download className="h-4 w-4 mr-2" />
+                            Export All Surveys
+                        </Button>
+
                         {selectedSurvey && (
                             <Button
                                 onClick={exportAnalytics}
@@ -374,7 +442,7 @@ export default function SurveyAnalytics() {
                                 className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
                             >
                                 <Download className="h-4 w-4 mr-2" />
-                                Export Report
+                                Export This Survey
                             </Button>
                         )}
 

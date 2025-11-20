@@ -9,11 +9,11 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
-import { 
-    AlertCircle, 
-    ArrowLeft, 
+import {
+    AlertCircle,
+    ArrowLeft,
     ArrowRight,
-    Loader2, 
+    Loader2,
     CheckCircle,
     Send
 } from 'lucide-react';
@@ -64,7 +64,7 @@ export default function TakeSurvey({ surveyId }: Props) {
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
-    
+
     const [survey, setSurvey] = useState<Survey | null>(null);
     const [response, setResponse] = useState<SurveyResponse | null>(null);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -98,7 +98,7 @@ export default function TakeSurvey({ surveyId }: Props) {
             }
 
             setSurvey(data.data.survey);
-            
+
             if (data.data.existing_response && data.data.existing_response.status === 'draft') {
                 setResponse(data.data.existing_response);
             } else {
@@ -130,9 +130,22 @@ export default function TakeSurvey({ surveyId }: Props) {
 
             if (res.ok) {
                 setResponse(data.data.response);
+            } else if (res.status === 409) {
+                // User has already responded to this survey
+                setError(
+                    data.message ||
+                    'You have already responded to this survey. You can view your response in the Survey History section.'
+                );
+                // Redirect to history after showing the message
+                setTimeout(() => {
+                    router.visit('/alumni/surveys/history');
+                }, 3000);
+            } else {
+                setError(data.message || 'Unable to start survey. Please try again.');
             }
         } catch (err) {
             console.error('Start survey error:', err);
+            setError('Failed to start survey. Please check your connection and try again.');
         }
     };
 
@@ -252,7 +265,7 @@ export default function TakeSurvey({ surveyId }: Props) {
         }
     };
 
-    const updateAnswer = (questionId: number, field: string, value: any) => {
+    const updateAnswer = (questionId: number, field: string, value: string | number | string[]) => {
         setAnswers(prev => ({
             ...prev,
             [questionId]: {
@@ -356,8 +369,8 @@ export default function TakeSurvey({ surveyId }: Props) {
                                     type="button"
                                     variant={answer.answer_value === value ? 'default' : 'outline'}
                                     onClick={() => updateAnswer(question.id, 'answer_value', value)}
-                                    className={answer.answer_value === value 
-                                        ? 'bg-maroon-700 hover:bg-maroon-800' 
+                                    className={answer.answer_value === value
+                                        ? 'bg-maroon-700 hover:bg-maroon-800'
                                         : 'border-beige-300 hover:border-maroon-500'}
                                 >
                                     {value}
@@ -444,7 +457,7 @@ export default function TakeSurvey({ surveyId }: Props) {
     return (
         <AlumniBaseLayout title={survey.title}>
             <Head title={`Take Survey: ${survey.title}`} />
-            
+
             <div className="mb-8">
                 <Button
                     variant="ghost"
@@ -454,7 +467,7 @@ export default function TakeSurvey({ surveyId }: Props) {
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back to Surveys
                 </Button>
-                
+
                 <h1 className="text-3xl font-bold text-maroon-800">{survey.title}</h1>
                 {survey.description && (
                     <p className="text-gray-600 mt-2">{survey.description}</p>
@@ -510,7 +523,7 @@ export default function TakeSurvey({ surveyId }: Props) {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {renderQuestionInput(currentQuestion)}
-                    
+
                     {currentQuestion.help_text && (
                         <p className="text-sm text-gray-500 italic">{currentQuestion.help_text}</p>
                     )}

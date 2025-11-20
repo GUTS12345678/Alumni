@@ -83,7 +83,12 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
     const currentUser = auth?.user;
 
     const handleLogout = () => {
-        router.post('/logout');
+        // Create and submit a form (logout is CSRF-exempt)
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/logout';
+        document.body.appendChild(form);
+        form.submit();
     };
 
     const isActivePath = (href: string) => {
@@ -91,23 +96,23 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
     };
 
     const SidebarContent = () => (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-screen">
             {/* Logo */}
             <div className={cn(
-                "flex items-center px-6 py-4 border-b border-beige-200",
+                "flex items-center px-6 py-4 border-b border-beige-200 flex-shrink-0",
                 sidebarCollapsed && "px-4"
             )}>
                 <GraduationCap className="h-8 w-8 text-maroon-600 flex-shrink-0" />
                 {!sidebarCollapsed && (
                     <div className="ml-3">
-                        <h1 className="text-lg font-bold text-maroon-800">Alumni Portal</h1>
-                        <p className="text-xs text-maroon-600">Welcome back!</p>
+                        <h1 className="text-lg font-bold text-maroon-800">Alumni Tracer</h1>
+                        <p className="text-xs text-maroon-600">Alumni Portal</p>
                     </div>
                 )}
             </div>
 
-            {/* Navigation - Scrollable */}
-            <div className="flex-1 overflow-y-auto py-4 scrollbar-thin scrollbar-thumb-beige-300 scrollbar-track-transparent hover:scrollbar-thumb-beige-400">
+            {/* Navigation */}
+            <div className="flex-1 overflow-y-auto py-4 scrollbar-thin scrollbar-thumb-maroon-300 scrollbar-track-beige-100">
                 {alumniNavigation.map((section) => (
                     <div key={section.section} className="mb-6">
                         {!sidebarCollapsed && (
@@ -147,7 +152,7 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
 
             {/* User Profile */}
             <div className={cn(
-                "border-t border-beige-200 p-4",
+                "border-t border-beige-200 p-4 flex-shrink-0",
                 sidebarCollapsed && "px-2"
             )}>
                 <div className={cn(
@@ -187,29 +192,27 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
         <>
             <Head title={title} />
 
-            <div className="flex h-screen bg-beige-50">
-                {/* Desktop Sidebar - Fixed Height Container */}
+            <div className="flex h-screen bg-beige-50 overflow-hidden">
+                {/* Desktop Sidebar - Fixed Position */}
                 <div className={cn(
-                    "hidden md:flex md:flex-col bg-white border-r border-beige-200 transition-all duration-300 h-screen",
+                    "hidden md:flex md:flex-col bg-white border-r border-beige-200 transition-all duration-300 fixed left-0 top-0 bottom-0 z-20",
                     sidebarCollapsed ? "md:w-16" : "md:w-64"
                 )}>
-                    <div className="relative flex-1 flex flex-col min-h-0">
-                        <SidebarContent />
+                    <SidebarContent />
 
-                        {/* Collapse Toggle */}
-                        <Button
-                            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                            variant="ghost"
-                            size="sm"
-                            className="absolute -right-3 top-4 h-6 w-6 p-0 border border-beige-200 bg-white shadow-sm hover:bg-beige-50"
-                        >
-                            {sidebarCollapsed ? (
-                                <ChevronRight className="h-3 w-3" />
-                            ) : (
-                                <ChevronLeft className="h-3 w-3" />
-                            )}
-                        </Button>
-                    </div>
+                    {/* Collapse Toggle */}
+                    <Button
+                        onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                        variant="ghost"
+                        size="sm"
+                        className="absolute -right-3 top-4 h-6 w-6 p-0 border border-beige-200 bg-white shadow-sm hover:bg-beige-50 z-30"
+                    >
+                        {sidebarCollapsed ? (
+                            <ChevronRight className="h-3 w-3" />
+                        ) : (
+                            <ChevronLeft className="h-3 w-3" />
+                        )}
+                    </Button>
                 </div>
 
                 {/* Mobile Sidebar Overlay */}
@@ -228,8 +231,11 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                     <SidebarContent />
                 </div>
 
-                {/* Main Content */}
-                <div className="flex-1 flex flex-col min-w-0 bg-white">
+                {/* Main Content - Add margin for fixed sidebar */}
+                <div className={cn(
+                    "flex-1 flex flex-col min-w-0 bg-white h-screen transition-all duration-300",
+                    sidebarCollapsed ? "md:ml-16" : "md:ml-64"
+                )}>
                     {/* Header */}
                     <header className="bg-white border-b border-beige-200 px-4 py-3 flex-shrink-0 shadow-sm">
                         <div className="flex items-center justify-between">

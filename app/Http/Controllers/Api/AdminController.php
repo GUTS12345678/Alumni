@@ -12,6 +12,8 @@ use App\Models\SurveyAnswer;
 use App\Models\ActivityLog;
 use App\Models\EmailTemplate;
 use App\Models\AdminSetting;
+use App\Models\Department;
+use App\Models\Course;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -30,6 +32,12 @@ class AdminController extends Controller
             $totalSurveys = Survey::count();
             $totalBatches = Batch::count();
             $totalResponses = SurveyResponse::where('status', 'completed')->count();
+            
+            // System-level counts (for Super Admin analytics)
+            $totalUsers = User::count();
+            $totalDepartments = Department::count();
+            $totalCourses = Course::count();
+            $activeSurveys = Survey::where('status', 'active')->count();
 
             // Response rate calculation
             $totalInvitations = SurveyResponse::count();
@@ -96,7 +104,11 @@ class AdminController extends Controller
                         'total_surveys' => $totalSurveys,
                         'total_batches' => $totalBatches,
                         'total_responses' => $totalResponses,
-                        'response_rate' => $responseRate
+                        'response_rate' => $responseRate,
+                        'total_users' => $totalUsers,
+                        'total_departments' => $totalDepartments,
+                        'total_courses' => $totalCourses,
+                        'active_surveys' => $activeSurveys
                     ],
                     'recent_activity' => [
                         'recent_registrations' => $recentRegistrations,
@@ -857,9 +869,15 @@ class AdminController extends Controller
     public function deleteAlumni($id): JsonResponse
     {
         try {
-            $alumni = AlumniProfile::findOrFail($id);
+            $alumni = AlumniProfile::with('user')->findOrFail($id);
             $alumniName = $alumni->first_name . ' ' . $alumni->last_name;
             
+            // Delete the associated user account if it exists
+            if ($alumni->user) {
+                $alumni->user->delete();
+            }
+            
+            // Delete the alumni profile
             $alumni->delete();
 
             return response()->json([
@@ -882,9 +900,65 @@ class AdminController extends Controller
     }
 
     /**
+     * Bulk delete alumni profiles
+     */
+    public function bulkDeleteAlumni(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'ids' => 'required|array|min:1',
+                'ids.*' => 'integer|exists:alumni_profiles,id'
+            ]);
+
+            DB::beginTransaction();
+            
+            $ids = $request->input('ids');
+            $count = 0;
+            
+            // Get alumni profiles with their associated users
+            $alumniProfiles = AlumniProfile::with('user')->whereIn('id', $ids)->get();
+            
+            foreach ($alumniProfiles as $alumni) {
+                // Delete the associated user account if it exists
+                if ($alumni->user) {
+                    $alumni->user->delete();
+                }
+                
+                // Delete the alumni profile
+                $alumni->delete();
+                $count++;
+            }
+            
+            DB::commit();
+            
+            return response()->json([
+                'success' => true,
+                'message' => "{$count} alumni profile(s) deleted successfully",
+                'deleted_count' => $count
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Bulk delete alumni failed: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete alumni profiles',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Export alumni data to CSV
      */
-    public function exportAlumni(Request $request): JsonResponse
+    public function exportAlumni(Request $request)
     {
         try {
             $query = AlumniProfile::with(['user:id,email', 'batch:id,name,graduation_year']);
@@ -900,22 +974,11 @@ class AdminController extends Controller
 
             $alumni = $query->get();
 
-            $csvData = [];
-            $csvData[] = [
-                'Name',
-                'Email',
-                'Phone',
-                'Batch',
-                'Year',
-                'Employment Status',
-                'Current Position',
-                'Company',
-                'Industry',
-                'Registration Date'
-            ];
+            $csvData = "Name,Email,Phone,Batch,Year,Employment Status,Current Position,Company,Industry,Registration Date\n";
 
             foreach ($alumni as $alumnus) {
-                $csvData[] = [
+                $csvData .= sprintf(
+                    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
                     $alumnus->full_name ?? '',
                     $alumnus->user->email ?? '',
                     $alumnus->phone ?? '',
@@ -926,22 +989,12 @@ class AdminController extends Controller
                     $alumnus->current_employer ?? '',
                     $alumnus->company_industry ?? '',
                     $alumnus->created_at->format('Y-m-d H:i:s')
-                ];
+                );
             }
 
-            // Convert to CSV string
-            $csvString = '';
-            foreach ($csvData as $row) {
-                $csvString .= '"' . implode('","', $row) . '"' . "\n";
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'filename' => 'alumni_export_' . date('Y-m-d_H-i-s') . '.csv',
-                    'content' => base64_encode($csvString),
-                    'total_records' => count($alumni)
-                ]
+            return response($csvData, 200, [
+                'Content-Type' => 'text/csv',
+                'Content-Disposition' => 'attachment; filename="alumni_export_' . date('Y-m-d_H-i-s') . '.csv"',
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -953,9 +1006,65 @@ class AdminController extends Controller
     }
 
     /**
+     * Export surveys list to CSV
+     */
+    public function exportSurveys(Request $request)
+    {
+        try {
+            $query = Survey::with('questions');
+
+            // Apply search if provided
+            if ($request->has('search')) {
+                $search = $request->search;
+                $query->where(function ($q) use ($search) {
+                    $q->where('title', 'like', '%' . $search . '%')
+                        ->orWhere('description', 'like', '%' . $search . '%');
+                });
+            }
+
+            $surveys = $query->orderBy('created_at', 'desc')->get();
+
+            // Build CSV header
+            $csvData = "ID,Title,Description,Status,Target Audience,Questions Count,Responses Count,Created Date,Start Date,End Date\n";
+
+            // Build CSV rows
+            foreach ($surveys as $survey) {
+                $row = sprintf(
+                    '%d,"%s","%s","%s","%s",%d,%d,"%s","%s","%s"',
+                    $survey->id,
+                    str_replace('"', '""', $survey->title),
+                    str_replace('"', '""', $survey->description ?? ''),
+                    $survey->status,
+                    str_replace('"', '""', $survey->target_audience ?? ''),
+                    $survey->questions->count(),
+                    $survey->responses()->count(),
+                    $survey->created_at->format('Y-m-d H:i:s'),
+                    $survey->start_date ? \Carbon\Carbon::parse($survey->start_date)->format('Y-m-d') : '',
+                    $survey->end_date ? \Carbon\Carbon::parse($survey->end_date)->format('Y-m-d') : ''
+                );
+
+                $csvData .= $row . "\n";
+            }
+
+            $filename = 'surveys_export_' . date('Y-m-d_H-i-s') . '.csv';
+
+            return response($csvData, 200, [
+                'Content-Type' => 'text/csv',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to export surveys',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Export survey responses to CSV
      */
-    public function exportSurveyResponses(Request $request, $surveyId): JsonResponse
+    public function exportSurveyResponses(Request $request, $surveyId)
     {
         try {
             $survey = Survey::with('questions')->findOrFail($surveyId);
@@ -965,45 +1074,35 @@ class AdminController extends Controller
                 ->where('status', 'completed')
                 ->get();
 
-            $csvData = [];
-
-            // Header row
-            $headers = ['Respondent Email', 'Submitted At'];
+            // Build CSV header
+            $csvData = "Respondent Email,Submitted At";
             foreach ($survey->questions as $question) {
-                $headers[] = $question->question_text;
+                $csvData .= ',"' . str_replace('"', '""', $question->question_text) . '"';
             }
-            $csvData[] = $headers;
+            $csvData .= "\n";
 
-            // Data rows
+            // Build CSV rows
             foreach ($responses as $response) {
-                $row = [
+                $row = sprintf(
+                    '"%s","%s"',
                     $response->user->email ?? '',
                     $response->updated_at->format('Y-m-d H:i:s')
-                ];
+                );
 
                 foreach ($survey->questions as $question) {
                     $answer = $response->answers->where('survey_question_id', $question->id)->first();
-                    $row[] = $answer ? ($answer->answer_text ?? $answer->answer_number ?? $answer->answer_date) : '';
+                    $answerText = $answer ? ($answer->answer_text ?? $answer->answer_number ?? $answer->answer_date ?? '') : '';
+                    $row .= ',"' . str_replace('"', '""', $answerText) . '"';
                 }
 
-                $csvData[] = $row;
+                $csvData .= $row . "\n";
             }
 
-            // Convert to CSV string
-            $csvString = '';
-            foreach ($csvData as $row) {
-                $csvString .= '"' . implode('","', array_map(function ($item) {
-                    return str_replace('"', '""', $item);
-                }, $row)) . '"' . "\n";
-            }
+            $filename = 'survey_responses_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', $survey->title) . '_' . date('Y-m-d_H-i-s') . '.csv';
 
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'filename' => 'survey_responses_' . $survey->title . '_' . date('Y-m-d_H-i-s') . '.csv',
-                    'content' => base64_encode($csvString),
-                    'total_responses' => count($responses)
-                ]
+            return response($csvData, 200, [
+                'Content-Type' => 'text/csv',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -1625,8 +1724,15 @@ class AdminController extends Controller
     public function getUsers(Request $request): JsonResponse
     {
         try {
+            $currentUser = auth()->user();
+            
             $query = User::with('alumniProfile:id,user_id,first_name,last_name,phone')
                 ->orderBy('created_at', 'desc');
+
+            // Restrict admin users to super_admin only
+            if ($currentUser->role !== 'super_admin') {
+                $query->where('role', '!=', 'admin');
+            }
 
             // Search filter
             if ($request->has('search') && $request->search) {
@@ -1693,6 +1799,15 @@ class AdminController extends Controller
     {
         try {
             $user = User::findOrFail($id);
+            $currentUser = auth()->user();
+
+            // Only super_admin can update admin users
+            if ($user->role === 'admin' && $currentUser->role !== 'super_admin') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only super admin can update admin users'
+                ], 403);
+            }
 
             $validated = $request->validate([
                 'name' => 'sometimes|string|max:255',
@@ -1730,6 +1845,15 @@ class AdminController extends Controller
     {
         try {
             $user = User::findOrFail($id);
+            $currentUser = auth()->user();
+
+            // Only super_admin can update admin users
+            if ($user->role === 'admin' && $currentUser->role !== 'super_admin') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only super admin can update admin users'
+                ], 403);
+            }
 
             $validated = $request->validate([
                 'status' => 'required|in:active,inactive,pending',
@@ -1758,6 +1882,15 @@ class AdminController extends Controller
     {
         try {
             $user = User::findOrFail($id);
+            $currentUser = auth()->user();
+            
+            // Only super_admin can delete admin users
+            if ($user->role === 'admin' && $currentUser->role !== 'super_admin') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only super admin can delete admin users'
+                ], 403);
+            }
             
             // Prevent deleting yourself
             if ($user->id === auth()->id()) {
@@ -1789,6 +1922,15 @@ class AdminController extends Controller
     {
         try {
             $user = User::findOrFail($id);
+            $currentUser = auth()->user();
+            
+            // Only super_admin can reset password for admin users
+            if ($user->role === 'admin' && $currentUser->role !== 'super_admin') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only super admin can reset password for admin users'
+                ], 403);
+            }
             
             // Generate password reset token
             $token = app('auth.password.broker')->createToken($user);
@@ -1815,6 +1957,8 @@ class AdminController extends Controller
     public function createUser(Request $request): JsonResponse
     {
         try {
+            $currentUser = auth()->user();
+            
             $validated = $request->validate([
                 'name' => 'required|string|max:255',
                 'email' => 'required|email|unique:users,email',
@@ -1822,6 +1966,14 @@ class AdminController extends Controller
                 'role' => 'required|in:admin,alumni',
                 'status' => 'required|in:active,inactive,pending',
             ]);
+
+            // Only super_admin can create admin users
+            if ($validated['role'] === 'admin' && $currentUser->role !== 'super_admin') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only super admin can create admin users'
+                ], 403);
+            }
 
             $user = User::create([
                 'name' => $validated['name'],
@@ -1918,6 +2070,46 @@ class AdminController extends Controller
                     'guard_name' => 'web',
                     'created_at' => now()->toISOString(),
                     'updated_at' => now()->toISOString()
+                ],
+                [
+                    'id' => '7',
+                    'name' => 'view_own_profile',
+                    'display_name' => 'View Own Profile',
+                    'description' => 'Can view own alumni profile',
+                    'category' => 'Profile',
+                    'guard_name' => 'web',
+                    'created_at' => now()->toISOString(),
+                    'updated_at' => now()->toISOString()
+                ],
+                [
+                    'id' => '8',
+                    'name' => 'update_own_profile',
+                    'display_name' => 'Update Own Profile',
+                    'description' => 'Can update own alumni profile',
+                    'category' => 'Profile',
+                    'guard_name' => 'web',
+                    'created_at' => now()->toISOString(),
+                    'updated_at' => now()->toISOString()
+                ],
+                [
+                    'id' => '9',
+                    'name' => 'take_surveys',
+                    'display_name' => 'Take Surveys',
+                    'description' => 'Can participate in surveys',
+                    'category' => 'Surveys',
+                    'guard_name' => 'web',
+                    'created_at' => now()->toISOString(),
+                    'updated_at' => now()->toISOString()
+                ],
+                [
+                    'id' => '10',
+                    'name' => 'view_own_survey_history',
+                    'display_name' => 'View Own Survey History',
+                    'description' => 'Can view own survey response history',
+                    'category' => 'Surveys',
+                    'guard_name' => 'web',
+                    'created_at' => now()->toISOString(),
+                    'updated_at' => now()->toISOString()
                 ]
             ];
             
@@ -1967,7 +2159,12 @@ class AdminController extends Controller
                     'display_name' => 'Alumni',
                     'description' => 'Can view and update own profile',
                     'guard_name' => 'web',
-                    'permissions' => [],
+                    'permissions' => [
+                        ['id' => '7', 'name' => 'view_own_profile', 'display_name' => 'View Own Profile'],
+                        ['id' => '8', 'name' => 'update_own_profile', 'display_name' => 'Update Own Profile'],
+                        ['id' => '9', 'name' => 'take_surveys', 'display_name' => 'Take Surveys'],
+                        ['id' => '10', 'name' => 'view_own_survey_history', 'display_name' => 'View Own Survey History'],
+                    ],
                     'users_count' => User::where('role', 'alumni')->count(),
                     'is_default' => true,
                     'created_at' => now()->toISOString(),
@@ -2045,7 +2242,7 @@ class AdminController extends Controller
 
             $stats = [
                 'total_roles' => 2, // admin, alumni
-                'total_permissions' => 6, // Based on the permissions defined above
+                'total_permissions' => 10, // Updated to include alumni permissions
                 'total_users_with_roles' => $totalUsers,
                 'most_used_role' => $mostUsedRole,
                 'permission_categories' => [
@@ -2054,7 +2251,9 @@ class AdminController extends Controller
                     ['name' => 'Alumni Management', 'count' => 1],
                     ['name' => 'Survey Management', 'count' => 1],
                     ['name' => 'Analytics', 'count' => 1],
-                    ['name' => 'Batch Management', 'count' => 1]
+                    ['name' => 'Batch Management', 'count' => 1],
+                    ['name' => 'Profile', 'count' => 2],
+                    ['name' => 'Surveys', 'count' => 2]
                 ]
             ];
             

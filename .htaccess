@@ -1,0 +1,32 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Disable directory browsing
+    Options -Indexes
+    
+    # Redirect all requests to public folder
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ /public/$1 [L,QSA]
+    
+    # Handle Laravel routes
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ public/index.php [L]
+</IfModule>
+
+# Disable directory listing as fallback
+<IfModule mod_autoindex.c>
+    Options -Indexes
+</IfModule>
+
+# Security: Deny access to sensitive files
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Protect important files
+<FilesMatch "(^#.*#|\.(bak|conf|dist|fla|in[ci]|log|psd|sh|sql|sw[op])|~)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>

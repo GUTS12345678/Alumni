@@ -12,6 +12,9 @@ class AlumniProfile extends Model
     protected $fillable = [
         'user_id',
         'batch_id',
+        'department_id',
+        'course_id',
+        'profile_complete',
         'first_name',
         'last_name',
         'middle_name',
@@ -52,9 +55,16 @@ class AlumniProfile extends Model
         'willing_to_hire_alumni',
         'profile_completed',
         'profile_completed_at',
+        'salary_range',
+        'career_field',
+        'survey_participation_count',
+        'last_profile_update',
     ];
 
     protected $casts = [
+        'department_id' => 'integer',
+        'course_id' => 'integer',
+        'profile_complete' => 'boolean',
         'birth_date' => 'date',
         'graduation_date' => 'date',
         'job_start_date' => 'date',
@@ -68,6 +78,8 @@ class AlumniProfile extends Model
         'profile_completed_at' => 'datetime',
         'skills' => 'array',
         'certifications' => 'array',
+        'survey_participation_count' => 'integer',
+        'last_profile_update' => 'datetime',
     ];
 
     /**
@@ -84,6 +96,22 @@ class AlumniProfile extends Model
     public function batch()
     {
         return $this->belongsTo(Batch::class);
+    }
+
+    /**
+     * Get the department this alumni belongs to
+     */
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    /**
+     * Get the course this alumni belongs to
+     */
+    public function course()
+    {
+        return $this->belongsTo(Course::class);
     }
 
     /**

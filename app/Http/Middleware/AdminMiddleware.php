@@ -26,11 +26,11 @@ class AdminMiddleware
                 ], 401);
             }
             
-            // For web requests, redirect to login
-            return redirect('/login');
+            // For web requests, redirect to login with intended URL
+            return redirect()->guest(route('login'));
         }
 
-        if ($user->role !== 'admin') {
+        if (!in_array($user->role, ['super_admin', 'admin'])) {
             // For API requests, return JSON
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json([

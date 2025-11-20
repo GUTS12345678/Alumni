@@ -441,5 +441,70 @@ class AuthController extends Controller
 
         return round(($earnedPoints / $totalPoints) * 100);
     }
-}
 
+    /**
+     * Update alumni department and course (one-time profile update)
+     */
+    public function updateDepartmentCourse(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'department_id' => 'required|exists:departments,id',
+            'course_id' => 'required|exists:courses,id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $user = Auth::user();
+
+        // Check if user has alumni profile
+        $profile = AlumniProfile::where('user_id', $user->id)->first();
+
+        if (!$profile) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Alumni profile not found'
+            ], 404);
+        }
+
+        // Verify the course belongs to the selected department
+        $course = \App\Models\Course::find($request->course_id);
+        if ($course->department_id != $request->department_id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The selected course does not belong to the selected department'
+            ], 422);
+        }
+
+        // Update the profile
+        $profile->update([
+            'department_id' => $request->department_id,
+            'course_id' => $request->course_id,
+            'profile_complete' => true,
+        ]);
+
+        // Log the activity
+        ActivityLog::create([
+            'user_id' => $user->id,
+            'action' => 'profile_department_course_updated',
+            'description' => "Updated department and course information",
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Profile updated successfully',
+            'data' => [
+                'department_id' => $profile->department_id,
+                'course_id' => $profile->course_id,
+                'profile_complete' => $profile->profile_complete,
+            ]
+        ]);
+    }
+}

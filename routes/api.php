@@ -19,6 +19,14 @@ Route::prefix('v1')->group(function () {
     Route::post('/surveys/{survey}/answer', [SurveyController::class, 'submitAnswer']);
     Route::post('/surveys/{survey}/complete', [SurveyController::class, 'completeResponse']);
     Route::get('/surveys/{survey}/progress', [SurveyController::class, 'getProgress']);
+    
+    // Public department/course endpoints (for registration dropdowns)
+    Route::prefix('admin')->group(function () {
+        Route::get('/departments/active', [\App\Http\Controllers\Admin\DepartmentController::class, 'getActive']);
+        Route::get('/departments/{id}/courses', [\App\Http\Controllers\Admin\DepartmentController::class, 'getCourses']);
+        Route::get('/departments/{id}/alumni', [\App\Http\Controllers\Admin\DepartmentController::class, 'getAlumni']);
+        Route::get('/departments/{id}/analytics', [\App\Http\Controllers\Admin\DepartmentController::class, 'getAnalytics']);
+    });
 });
 
 // Protected routes (authentication required)
@@ -45,12 +53,41 @@ Route::prefix('v1/alumni')->middleware(['auth:sanctum', 'alumni'])->group(functi
     // Alumni profile
     Route::get('/profile', [AuthController::class, 'alumniProfile']);
     Route::put('/profile', [AuthController::class, 'updateAlumniProfile']);
+    
+    // Two-Factor Authentication for alumni
+    // Route::post('/two-factor/verify-setup', [\App\Http\Controllers\Auth\TwoFactorSetupController::class, 'verifySetup']);
+});
+
+// Two-Factor Authentication challenge (public - no auth required)
+// Route::prefix('v1/alumni')->group(function () {
+//     Route::post('/two-factor/verify', [\App\Http\Controllers\Auth\TwoFactorChallengeController::class, 'verify']);
+// });
+
+// Profile routes (all authenticated users)
+Route::prefix('v1/profile')->middleware(['auth:sanctum'])->group(function () {
+    Route::get('/', [\App\Http\Controllers\Api\V1\ProfileController::class, 'show']);
+    Route::post('/', [\App\Http\Controllers\Api\V1\ProfileController::class, 'update']);
+    Route::post('/upload-image', [\App\Http\Controllers\Api\V1\ProfileController::class, 'uploadImage']);
+    Route::delete('/delete-image', [\App\Http\Controllers\Api\V1\ProfileController::class, 'deleteImage']);
+    Route::post('/password', [\App\Http\Controllers\Api\V1\ProfileController::class, 'updatePassword']);
 });
 
 // Admin-only routes (authentication + admin role required)
 Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
     // Dashboard
     Route::get('/dashboard', [AdminController::class, 'dashboard']);
+
+    // System Appearance Settings
+    Route::get('/appearance', [\App\Http\Controllers\Api\V1\Admin\AppearanceController::class, 'index']);
+    Route::post('/appearance', [\App\Http\Controllers\Api\V1\Admin\AppearanceController::class, 'update']);
+    Route::post('/appearance/upload', [\App\Http\Controllers\Api\V1\Admin\AppearanceController::class, 'uploadImage']);
+    Route::delete('/appearance/delete', [\App\Http\Controllers\Api\V1\Admin\AppearanceController::class, 'deleteImage']);
+
+    // Department Appearance Settings
+    Route::get('/departments/{id}/appearance', [\App\Http\Controllers\Api\V1\Admin\DepartmentAppearanceController::class, 'show']);
+    Route::post('/departments/{id}/appearance', [\App\Http\Controllers\Api\V1\Admin\DepartmentAppearanceController::class, 'update']);
+    Route::post('/departments/{id}/appearance/upload', [\App\Http\Controllers\Api\V1\Admin\DepartmentAppearanceController::class, 'uploadImage']);
+    Route::delete('/departments/{id}/appearance/delete', [\App\Http\Controllers\Api\V1\Admin\DepartmentAppearanceController::class, 'deleteImage']);
 
     // Alumni management (Alumni Bank)
     Route::get('/alumni', [AdminController::class, 'getAlumni']);
@@ -59,12 +96,14 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     Route::get('/alumni/{id}', [AdminController::class, 'getAlumniProfile']);
     Route::put('/alumni/{id}', [AdminController::class, 'updateAlumni']);
     Route::delete('/alumni/{id}', [AdminController::class, 'deleteAlumni']);
+    Route::delete('/alumni/bulk-delete', [AdminController::class, 'bulkDeleteAlumni']);
 
     // Profile management
     Route::put('/profiles/{id}', [AdminController::class, 'updateProfile']);
 
     // Survey management (Survey Bank)
     Route::get('/surveys', [AdminController::class, 'getSurveys']);
+    Route::get('/surveys/export', [AdminController::class, 'exportSurveys']);
     Route::post('/surveys', [AdminController::class, 'createSurvey']);
     Route::get('/surveys/{id}', [AdminController::class, 'getSurveyDetails']);
     Route::put('/surveys/{id}', [AdminController::class, 'updateSurvey']);
@@ -87,6 +126,7 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     Route::get('/analytics/overview', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'getAnalyticsOverview']);
     Route::get('/analytics/surveys/{survey}', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'getSurveyAnalytics']);
     Route::post('/analytics/surveys/{survey}/export', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'exportSurveyAnalytics']);
+    Route::post('/analytics/surveys/export-all', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'exportAllSurveys']);
 
     // Batch management
     Route::get('/batches', [AdminController::class, 'getBatches']);
@@ -98,6 +138,9 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     Route::get('/activity-logs', [AdminController::class, 'getActivityLogs']);
     Route::get('/activity-logs/export', [AdminController::class, 'exportActivityLogs']);
 
+    // System Metrics
+    Route::get('/system-metrics', [\App\Http\Controllers\Admin\SystemMetricsController::class, 'getMetrics']);
+
     // User Management
     Route::get('/users', [AdminController::class, 'getUsers']);
     Route::post('/users', [AdminController::class, 'createUser']);
@@ -105,6 +148,16 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     Route::delete('/users/{id}', [AdminController::class, 'deleteUser']);
     Route::patch('/users/{id}/status', [AdminController::class, 'updateUserStatus']);
     Route::post('/users/{id}/reset-password', [AdminController::class, 'resetUserPassword']);
+
+    // Role Management (Super Admin only)
+    Route::prefix('role-management')->middleware(['super_admin'])->group(function () {
+        Route::post('/users/{userId}/change-role', [\App\Http\Controllers\Admin\RoleManagementController::class, 'updateRole']);
+        Route::get('/users/{userId}/role-history', [\App\Http\Controllers\Admin\RoleManagementController::class, 'getRoleHistory']);
+        Route::get('/available-roles', [\App\Http\Controllers\Admin\RoleManagementController::class, 'getAvailableRoles']);
+    });
+
+    // NOTE: Super Admin routes moved outside auth:sanctum group to support CSRF validation
+    // See below for actual super-admin department/course management routes
 
     // Permissions Management  
     Route::get('/permissions', [AdminController::class, 'getPermissions']);
@@ -141,7 +194,15 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     Route::get('/backups/download/{filename}', [AdminController::class, 'downloadBackup']);
     Route::delete('/backups/{id}', [AdminController::class, 'deleteBackup']);
     Route::post('/system/backup', [AdminController::class, 'createBackup']); // Legacy endpoint
+
+    // Bulk Operations
+    Route::post('/bulk/delete', [\App\Http\Controllers\Api\V1\Admin\BulkOperationsController::class, 'bulkDelete']);
+    Route::post('/bulk/restore', [\App\Http\Controllers\Api\V1\Admin\BulkOperationsController::class, 'bulkRestore']);
+    Route::post('/bulk/export', [\App\Http\Controllers\Api\V1\Admin\BulkOperationsController::class, 'bulkExport']);
+    Route::post('/bulk/update-status', [\App\Http\Controllers\Api\V1\Admin\BulkOperationsController::class, 'bulkUpdateStatus']);
 });
+
+// NOTE: Super Admin department/course routes moved to routes/web.php for proper CSRF protection
 
 // Health check route
 Route::get('/health', function () {

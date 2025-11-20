@@ -43,12 +43,6 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
         ]);
     })->name('admin.batches');
 
-    Route::get('/admin/profiles', function () {
-        return Inertia::render('admin/Profiles', [
-            'user' => Auth::user()
-        ]);
-    })->name('admin.profiles');
-
     // Survey System
     Route::get('/admin/surveys', function () {
         return Inertia::render('admin/SurveyBank', [
@@ -82,8 +76,10 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
     })->name('admin.users');
 
     Route::get('/admin/permissions', function () {
-        return Inertia::render('admin/Permissions', [
-            'user' => Auth::user()
+        return Inertia::render('SuperAdmin/PermissionMatrix', [
+            'auth' => [
+                'user' => Auth::user()
+            ]
         ]);
     })->name('admin.permissions');
 
@@ -145,17 +141,123 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
         ]);
     })->name('admin.email-templates.edit');
 
-    Route::get('/admin/settings', function () {
-        return Inertia::render('admin/SystemSettings', [
-            'user' => Auth::user()
-        ]);
-    })->name('admin.settings');
-
     Route::get('/admin/backup', function () {
         return Inertia::render('admin/Backup', [
             'user' => Auth::user()
         ]);
     })->name('admin.backup');
+
+    // Profile Settings (accessible to all admins)
+    Route::get('/admin/profile', function () {
+        return Inertia::render('shared/ProfileSettings', [
+            'auth' => [
+                'user' => Auth::user()
+            ]
+        ]);
+    })->name('admin.profile');
+
+    // Two-Factor Authentication Settings (Google Authenticator only)
+    // Route::get('/admin/2fa/settings', [App\Http\Controllers\Admin\TwoFactorController::class, 'index'])->name('admin.2fa.settings');
+    // Route::get('/admin/2fa/setup-google-auth', [App\Http\Controllers\Admin\TwoFactorController::class, 'setupGoogleAuth'])->name('admin.2fa.setup-google');
+    // Route::post('/admin/2fa/verify-google-auth', [App\Http\Controllers\Admin\TwoFactorController::class, 'verifyGoogleAuth'])->name('admin.2fa.verify-google');
+    // Route::post('/admin/2fa/disable-google-auth', [App\Http\Controllers\Admin\TwoFactorController::class, 'disableGoogleAuth'])->name('admin.2fa.disable-google');
+});
+
+// Super Admin Routes (Super Admin Only)
+Route::middleware(['web', 'auth', 'super_admin'])->prefix('super-admin')->group(function () {
+    // Department & Course Management
+    Route::get('/departments', function () {
+        return Inertia::render('SuperAdmin/DepartmentManagement', [
+            'auth' => [
+                'user' => Auth::user()
+            ]
+        ]);
+    })->name('super-admin.departments');
+
+    // Department Dashboard
+    Route::get('/departments/{id}', function ($id) {
+        return Inertia::render('SuperAdmin/DepartmentDashboard', [
+            'auth' => [
+                'user' => Auth::user()
+            ],
+            'departmentId' => $id
+        ]);
+    })->name('super-admin.departments.view');
+
+    Route::get('/courses', function () {
+        return Inertia::render('SuperAdmin/CourseManagement', [
+            'auth' => [
+                'user' => Auth::user()
+            ]
+        ]);
+    })->name('super-admin.courses');
+
+    // Permission Management
+    Route::get('/permissions', function () {
+        return Inertia::render('SuperAdmin/PermissionMatrix', [
+            'auth' => [
+                'user' => Auth::user()
+            ]
+        ]);
+    })->name('super-admin.permissions');
+
+    // System Analytics
+    Route::get('/analytics', function () {
+        return Inertia::render('SuperAdmin/Analytics', [
+            'auth' => [
+                'user' => Auth::user()
+            ]
+        ]);
+    })->name('super-admin.analytics');
+
+    // System Metrics
+    Route::get('/metrics', function () {
+        return Inertia::render('SuperAdmin/SystemMetrics', [
+            'auth' => [
+                'user' => Auth::user()
+            ]
+        ]);
+    })->name('super-admin.metrics');
+
+    // System Settings
+    Route::get('/settings', function () {
+        return Inertia::render('SuperAdmin/ImprovedSystemSettings', [
+            'auth' => [
+                'user' => Auth::user()
+            ]
+        ]);
+    })->name('super-admin.settings');
+    
+    // Legacy System Settings (keep old route for backward compatibility)
+    Route::get('/settings-old', function () {
+        return Inertia::render('SuperAdmin/SystemSettings', [
+            'auth' => [
+                'user' => Auth::user()
+            ]
+        ]);
+    })->name('super-admin.settings-old');
+});
+
+// Super Admin API Routes (with CSRF protection via web middleware)
+Route::middleware(['auth', 'super_admin'])->prefix('api/v1/admin/super-admin')->group(function () {
+    // Departments
+    Route::get('/departments', [\App\Http\Controllers\Admin\DepartmentController::class, 'index']);
+    Route::post('/departments', [\App\Http\Controllers\Admin\DepartmentController::class, 'store']);
+    Route::get('/departments/statistics', [\App\Http\Controllers\Admin\DepartmentController::class, 'statistics']);
+    Route::get('/departments/{id}', [\App\Http\Controllers\Admin\DepartmentController::class, 'show']);
+    Route::put('/departments/{id}', [\App\Http\Controllers\Admin\DepartmentController::class, 'update']);
+    Route::delete('/departments/{id}', [\App\Http\Controllers\Admin\DepartmentController::class, 'destroy']);
+    Route::post('/departments/{id}/restore', [\App\Http\Controllers\Admin\DepartmentController::class, 'restore']);
+
+    // Courses
+    Route::get('/courses', [\App\Http\Controllers\Admin\CourseController::class, 'index']);
+    Route::post('/courses', [\App\Http\Controllers\Admin\CourseController::class, 'store']);
+    Route::get('/courses/statistics', [\App\Http\Controllers\Admin\CourseController::class, 'statistics']);
+    Route::get('/courses/{id}', [\App\Http\Controllers\Admin\CourseController::class, 'show']);
+    Route::put('/courses/{id}', [\App\Http\Controllers\Admin\CourseController::class, 'update']);
+    Route::post('/courses/{id}/reassign', [\App\Http\Controllers\Admin\CourseController::class, 'reassignAlumni']);
+    Route::delete('/courses/{id}', [\App\Http\Controllers\Admin\CourseController::class, 'destroy']);
+    Route::post('/courses/{id}/restore', [\App\Http\Controllers\Admin\CourseController::class, 'restore']);
 });
 
 // Alumni Dashboard Routes
@@ -178,8 +280,17 @@ Route::middleware(['web', 'auth', 'alumni'])->group(function () {
         ->name('alumni.profile.update');
 
     // Settings Routes
-    Route::get('/alumni/settings', [App\Http\Controllers\Alumni\SettingsController::class, 'index'])
-        ->name('alumni.settings');
+    Route::get('/alumni/settings', function () {
+        return Inertia::render('shared/ProfileSettings', [
+            'auth' => [
+                'user' => Auth::user()
+            ]
+        ]);
+    })->name('alumni.settings');
+    
+    // Legacy Settings Routes (keep for backward compatibility)
+    Route::get('/alumni/settings-old', [App\Http\Controllers\Alumni\SettingsController::class, 'index'])
+        ->name('alumni.settings-old');
     Route::put('/alumni/settings/password', [App\Http\Controllers\Alumni\SettingsController::class, 'updatePassword'])
         ->name('alumni.settings.password');
     Route::put('/alumni/settings/notifications', [App\Http\Controllers\Alumni\SettingsController::class, 'updateNotifications'])
@@ -223,10 +334,22 @@ Route::middleware(['web', 'auth', 'alumni'])->group(function () {
     // Job Board Routes
     Route::get('/alumni/jobs', [App\Http\Controllers\Alumni\JobController::class, 'index'])
         ->name('alumni.jobs');
+    Route::get('/alumni/jobs/saved', [App\Http\Controllers\Alumni\JobController::class, 'savedJobs'])
+        ->name('alumni.jobs.saved');
+    Route::get('/alumni/jobs/applications', [App\Http\Controllers\Alumni\JobController::class, 'myApplications'])
+        ->name('alumni.jobs.applications');
     Route::get('/alumni/jobs/{id}', [App\Http\Controllers\Alumni\JobController::class, 'show'])
         ->name('alumni.jobs.show');
     Route::post('/alumni/jobs', [App\Http\Controllers\Alumni\JobController::class, 'store'])
         ->name('alumni.jobs.store');
+    Route::post('/alumni/jobs/{id}/save', [App\Http\Controllers\Alumni\JobController::class, 'saveJob'])
+        ->name('alumni.jobs.save');
+    Route::delete('/alumni/jobs/{id}/unsave', [App\Http\Controllers\Alumni\JobController::class, 'unsaveJob'])
+        ->name('alumni.jobs.unsave');
+    Route::post('/alumni/jobs/{id}/apply', [App\Http\Controllers\Alumni\JobController::class, 'apply'])
+        ->name('alumni.jobs.apply');
+    Route::delete('/alumni/jobs/applications/{id}', [App\Http\Controllers\Alumni\JobController::class, 'withdrawApplication'])
+        ->name('alumni.jobs.withdraw');
     Route::put('/alumni/jobs/{id}', [App\Http\Controllers\Alumni\JobController::class, 'update'])
         ->name('alumni.jobs.update');
     Route::delete('/alumni/jobs/{id}', [App\Http\Controllers\Alumni\JobController::class, 'destroy'])
@@ -290,7 +413,8 @@ Route::middleware(['web', 'auth', 'alumni'])->group(function () {
 Route::middleware(['web', 'auth'])->get('/dashboard', function () {
     $user = Auth::user();
     
-    if ($user && $user->role === 'admin') {
+    // Super admins and regular admins both go to admin dashboard
+    if ($user && in_array($user->role, ['super_admin', 'admin'])) {
         return redirect()->route('admin.dashboard');
     } elseif ($user && $user->role === 'alumni') {
         return redirect()->route('alumni.dashboard');
@@ -298,6 +422,11 @@ Route::middleware(['web', 'auth'])->get('/dashboard', function () {
         return redirect('/')->with('error', 'Invalid user role');
     }
 })->name('dashboard');
+
+// Two-Factor Authentication Routes
+// Route::middleware(['web', 'auth'])->group(function () {
+//     Route::get('/two-factor/setup', [App\Http\Controllers\Auth\TwoFactorSetupController::class, 'show'])->name('two-factor.setup');
+// });
 
 // Auth routes for web-based authentication
 require __DIR__.'/auth.php';

@@ -100,39 +100,40 @@ class AnalyticsController extends Controller
     private function getYearlyTimeToJobData($yearFilter = null): array
     {
         // Get data from employments table (first job after graduation)
+        // Use fixed graduation date: June 1st of graduation year
         $queryFromJobs = DB::table('alumni_profiles as ap')
+            ->join('batches as b', 'ap.batch_id', '=', 'b.id')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->select(
-                'ap.graduation_year',
-                DB::raw('AVG(DATEDIFF(e.start_date, ap.graduation_date)) as avg_days_to_job'),
+                'b.graduation_year',
+                DB::raw('AVG(DATEDIFF(e.start_date, CONCAT(b.graduation_year, "-06-01"))) as avg_days_to_job'),
                 DB::raw('COUNT(DISTINCT ap.id) as total_alumni_with_jobs')
             )
-            ->whereNotNull('ap.graduation_date')
-            ->whereNotNull('ap.graduation_year')
+            ->whereNotNull('b.graduation_year')
             ->whereNotNull('e.start_date')
             ->when($yearFilter, function ($q) use ($yearFilter) {
-                return $q->whereIn('ap.graduation_year', $yearFilter);
+                return $q->whereIn('b.graduation_year', $yearFilter);
             })
-            ->groupBy('ap.graduation_year')
-            ->orderBy('ap.graduation_year')
+            ->groupBy('b.graduation_year')
+            ->orderBy('b.graduation_year')
             ->get()
             ->keyBy('graduation_year');
 
         // Get total alumni count and employment status from profiles
-        $queryFromProfiles = DB::table('alumni_profiles')
+        $queryFromProfiles = DB::table('alumni_profiles as ap')
+            ->join('batches as b', 'ap.batch_id', '=', 'b.id')
             ->select(
-                DB::raw('graduation_year'),
-                DB::raw('COUNT(id) as total_alumni'),
-                DB::raw('SUM(CASE WHEN employment_status IN ("employed_full_time", "employed_part_time", "self_employed") THEN 1 ELSE 0 END) as employed_alumni'),
-                DB::raw('AVG(DATEDIFF(job_start_date, graduation_date)) as avg_days_from_profile')
+                DB::raw('b.graduation_year'),
+                DB::raw('COUNT(ap.id) as total_alumni'),
+                DB::raw('SUM(CASE WHEN ap.employment_status IN ("employed_full_time", "employed_part_time", "self_employed") THEN 1 ELSE 0 END) as employed_alumni'),
+                DB::raw('AVG(DATEDIFF(ap.job_start_date, CONCAT(b.graduation_year, "-06-01"))) as avg_days_from_profile')
             )
-            ->whereNotNull('graduation_date')
-            ->whereNotNull('graduation_year')
+            ->whereNotNull('b.graduation_year')
             ->when($yearFilter, function ($q) use ($yearFilter) {
-                return $q->whereIn('graduation_year', $yearFilter);
+                return $q->whereIn('b.graduation_year', $yearFilter);
             })
-            ->groupBy('graduation_year')
-            ->orderBy('graduation_year')
+            ->groupBy('b.graduation_year')
+            ->orderBy('b.graduation_year')
             ->get();
 
         $data = [];
@@ -174,15 +175,16 @@ class AnalyticsController extends Controller
     private function getProgramBreakdownForYear($year): array
     {
         // Get data from employments table (actual job records)
+        // Use fixed graduation date: June 1st of graduation year
         $programsFromJobs = DB::table('alumni_profiles as ap')
+            ->join('batches as b', 'ap.batch_id', '=', 'b.id')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->select(
                 'ap.degree_program as program',
-                DB::raw('AVG(DATEDIFF(e.start_date, ap.graduation_date)) as avg_days'),
+                DB::raw('AVG(DATEDIFF(e.start_date, CONCAT(b.graduation_year, "-06-01"))) as avg_days'),
                 DB::raw('COUNT(DISTINCT ap.id) as alumni_count')
             )
-            ->where('ap.graduation_year', $year)
-            ->whereNotNull('ap.graduation_date')
+            ->where('b.graduation_year', $year)
             ->whereNotNull('e.start_date')
             ->groupBy('ap.degree_program')
             ->having('alumni_count', '>', 0)
@@ -190,22 +192,22 @@ class AnalyticsController extends Controller
             ->keyBy('program');
             
         // Get data from profiles (fallback for alumni without employment records)
-        $programsFromProfiles = DB::table('alumni_profiles')
+        $programsFromProfiles = DB::table('alumni_profiles as ap')
+            ->join('batches as b', 'ap.batch_id', '=', 'b.id')
             ->select(
-                'degree_program as program',
-                DB::raw('AVG(DATEDIFF(job_start_date, graduation_date)) as avg_days'),
-                DB::raw('COUNT(id) as alumni_count')
+                'ap.degree_program as program',
+                DB::raw('AVG(DATEDIFF(ap.job_start_date, CONCAT(b.graduation_year, "-06-01"))) as avg_days'),
+                DB::raw('COUNT(ap.id) as alumni_count')
             )
-            ->where('graduation_year', $year)
-            ->whereNotNull('graduation_date')
-            ->whereNotNull('job_start_date')
-            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->where('b.graduation_year', $year)
+            ->whereNotNull('ap.job_start_date')
+            ->whereIn('ap.employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotExists(function ($query) use ($year) {
                 $query->select(DB::raw(1))
                       ->from('employments')
-                      ->whereColumn('employments.alumni_id', 'alumni_profiles.id');
+                      ->whereColumn('employments.alumni_id', 'ap.id');
             })
-            ->groupBy('degree_program')
+            ->groupBy('ap.degree_program')
             ->having('alumni_count', '>', 0)
             ->get();
         
@@ -269,25 +271,25 @@ class AnalyticsController extends Controller
     {
         // Get days from employments table
         $daysFromJobs = DB::table('alumni_profiles as ap')
+            ->join('batches as b', 'ap.batch_id', '=', 'b.id')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
-            ->select(DB::raw('DATEDIFF(e.start_date, ap.graduation_date) as days_to_job'))
-            ->where('ap.graduation_year', $year)
-            ->whereNotNull('ap.graduation_date')
+            ->select(DB::raw('DATEDIFF(e.start_date, CONCAT(b.graduation_year, "-06-01")) as days_to_job'))
+            ->where('b.graduation_year', $year)
             ->whereNotNull('e.start_date')
             ->pluck('days_to_job')
             ->toArray();
             
         // Get days from profiles (for alumni without employment records)
-        $daysFromProfiles = DB::table('alumni_profiles')
-            ->select(DB::raw('DATEDIFF(job_start_date, graduation_date) as days_to_job'))
-            ->where('graduation_year', $year)
-            ->whereNotNull('graduation_date')
-            ->whereNotNull('job_start_date')
-            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+        $daysFromProfiles = DB::table('alumni_profiles as ap')
+            ->join('batches as b', 'ap.batch_id', '=', 'b.id')
+            ->select(DB::raw('DATEDIFF(ap.job_start_date, CONCAT(b.graduation_year, "-06-01")) as days_to_job'))
+            ->where('b.graduation_year', $year)
+            ->whereNotNull('ap.job_start_date')
+            ->whereIn('ap.employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotExists(function ($query) {
                 $query->select(DB::raw(1))
                       ->from('employments')
-                      ->whereColumn('employments.alumni_id', 'alumni_profiles.id');
+                      ->whereColumn('employments.alumni_id', 'ap.id');
             })
             ->pluck('days_to_job')
             ->toArray();
@@ -688,9 +690,11 @@ class AnalyticsController extends Controller
                 ->join('survey_answers', 'survey_responses.id', '=', 'survey_answers.response_id')
                 ->join('survey_questions', 'survey_answers.question_id', '=', 'survey_questions.id')
                 ->where('survey_responses.survey_id', $surveyId)
-                ->where('survey_questions.question_text', 'LIKE', '%employment%')
-                ->orWhere('survey_questions.question_text', 'LIKE', '%job%')
-                ->orWhere('survey_questions.question_text', 'LIKE', '%work%')
+                ->where(function ($query) {
+                    $query->where('survey_questions.question_text', 'LIKE', '%employment%')
+                          ->orWhere('survey_questions.question_text', 'LIKE', '%job%')
+                          ->orWhere('survey_questions.question_text', 'LIKE', '%work%');
+                })
                 ->select('survey_answers.answer_text')
                 ->get();
 
@@ -857,6 +861,124 @@ class AnalyticsController extends Controller
                     $question['skip_rate']
                 ]);
             }
+        }
+        
+        rewind($handle);
+        $content = stream_get_contents($handle);
+        fclose($handle);
+        
+        return $content;
+    }
+
+    /**
+     * Export analytics for all surveys
+     */
+    public function exportAllSurveys(Request $request)
+    {
+        try {
+            $days = $request->get('days', 30);
+            
+            // Get all surveys
+            $surveys = Survey::with(['responses' => function ($query) use ($days) {
+                $query->where('submitted_at', '>=', now()->subDays($days));
+            }])
+            ->orderBy('created_at', 'desc')
+            ->get();
+            
+            $filename = 'all_surveys_analytics_' . date('Y-m-d') . '.xlsx';
+            
+            $content = $this->generateAllSurveysExcel($surveys, $days);
+            
+            return response($content)
+                ->header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to export all surveys analytics',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate Excel content for all surveys
+     */
+    private function generateAllSurveysExcel($surveys, $days): string
+    {
+        $handle = fopen('php://temp', 'w+');
+        
+        // Header
+        fputcsv($handle, ['All Surveys Analytics Report']);
+        fputcsv($handle, ['Generated on:', date('Y-m-d H:i:s')]);
+        fputcsv($handle, ['Period:', "Last {$days} days"]);
+        fputcsv($handle, []);
+        
+        // Summary
+        fputcsv($handle, ['Summary']);
+        fputcsv($handle, ['Total Surveys:', $surveys->count()]);
+        fputcsv($handle, ['Total Responses:', $surveys->sum(fn($s) => $s->responses->count())]);
+        fputcsv($handle, []);
+        
+        // Individual Survey Details
+        fputcsv($handle, ['Survey Details']);
+        fputcsv($handle, ['Survey Title', 'Status', 'Created Date', 'Total Responses', 'Completion Rate (%)', 'Avg Time (min)']);
+        
+        foreach ($surveys as $survey) {
+            $totalResponses = $survey->responses->count();
+            $completedResponses = $survey->responses->whereNotNull('submitted_at')->count();
+            $completionRate = $totalResponses > 0 ? round(($completedResponses / $totalResponses) * 100, 1) : 0;
+            
+            // Calculate average completion time
+            $avgTime = $survey->responses->whereNotNull('submitted_at')
+                ->map(function ($response) {
+                    if ($response->submitted_at && $response->started_at) {
+                        return \Carbon\Carbon::parse($response->started_at)
+                            ->diffInMinutes(\Carbon\Carbon::parse($response->submitted_at));
+                    }
+                    return null;
+                })
+                ->filter()
+                ->avg();
+            
+            fputcsv($handle, [
+                $survey->title,
+                ucfirst($survey->status),
+                $survey->created_at->format('Y-m-d'),
+                $totalResponses,
+                $completionRate,
+                $avgTime ? round($avgTime, 1) : 'N/A'
+            ]);
+        }
+        
+        fputcsv($handle, []);
+        
+        // Detailed breakdown by survey
+        foreach ($surveys as $survey) {
+            fputcsv($handle, []);
+            fputcsv($handle, ['=== ' . $survey->title . ' ===']);
+            fputcsv($handle, ['Description:', $survey->description]);
+            fputcsv($handle, ['Status:', ucfirst($survey->status)]);
+            fputcsv($handle, ['Total Questions:', $survey->questions->count()]);
+            fputcsv($handle, ['Total Responses:', $survey->responses->count()]);
+            fputcsv($handle, []);
+            
+            // Response dates
+            if ($survey->responses->count() > 0) {
+                fputcsv($handle, ['Responses by Date']);
+                $responsesByDate = $survey->responses
+                    ->groupBy(fn($r) => \Carbon\Carbon::parse($r->submitted_at)->format('Y-m-d'))
+                    ->map(fn($group) => $group->count())
+                    ->sortKeys();
+                
+                fputcsv($handle, ['Date', 'Count']);
+                foreach ($responsesByDate as $date => $count) {
+                    fputcsv($handle, [$date, $count]);
+                }
+            }
+            
+            fputcsv($handle, []);
         }
         
         rewind($handle);

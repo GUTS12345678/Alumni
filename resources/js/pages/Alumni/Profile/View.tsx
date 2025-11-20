@@ -41,7 +41,7 @@ interface AlumniProfile {
     postal_code?: string;
     country?: string;
     batch_id?: number;
-    batch?: any;
+    batch?: { id: number; name: string; year: number };
     degree_program?: string;
     major?: string;
     minor?: string;
@@ -155,7 +155,7 @@ export default function ProfileView() {
     return (
         <AlumniBaseLayout title="My Profile">
             <Head title="My Profile" />
-            
+
             {/* Header with Edit Button */}
             <div className="mb-8 flex items-center justify-between">
                 <div>
@@ -466,14 +466,14 @@ export default function ProfileView() {
 }
 
 // Helper component for info fields
-function InfoField({ icon: Icon, label, value, className = '' }: { 
-    icon: any; 
-    label: string; 
-    value?: string; 
+function InfoField({ icon: Icon, label, value, className = '' }: {
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    value?: string;
     className?: string;
 }) {
     if (!value) return null;
-    
+
     return (
         <div className={`flex items-start space-x-3 ${className}`}>
             <Icon className="h-5 w-5 text-maroon-600 mt-0.5 flex-shrink-0" />

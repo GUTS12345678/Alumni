@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\SurveyController;
 use App\Http\Controllers\Api\AdminController;
+use App\Http\Controllers\Api\EmailOtpController;
 
 
 // Public routes (no authentication required)
@@ -12,6 +13,12 @@ Route::prefix('v1')->group(function () {
     // Authentication routes
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+
+    // Email OTP verification routes
+    Route::post('/otp/send', [EmailOtpController::class, 'sendOtp']);
+    Route::post('/otp/verify', [EmailOtpController::class, 'verifyOtp']);
+    Route::post('/otp/resend', [EmailOtpController::class, 'resendOtp']);
+    Route::post('/otp/check', [EmailOtpController::class, 'checkVerification']);
 
     // Public survey routes (accessible via invitation token)
     Route::get('/surveys/{survey}', [SurveyController::class, 'show']);
@@ -23,10 +30,17 @@ Route::prefix('v1')->group(function () {
     // Public department/course endpoints (for registration dropdowns)
     Route::prefix('admin')->group(function () {
         Route::get('/departments/active', [\App\Http\Controllers\Admin\DepartmentController::class, 'getActive']);
+        Route::get('/departments/{id}', [\App\Http\Controllers\Admin\DepartmentController::class, 'show']);
+        Route::put('/departments/{id}', [\App\Http\Controllers\Admin\DepartmentController::class, 'update']);
         Route::get('/departments/{id}/courses', [\App\Http\Controllers\Admin\DepartmentController::class, 'getCourses']);
         Route::get('/departments/{id}/alumni', [\App\Http\Controllers\Admin\DepartmentController::class, 'getAlumni']);
         Route::get('/departments/{id}/analytics', [\App\Http\Controllers\Admin\DepartmentController::class, 'getAnalytics']);
+        Route::post('/departments/upload-image', [\App\Http\Controllers\Admin\DepartmentController::class, 'uploadImage']);
     });
+
+    // Validation endpoints for registration
+    Route::post('/check-email', [AuthController::class, 'checkEmail']);
+    Route::post('/check-student-id', [AuthController::class, 'checkStudentId']);
 });
 
 // Protected routes (authentication required)
@@ -64,7 +78,7 @@ Route::prefix('v1/alumni')->middleware(['auth:sanctum', 'alumni'])->group(functi
 // });
 
 // Profile routes (all authenticated users)
-Route::prefix('v1/profile')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('v1/profile')->middleware(['auth:sanctum,web'])->group(function () {
     Route::get('/', [\App\Http\Controllers\Api\V1\ProfileController::class, 'show']);
     Route::post('/', [\App\Http\Controllers\Api\V1\ProfileController::class, 'update']);
     Route::post('/upload-image', [\App\Http\Controllers\Api\V1\ProfileController::class, 'uploadImage']);
@@ -125,6 +139,7 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     // Survey Analytics routes
     Route::get('/analytics/overview', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'getAnalyticsOverview']);
     Route::get('/analytics/surveys/{survey}', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'getSurveyAnalytics']);
+    Route::get('/analytics/surveys/{survey}/responses', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'getSurveyResponses']);
     Route::post('/analytics/surveys/{survey}/export', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'exportSurveyAnalytics']);
     Route::post('/analytics/surveys/export-all', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'exportAllSurveys']);
 
@@ -161,23 +176,30 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
 
     // Permissions Management  
     Route::get('/permissions', [AdminController::class, 'getPermissions']);
+    Route::get('/permissions/{id}/users', [AdminController::class, 'getPermissionUsers']);
     Route::get('/permissions/stats', [AdminController::class, 'getPermissionsStats']);
     Route::get('/roles', [AdminController::class, 'getRoles']);
     Route::get('/roles/{id}', [AdminController::class, 'getRole']);
     Route::post('/roles', [AdminController::class, 'createRole']);
     Route::put('/roles/{id}', [AdminController::class, 'updateRole']);
+    Route::put('/roles/{id}/permissions', [AdminController::class, 'updateRolePermissions']);
     Route::delete('/roles/{id}', [AdminController::class, 'deleteRole']);
     Route::get('/users/with-roles', [AdminController::class, 'getUsersWithRoles']);
     Route::post('/permissions', [AdminController::class, 'createPermission']);
     Route::put('/permissions/{id}', [AdminController::class, 'updatePermission']);
+    Route::post('/users/{id}/permissions', [AdminController::class, 'giveUserPermission']);
+    Route::delete('/users/{id}/permissions/{permissionId}', [AdminController::class, 'revokeUserPermission']);
 
     // Email Templates
     Route::get('/email-templates', [AdminController::class, 'getEmailTemplates']);
     Route::get('/email-templates/stats', [AdminController::class, 'getEmailTemplateStats']);
+    Route::get('/email-templates/export', [AdminController::class, 'exportEmailTemplates']);
     Route::get('/email-templates/{id}', [AdminController::class, 'getEmailTemplate']);
     Route::post('/email-templates', [AdminController::class, 'createEmailTemplate']);
     Route::put('/email-templates/{id}', [AdminController::class, 'updateEmailTemplate']);
     Route::delete('/email-templates/{id}', [AdminController::class, 'deleteEmailTemplate']);
+    Route::post('/email-templates/{id}/duplicate', [AdminController::class, 'duplicateEmailTemplate']);
+    Route::post('/email-templates/{id}/test', [AdminController::class, 'testEmailTemplate']);
 
     // System Settings
     Route::get('/settings', [AdminController::class, 'getSystemSettings']);

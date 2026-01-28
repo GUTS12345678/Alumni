@@ -319,6 +319,28 @@ class SurveyController extends Controller
                 ], 409);
             }
 
+            // Check for student ID in answers to validate before creating profile
+            $studentIdAnswer = null;
+            $tempAnswers = $response->answers()->with('surveyQuestion')->get();
+            foreach ($tempAnswers as $answer) {
+                $questionText = strtolower($answer->surveyQuestion->question_text);
+                if (str_contains($questionText, 'student id') || str_contains($questionText, 'student number')) {
+                    $studentIdAnswer = $answer->formatted_answer;
+                    break;
+                }
+            }
+
+            // Validate student ID doesn't already exist
+            if ($studentIdAnswer) {
+                $existingProfile = AlumniProfile::where('student_id', $studentIdAnswer)->first();
+                if ($existingProfile) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Student ID already registered. If you believe this is an error, please contact support.'
+                    ], 409);
+                }
+            }
+
             // Create new user
             $user = User::create([
                 'email' => $request->email,

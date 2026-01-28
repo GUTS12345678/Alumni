@@ -49,14 +49,20 @@ class AdminController extends Controller
                 ->where('updated_at', '>=', Carbon::now()->subDays(30))
                 ->count();
 
-            // Batch distribution
-            $batchDistribution = Batch::withCount('alumniProfiles')->get()->map(function ($batch) {
-                return [
-                    'batch_name' => $batch->name,
-                    'batch_year' => $batch->graduation_year,
-                    'alumni_count' => $batch->alumni_profiles_count
-                ];
-            });
+            // Batch distribution - Use graduation_year from alumni_profiles directly
+            // This handles alumni who have graduation_year set but may not have batch_id
+            $batchDistribution = AlumniProfile::select('graduation_year', DB::raw('COUNT(*) as alumni_count'))
+                ->whereNotNull('graduation_year')
+                ->groupBy('graduation_year')
+                ->orderBy('graduation_year', 'desc')
+                ->get()
+                ->map(function ($record) {
+                    return [
+                        'batch_name' => 'Class of ' . $record->graduation_year,
+                        'batch_year' => (int) $record->graduation_year,
+                        'alumni_count' => (int) $record->alumni_count
+                    ];
+                });
 
             // Employment status distribution
             $employmentStats = AlumniProfile::select('employment_status')
@@ -523,6 +529,13 @@ class AdminController extends Controller
                     : 0;
                 $survey->completed_responses = $completedResponses;
                 $survey->in_progress_responses = $survey->responses()->where('status', 'in_progress')->count();
+
+                // Calculate average completion time in minutes
+                $avgCompletionTime = $survey->responses()
+                    ->whereNotNull('completed_at')
+                    ->selectRaw('AVG(TIMESTAMPDIFF(MINUTE, created_at, completed_at)) as avg_time')
+                    ->value('avg_time');
+                $survey->avg_completion_time = $avgCompletionTime ? round((float) $avgCompletionTime, 1) : null;
 
                 // Calculate response rate if survey has targets
                 if ($survey->target_batches || $survey->target_graduation_years) {
@@ -2009,113 +2022,38 @@ class AdminController extends Controller
     public function getPermissions(Request $request): JsonResponse
     {
         try {
-            // Sample permissions structure for the system
-            $permissions = [
-                [
-                    'id' => '1',
-                    'name' => 'view_dashboard',
-                    'display_name' => 'View Dashboard',
-                    'description' => 'Can view the admin dashboard',
-                    'category' => 'Dashboard',
-                    'guard_name' => 'web',
-                    'created_at' => now()->toISOString(),
-                    'updated_at' => now()->toISOString()
-                ],
-                [
-                    'id' => '2',
-                    'name' => 'manage_users',
-                    'display_name' => 'Manage Users',
-                    'description' => 'Can create, edit, and delete users',
-                    'category' => 'User Management',
-                    'guard_name' => 'web',
-                    'created_at' => now()->toISOString(),
-                    'updated_at' => now()->toISOString()
-                ],
-                [
-                    'id' => '3',
-                    'name' => 'manage_alumni',
-                    'display_name' => 'Manage Alumni',
-                    'description' => 'Can manage alumni profiles',
-                    'category' => 'Alumni Management',
-                    'guard_name' => 'web',
-                    'created_at' => now()->toISOString(),
-                    'updated_at' => now()->toISOString()
-                ],
-                [
-                    'id' => '4',
-                    'name' => 'manage_surveys',
-                    'display_name' => 'Manage Surveys',
-                    'description' => 'Can create and manage surveys',
-                    'category' => 'Survey Management',
-                    'guard_name' => 'web',
-                    'created_at' => now()->toISOString(),
-                    'updated_at' => now()->toISOString()
-                ],
-                [
-                    'id' => '5',
-                    'name' => 'view_analytics',
-                    'display_name' => 'View Analytics',
-                    'description' => 'Can view analytics and reports',
-                    'category' => 'Analytics',
-                    'guard_name' => 'web',
-                    'created_at' => now()->toISOString(),
-                    'updated_at' => now()->toISOString()
-                ],
-                [
-                    'id' => '6',
-                    'name' => 'manage_batches',
-                    'display_name' => 'Manage Batches',
-                    'description' => 'Can manage graduation batches',
-                    'category' => 'Batch Management',
-                    'guard_name' => 'web',
-                    'created_at' => now()->toISOString(),
-                    'updated_at' => now()->toISOString()
-                ],
-                [
-                    'id' => '7',
-                    'name' => 'view_own_profile',
-                    'display_name' => 'View Own Profile',
-                    'description' => 'Can view own alumni profile',
-                    'category' => 'Profile',
-                    'guard_name' => 'web',
-                    'created_at' => now()->toISOString(),
-                    'updated_at' => now()->toISOString()
-                ],
-                [
-                    'id' => '8',
-                    'name' => 'update_own_profile',
-                    'display_name' => 'Update Own Profile',
-                    'description' => 'Can update own alumni profile',
-                    'category' => 'Profile',
-                    'guard_name' => 'web',
-                    'created_at' => now()->toISOString(),
-                    'updated_at' => now()->toISOString()
-                ],
-                [
-                    'id' => '9',
-                    'name' => 'take_surveys',
-                    'display_name' => 'Take Surveys',
-                    'description' => 'Can participate in surveys',
-                    'category' => 'Surveys',
-                    'guard_name' => 'web',
-                    'created_at' => now()->toISOString(),
-                    'updated_at' => now()->toISOString()
-                ],
-                [
-                    'id' => '10',
-                    'name' => 'view_own_survey_history',
-                    'display_name' => 'View Own Survey History',
-                    'description' => 'Can view own survey response history',
-                    'category' => 'Surveys',
-                    'guard_name' => 'web',
-                    'created_at' => now()->toISOString(),
-                    'updated_at' => now()->toISOString()
-                ]
-            ];
+            $permissions = \App\Models\Permission::select(
+                'id',
+                'name',
+                'display_name',
+                'description',
+                'category'
+            )
+            ->withCount(['users' => function ($query) {
+                // Count users with this permission through roles or direct assignment
+                $query->where('is_granted', true);
+            }])
+            ->orderBy('category')
+            ->orderBy('display_name')
+            ->get();
+
+            // Add user count to each permission
+            $permissionsWithCount = $permissions->map(function ($permission) {
+                return [
+                    'id' => $permission->id,
+                    'name' => $permission->name,
+                    'display_name' => $permission->display_name,
+                    'description' => $permission->description,
+                    'category' => $permission->category,
+                    'user_count' => $permission->getAllUsersWithPermission()->count(),
+                    'created_at' => $permission->created_at?->toISOString(),
+                    'updated_at' => $permission->updated_at?->toISOString()
+                ];
+            });
             
             return response()->json([
                 'success' => true,
-                'data' => $permissions
+                'data' => $permissionsWithCount
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -2127,50 +2065,78 @@ class AdminController extends Controller
     }
 
     /**
+     * Get users with a specific permission
+     */
+    public function getPermissionUsers(Request $request, $id): JsonResponse
+    {
+        try {
+            $permission = \App\Models\Permission::findOrFail($id);
+            $users = $permission->getAllUsersWithPermission();
+
+            $usersData = $users->map(function ($user) use ($permission) {
+                // Determine access source
+                $accessSource = 'role'; // default
+
+                // Check if user has custom permission
+                $customPermission = $user->customPermissions()
+                    ->where('permission_id', $permission->id)
+                    ->first();
+
+                if ($customPermission) {
+                    $accessSource = $customPermission->pivot->is_granted ? 'custom_grant' : 'custom_deny';
+                }
+
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role_id' => $user->role_id,
+                    'role_name' => $user->assignedRole?->name,
+                    'role_display_name' => $user->assignedRole?->display_name,
+                    'access_source' => $accessSource
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $usersData
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch users with permission',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Get roles data
      */
     public function getRoles(Request $request): JsonResponse
     {
         try {
-            // Sample roles structure based on your system
-            $roles = [
-                [
-                    'id' => '1',
-                    'name' => 'admin',
-                    'display_name' => 'Administrator',
-                    'description' => 'Can manage users, alumni, and surveys',
-                    'guard_name' => 'web',
-                    'permissions' => [
-                        ['id' => '1', 'name' => 'view_dashboard'],
-                        ['id' => '2', 'name' => 'manage_users'],
-                        ['id' => '3', 'name' => 'manage_alumni'],
-                        ['id' => '4', 'name' => 'manage_surveys'],
-                        ['id' => '5', 'name' => 'view_analytics'],
-                        ['id' => '6', 'name' => 'manage_batches']
-                    ],
-                    'users_count' => User::where('role', 'admin')->count(),
-                    'is_default' => true,
-                    'created_at' => now()->toISOString(),
-                    'updated_at' => now()->toISOString()
-                ],
-                [
-                    'id' => '2',
-                    'name' => 'alumni',
-                    'display_name' => 'Alumni',
-                    'description' => 'Can view and update own profile',
-                    'guard_name' => 'web',
-                    'permissions' => [
-                        ['id' => '7', 'name' => 'view_own_profile', 'display_name' => 'View Own Profile'],
-                        ['id' => '8', 'name' => 'update_own_profile', 'display_name' => 'Update Own Profile'],
-                        ['id' => '9', 'name' => 'take_surveys', 'display_name' => 'Take Surveys'],
-                        ['id' => '10', 'name' => 'view_own_survey_history', 'display_name' => 'View Own Survey History'],
-                    ],
-                    'users_count' => User::where('role', 'alumni')->count(),
-                    'is_default' => true,
-                    'created_at' => now()->toISOString(),
-                    'updated_at' => now()->toISOString()
-                ]
-            ];
+            $roles = \App\Models\Role::with('permissions:id,name,display_name')
+                ->get()
+                ->map(function ($role) {
+                    return [
+                        'id' => $role->id,
+                        'name' => $role->name,
+                        'display_name' => $role->display_name,
+                        'description' => $role->description,
+                        'is_system_role' => $role->is_system_role,
+                        'permissions' => $role->permissions->pluck('id')->toArray(),
+                        'permissions_details' => $role->permissions->map(function ($perm) {
+                            return [
+                                'id' => $perm->id,
+                                'name' => $perm->name,
+                                'display_name' => $perm->display_name
+                            ];
+                        }),
+                        'created_at' => $role->created_at?->toISOString(),
+                        'updated_at' => $role->updated_at?->toISOString()
+                    ];
+                });
             
             return response()->json([
                 'success' => true,
@@ -2180,6 +2146,107 @@ class AdminController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch roles',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update role permissions
+     */
+    public function updateRolePermissions(Request $request, $id): JsonResponse
+    {
+        try {
+            $role = \App\Models\Role::findOrFail($id);
+
+            // Prevent modifying super admin permissions
+            if ($role->is_system_role && $role->name === 'super_admin') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Super Admin permissions cannot be modified'
+                ], 403);
+            }
+
+            $validated = $request->validate([
+                'permission_ids' => 'required|array',
+                'permission_ids.*' => 'exists:permissions,id'
+            ]);
+
+            $role->syncPermissions($validated['permission_ids']);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Permissions updated successfully',
+                'data' => [
+                    'id' => $role->id,
+                    'name' => $role->name,
+                    'display_name' => $role->display_name,
+                    'permissions' => $role->permissions->pluck('id')->toArray()
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update permissions',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Give a custom permission to a user
+     */
+    public function giveUserPermission(Request $request, $id): JsonResponse
+    {
+        try {
+            $user = \App\Models\User::findOrFail($id);
+
+            $validated = $request->validate([
+                'permission_id' => 'required|exists:permissions,id',
+                'is_granted' => 'required|boolean'
+            ]);
+
+            if ($validated['is_granted']) {
+                $user->givePermission($validated['permission_id']);
+            } else {
+                $user->denyPermission($validated['permission_id']);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $validated['is_granted'] ? 'Permission granted' : 'Permission denied',
+                'data' => [
+                    'user_id' => $user->id,
+                    'permission_id' => $validated['permission_id'],
+                    'is_granted' => $validated['is_granted']
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update user permission',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Revoke a custom permission from a user
+     */
+    public function revokeUserPermission(Request $request, $id, $permissionId): JsonResponse
+    {
+        try {
+            $user = \App\Models\User::findOrFail($id);
+            $user->revokePermission($permissionId);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Permission revoked successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to revoke permission',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -2546,6 +2613,127 @@ class AdminController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete email template',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Duplicate an email template
+     */
+    public function duplicateEmailTemplate($id): JsonResponse
+    {
+        try {
+            $template = EmailTemplate::findOrFail($id);
+            
+            $newTemplate = $template->replicate();
+            $newTemplate->name = $template->name . ' (Copy)';
+            $newTemplate->slug = $template->slug . '-copy-' . time();
+            $newTemplate->usage_count = 0;
+            $newTemplate->last_sent_at = null;
+            $newTemplate->created_by = auth()->id();
+            $newTemplate->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Email template duplicated successfully',
+                'data' => $newTemplate
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email template not found'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to duplicate email template',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Test an email template by sending a test email
+     */
+    public function testEmailTemplate(Request $request, $id): JsonResponse
+    {
+        try {
+            $template = EmailTemplate::findOrFail($id);
+            
+            $request->validate([
+                'test_email' => 'required|email'
+            ]);
+
+            $testEmail = $request->test_email;
+            
+            // Replace variables with test data
+            $testData = [
+                '{{name}}' => 'Test User',
+                '{{first_name}}' => 'Test',
+                '{{last_name}}' => 'User',
+                '{{email}}' => $testEmail,
+                '{{date}}' => now()->format('F j, Y'),
+                '{{company}}' => 'Test Company',
+                '{{app_name}}' => config('app.name'),
+            ];
+            
+            $subject = str_replace(array_keys($testData), array_values($testData), $template->subject);
+            $body = str_replace(array_keys($testData), array_values($testData), $template->body);
+            
+            // Send test email
+            \Mail::raw($body, function ($message) use ($testEmail, $subject) {
+                $message->to($testEmail)
+                    ->subject('[TEST] ' . $subject);
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Test email sent successfully to ' . $testEmail
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email template not found'
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send test email',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Export email templates
+     */
+    public function exportEmailTemplates(Request $request): JsonResponse
+    {
+        try {
+            $templates = EmailTemplate::all();
+            
+            $exportData = $templates->map(function ($template) {
+                return [
+                    'name' => $template->name,
+                    'slug' => $template->slug,
+                    'subject' => $template->subject,
+                    'body' => $template->body,
+                    'category' => $template->category,
+                    'variables' => $template->variables,
+                    'status' => $template->status,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $exportData,
+                'count' => $templates->count()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to export email templates',
                 'error' => $e->getMessage()
             ], 500);
         }

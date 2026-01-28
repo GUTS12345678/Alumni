@@ -15,7 +15,16 @@ import {
     Target,
     CheckCircle,
     Clock,
-    AlertTriangle
+    AlertTriangle,
+    ChevronLeft,
+    ChevronRight,
+    Eye,
+    X,
+    User,
+    Mail,
+    MessageSquare,
+    ListChecks,
+    ArrowLeft
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import ResponseTrendsChart from '@/components/charts/ResponseTrendsChart';
@@ -69,7 +78,33 @@ interface AnalyticsStats {
     recent_activity: { date: string; responses: number }[];
 }
 
-interface User {
+interface Question {
+    id: number;
+    question_text: string;
+    question_type: string;
+    order: number;
+}
+
+interface ResponseAnswer {
+    answer_text: string | null;
+    answer_json: Record<string, unknown> | null;
+    answered_at: string | null;
+}
+
+interface IndividualResponse {
+    id: number;
+    respondent_name: string;
+    respondent_email: string;
+    status: string;
+    started_at: string;
+    completed_at: string | null;
+    created_at: string;
+    answers: Record<number, ResponseAnswer>;
+    answered_count: number;
+    total_questions: number;
+}
+
+interface UserProp {
     id: number;
     email: string;
     role: string;
@@ -77,8 +112,10 @@ interface User {
 }
 
 interface Props {
-    user: User;
+    user: UserProp;
 }
+
+type TabType = 'overview' | 'responses' | 'questions';
 
 export default function SurveyAnalytics({ user }: Props) {
     const [surveys, setSurveys] = useState<Survey[]>([]);
@@ -88,14 +125,28 @@ export default function SurveyAnalytics({ user }: Props) {
     const [loading, setLoading] = useState(true);
     const [analyticsLoading, setAnalyticsLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [dateRange, setDateRange] = useState('30'); // days
+    const [dateRange, setDateRange] = useState('all');
     const [error, setError] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<TabType>('overview');
 
-    // Helper function to get CSRF token
+    // Individual responses state
+    const [responses, setResponses] = useState<IndividualResponse[]>([]);
+    const [questions, setQuestions] = useState<Question[]>([]);
+    const [responsesLoading, setResponsesLoading] = useState(false);
+    const [responsesPage, setResponsesPage] = useState(1);
+    const [responsesTotalPages, setResponsesTotalPages] = useState(1);
+    const [responsesTotal, setResponsesTotal] = useState(0);
+    const [responseSearch, setResponseSearch] = useState('');
+    const [selectedResponse, setSelectedResponse] = useState<IndividualResponse | null>(null);
+    const [showResponseModal, setShowResponseModal] = useState(false);
+    const [withAnswersOnly, setWithAnswersOnly] = useState(true); // Default to showing only responses with answers
+    const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'in_progress'>('all');
+
     const getCsrfToken = () => {
         const meta = document.querySelector('meta[name="csrf-token"]');
         return meta ? meta.getAttribute('content') || '' : '';
     };
+
     const [autoRefresh, setAutoRefresh] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
@@ -141,9 +192,8 @@ export default function SurveyAnalytics({ user }: Props) {
             const statsData = await statsResponse.json();
 
             if (surveysData.success) {
-                // Extract array from paginated response
-                const surveysList = Array.isArray(surveysData.data) 
-                    ? surveysData.data 
+                const surveysList = Array.isArray(surveysData.data)
+                    ? surveysData.data
                     : (surveysData.data?.data || []);
                 setSurveys(surveysList);
             }
@@ -202,6 +252,53 @@ export default function SurveyAnalytics({ user }: Props) {
         }
     }, [dateRange]);
 
+    const fetchSurveyResponses = useCallback(async (surveyId: string, page: number = 1, search: string = '') => {
+        try {
+            setResponsesLoading(true);
+
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const params = new URLSearchParams({
+                days: dateRange,
+                page: page.toString(),
+                per_page: '15',
+                search: search,
+                with_answers: withAnswersOnly ? 'true' : 'false',
+                status: statusFilter
+            });
+
+            const response = await fetch(`/api/v1/admin/analytics/surveys/${surveyId}/responses?${params}`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch responses');
+            }
+
+            const data = await response.json();
+            if (data.success) {
+                setResponses(data.data.responses);
+                setQuestions(data.data.questions);
+                setResponsesPage(data.data.pagination.current_page);
+                setResponsesTotalPages(data.data.pagination.last_page);
+                setResponsesTotal(data.data.pagination.total);
+            }
+        } catch (err) {
+            console.error('Responses fetch error:', err);
+        } finally {
+            setResponsesLoading(false);
+        }
+    }, [dateRange, withAnswersOnly, statusFilter]);
+
     useEffect(() => {
         fetchSurveys();
     }, []);
@@ -209,10 +306,20 @@ export default function SurveyAnalytics({ user }: Props) {
     useEffect(() => {
         if (selectedSurvey) {
             fetchSurveyAnalytics(selectedSurvey);
+            if (activeTab === 'responses') {
+                fetchSurveyResponses(selectedSurvey, 1, responseSearch);
+            }
         }
-    }, [selectedSurvey, fetchSurveyAnalytics]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedSurvey, fetchSurveyAnalytics, dateRange]);
 
-    // Auto-refresh effect
+    useEffect(() => {
+        if (selectedSurvey && activeTab === 'responses') {
+            fetchSurveyResponses(selectedSurvey, responsesPage, responseSearch);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab, responsesPage, withAnswersOnly, statusFilter, selectedSurvey]);
+
     useEffect(() => {
         let interval: NodeJS.Timeout;
 
@@ -223,7 +330,7 @@ export default function SurveyAnalytics({ user }: Props) {
                 } else {
                     fetchSurveys();
                 }
-            }, 30000); // Refresh every 30 seconds
+            }, 30000);
         }
 
         return () => {
@@ -232,6 +339,18 @@ export default function SurveyAnalytics({ user }: Props) {
             }
         };
     }, [autoRefresh, selectedSurvey, fetchSurveyAnalytics]);
+
+    const handleResponseSearch = () => {
+        if (selectedSurvey) {
+            setResponsesPage(1);
+            fetchSurveyResponses(selectedSurvey, 1, responseSearch);
+        }
+    };
+
+    const viewResponseDetails = (response: IndividualResponse) => {
+        setSelectedResponse(response);
+        setShowResponseModal(true);
+    };
 
     const exportAnalytics = async () => {
         if (!selectedSurvey) return;
@@ -269,48 +388,8 @@ export default function SurveyAnalytics({ user }: Props) {
             } else {
                 alert('Failed to export analytics. Please try again.');
             }
-        } catch (error) {
-            console.error('Export error:', error);
-            alert('An error occurred while exporting. Please try again.');
-        }
-    };
-
-    const exportAllSurveys = async () => {
-        try {
-            const token = localStorage.getItem('auth_token');
-            if (!token) {
-                window.location.href = '/login';
-                return;
-            }
-
-            const response = await fetch(`/api/v1/admin/analytics/surveys/export-all`, {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': getCsrfToken(),
-                },
-                credentials: 'same-origin',
-                body: JSON.stringify({ days: dateRange }),
-            });
-
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = `all_surveys_analytics_${new Date().toISOString().split('T')[0]}.xlsx`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-            } else {
-                alert('Failed to export all surveys. Please try again.');
-            }
-        } catch (error) {
-            console.error('Export all error:', error);
+        } catch (err) {
+            console.error('Export error:', err);
             alert('An error occurred while exporting. Please try again.');
         }
     };
@@ -321,6 +400,8 @@ export default function SurveyAnalytics({ user }: Props) {
             'active': { color: 'bg-green-100 text-green-800', icon: CheckCircle },
             'closed': { color: 'bg-blue-100 text-blue-800', icon: Target },
             'archived': { color: 'bg-red-100 text-red-800', icon: AlertTriangle },
+            'completed': { color: 'bg-green-100 text-green-800', icon: CheckCircle },
+            'in_progress': { color: 'bg-yellow-100 text-yellow-800', icon: Clock },
         };
 
         const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.draft;
@@ -329,7 +410,7 @@ export default function SurveyAnalytics({ user }: Props) {
         return (
             <Badge className={config.color}>
                 <Icon className="h-3 w-3 mr-1" />
-                {status.charAt(0).toUpperCase() + status.slice(1)}
+                {status.replace('_', ' ').charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
             </Badge>
         );
     };
@@ -342,8 +423,17 @@ export default function SurveyAnalytics({ user }: Props) {
         });
     };
 
+    const formatDateTime = (dateString: string) => {
+        return new Date(dateString).toLocaleString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+
     const formatTime = (minutes: number | null | undefined) => {
-        // Handle null, undefined, NaN, or 0
         if (!minutes || isNaN(minutes) || minutes === 0) {
             return 'N/A';
         }
@@ -356,14 +446,126 @@ export default function SurveyAnalytics({ user }: Props) {
     };
 
     const filteredSurveys = (Array.isArray(surveys) ? surveys : []).filter(survey => {
-        // Filter by status (show active and closed surveys only)
         const statusMatch = survey.status === 'active' || survey.status === 'closed';
-        // Filter by search term
-        const searchMatch = !searchTerm || 
+        const searchMatch = !searchTerm ||
             survey.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             survey.description?.toLowerCase().includes(searchTerm.toLowerCase());
         return statusMatch && searchMatch;
     });
+
+    const getQuestionTypeBadge = (type: string) => {
+        const typeColors: Record<string, string> = {
+            'text': 'bg-blue-100 text-blue-800',
+            'email': 'bg-purple-100 text-purple-800',
+            'phone': 'bg-green-100 text-green-800',
+            'number': 'bg-orange-100 text-orange-800',
+            'date': 'bg-pink-100 text-pink-800',
+            'radio': 'bg-yellow-100 text-yellow-800',
+            'checkbox': 'bg-indigo-100 text-indigo-800',
+            'select': 'bg-cyan-100 text-cyan-800',
+            'textarea': 'bg-teal-100 text-teal-800',
+        };
+        return typeColors[type] || 'bg-gray-100 text-gray-800';
+    };
+
+    // Response Details Modal
+    const ResponseModal = () => {
+        if (!showResponseModal || !selectedResponse) return null;
+
+        return (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+                    {/* Modal Header */}
+                    <div className="bg-gradient-to-r from-maroon-700 to-maroon-800 text-white px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-xl font-bold">Response Details</h2>
+                                <p className="text-maroon-200 text-sm">
+                                    Submitted on {formatDateTime(selectedResponse.created_at)}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setShowResponseModal(false)}
+                                className="p-2 hover:bg-maroon-600 rounded-full transition-colors"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Respondent Info */}
+                    <div className="bg-beige-50 px-6 py-4 border-b border-beige-200">
+                        <div className="flex items-center gap-6">
+                            <div className="bg-maroon-100 p-3 rounded-full">
+                                <User className="h-8 w-8 text-maroon-700" />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-semibold text-maroon-800">
+                                    {selectedResponse.respondent_name}
+                                </h3>
+                                <div className="flex items-center gap-4 text-sm text-gray-600">
+                                    <span className="flex items-center gap-1">
+                                        <Mail className="h-4 w-4" />
+                                        {selectedResponse.respondent_email}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                        <MessageSquare className="h-4 w-4" />
+                                        {selectedResponse.answered_count} / {selectedResponse.total_questions} answered
+                                    </span>
+                                </div>
+                            </div>
+                            {getStatusBadge(selectedResponse.status)}
+                        </div>
+                    </div>
+
+                    {/* Answers */}
+                    <div className="overflow-y-auto max-h-[calc(90vh-200px)] p-6">
+                        <div className="space-y-4">
+                            {questions.map((question, index) => {
+                                const answer = selectedResponse.answers[question.id];
+                                const hasAnswer = answer && (answer.answer_text || answer.answer_json);
+
+                                return (
+                                    <div
+                                        key={question.id}
+                                        className={`p-4 rounded-lg border ${hasAnswer ? 'bg-white border-beige-200' : 'bg-gray-50 border-gray-200'
+                                            }`}
+                                    >
+                                        <div className="flex items-start justify-between mb-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="bg-maroon-700 text-white text-xs font-bold px-2 py-1 rounded">
+                                                    Q{index + 1}
+                                                </span>
+                                                <h4 className="font-medium text-gray-800">
+                                                    {question.question_text}
+                                                </h4>
+                                            </div>
+                                            <Badge className={getQuestionTypeBadge(question.question_type)}>
+                                                {question.question_type}
+                                            </Badge>
+                                        </div>
+                                        <div className="ml-9">
+                                            {hasAnswer ? (
+                                                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                                                    <p className="text-gray-800">
+                                                        {answer.answer_text || JSON.stringify(answer.answer_json)}
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-gray-100 border border-gray-200 rounded-lg p-3">
+                                                    <p className="text-gray-500 italic">No answer provided</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     if (loading) {
         return (
@@ -398,12 +600,31 @@ export default function SurveyAnalytics({ user }: Props) {
 
     return (
         <AdminBaseLayout title="Survey Analytics" user={user}>
+            <ResponseModal />
+
             <div className="space-y-6">
-                {/* Header with Actions */}
+                {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h2 className="text-2xl font-bold text-maroon-800">Survey Analytics</h2>
-                        <p className="text-maroon-600">Detailed insights and response analytics</p>
+                        {selectedSurvey ? (
+                            <button
+                                onClick={() => {
+                                    setSelectedSurvey('');
+                                    setAnalytics(null);
+                                    setActiveTab('overview');
+                                }}
+                                className="flex items-center text-maroon-600 hover:text-maroon-800 mb-2"
+                            >
+                                <ArrowLeft className="h-4 w-4 mr-1" />
+                                Back to all surveys
+                            </button>
+                        ) : null}
+                        <h2 className="text-2xl font-bold text-maroon-800">
+                            {selectedSurvey && analytics ? analytics.survey.title : 'Survey Analytics'}
+                        </h2>
+                        <p className="text-maroon-600">
+                            {selectedSurvey ? 'View detailed analytics and responses' : 'Detailed insights and response analytics'}
+                        </p>
                         <p className="text-xs text-gray-500 mt-1">
                             Last updated: {lastUpdated.toLocaleTimeString()}
                             {autoRefresh && <span className="ml-2 text-green-600">● Live</span>}
@@ -420,29 +641,19 @@ export default function SurveyAnalytics({ user }: Props) {
                                 className="rounded border-maroon-300 text-maroon-600 focus:ring-maroon-200"
                             />
                             <label htmlFor="auto-refresh" className="text-sm text-maroon-700">
-                                Auto-refresh (30s)
+                                Auto-refresh
                             </label>
                         </div>
-
-                        <Button
-                            onClick={exportAllSurveys}
-                            variant="outline"
-                            size="sm"
-                            className="border-green-300 text-green-700 hover:bg-green-50"
-                        >
-                            <Download className="h-4 w-4 mr-2" />
-                            Export All Surveys
-                        </Button>
 
                         {selectedSurvey && (
                             <Button
                                 onClick={exportAnalytics}
                                 variant="outline"
                                 size="sm"
-                                className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                className="border-green-300 text-green-700 hover:bg-green-50"
                             >
                                 <Download className="h-4 w-4 mr-2" />
-                                Export This Survey
+                                Export
                             </Button>
                         )}
 
@@ -459,344 +670,500 @@ export default function SurveyAnalytics({ user }: Props) {
                     </div>
                 </div>
 
-                {/* Overview Statistics */}
-                {stats && (
+                {/* Overview Statistics - Show when no survey selected */}
+                {!selectedSurvey && stats && (
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-white to-beige-50">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium text-maroon-800">Total Surveys</CardTitle>
-                                <FileText className="h-4 w-4 text-maroon-600" />
+                                <FileText className="h-5 w-5 text-maroon-600" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-maroon-800">{stats.total_surveys}</div>
-                                <p className="text-xs text-maroon-600 mt-1">{stats.active_surveys} currently active</p>
+                                <div className="text-3xl font-bold text-maroon-800">{stats.total_surveys ?? 0}</div>
+                                <p className="text-sm text-maroon-600 mt-1">{stats.active_surveys ?? 0} currently active</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-white to-blue-50">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium text-maroon-800">Total Responses</CardTitle>
-                                <Users className="h-4 w-4 text-maroon-600" />
+                                <Users className="h-5 w-5 text-blue-600" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-blue-600">{stats.total_responses.toLocaleString()}</div>
-                                <p className="text-xs text-maroon-600 mt-1">Across all surveys</p>
+                                <div className="text-3xl font-bold text-blue-600">{(stats.total_responses ?? 0).toLocaleString()}</div>
+                                <p className="text-sm text-maroon-600 mt-1">Across all surveys</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-white to-green-50">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium text-maroon-800">Avg Completion Rate</CardTitle>
-                                <Target className="h-4 w-4 text-maroon-600" />
+                                <Target className="h-5 w-5 text-green-600" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-green-600">{stats.avg_completion_rate.toFixed(1)}%</div>
-                                <p className="text-xs text-maroon-600 mt-1">Overall completion rate</p>
+                                <div className="text-3xl font-bold text-green-600">{(stats.avg_completion_rate ?? 0).toFixed(1)}%</div>
+                                <p className="text-sm text-maroon-600 mt-1">Overall completion rate</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-white to-purple-50">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                 <CardTitle className="text-sm font-medium text-maroon-800">Most Popular</CardTitle>
-                                <TrendingUp className="h-4 w-4 text-maroon-600" />
+                                <TrendingUp className="h-5 w-5 text-purple-600" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-lg font-bold text-purple-600 truncate">{stats.most_popular_survey}</div>
-                                <p className="text-xs text-maroon-600 mt-1">Highest response rate</p>
+                                <div className="text-lg font-bold text-purple-600 truncate">{stats.most_popular_survey || 'N/A'}</div>
+                                <p className="text-sm text-maroon-600 mt-1">Highest response rate</p>
                             </CardContent>
                         </Card>
                     </div>
                 )}
 
-                {/* Survey Selection */}
-                <Card className="border-beige-200 shadow-lg">
-                    <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800">Select Survey for Analysis</CardTitle>
-                        <CardDescription className="text-maroon-600">
-                            Choose a survey to view detailed analytics
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div className="relative">
-                                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                                <Input
-                                    placeholder="Search surveys..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-10 border-beige-300 focus:border-maroon-400 focus:ring-maroon-200"
-                                />
+                {/* Survey Selection - Show when no survey selected */}
+                {!selectedSurvey && (
+                    <Card className="border-beige-200 shadow-lg">
+                        <CardHeader>
+                            <CardTitle className="text-xl text-maroon-800">Select Survey for Analysis</CardTitle>
+                            <CardDescription className="text-maroon-600">
+                                Choose a survey to view detailed analytics and individual responses
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                                    <Input
+                                        placeholder="Search surveys..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="pl-10 border-beige-300 focus:border-maroon-400 focus:ring-maroon-200"
+                                    />
+                                </div>
+
+                                <select
+                                    value={dateRange}
+                                    onChange={(e) => setDateRange(e.target.value)}
+                                    className="px-3 py-2 border border-beige-300 rounded-md focus:border-maroon-400 focus:ring-maroon-200"
+                                >
+                                    <option value="all">All time</option>
+                                    <option value="365">Last year</option>
+                                    <option value="90">Last 90 days</option>
+                                    <option value="30">Last 30 days</option>
+                                    <option value="7">Last 7 days</option>
+                                </select>
                             </div>
 
-                            <select
-                                value={dateRange}
-                                onChange={(e) => setDateRange(e.target.value)}
-                                className="px-3 py-2 border border-beige-300 rounded-md focus:border-maroon-400 focus:ring-maroon-200"
-                            >
-                                <option value="7">Last 7 days</option>
-                                <option value="30">Last 30 days</option>
-                                <option value="90">Last 90 days</option>
-                                <option value="365">Last year</option>
-                                <option value="all">All time</option>
-                            </select>
-                        </div>
-
-                        {filteredSurveys.length === 0 ? (
-                            <div className="text-center py-8">
-                                <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                                <h3 className="text-lg font-medium text-gray-900 mb-2">No surveys found</h3>
-                                <p className="text-gray-500">
-                                    {searchTerm ? 'Try adjusting your search' : 'Create surveys to see analytics'}
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {filteredSurveys.map((survey) => (
-                                    <Card
-                                        key={survey.id}
-                                        className={`cursor-pointer transition-all hover:shadow-md border-2 ${selectedSurvey === survey.id
-                                            ? 'border-maroon-400 bg-maroon-50'
-                                            : 'border-beige-200 hover:border-maroon-200'
-                                            }`}
-                                        onClick={() => setSelectedSurvey(survey.id)}
-                                    >
-                                        <CardContent className="p-4">
-                                            <div className="flex items-start justify-between mb-2">
-                                                <h3 className="font-medium text-maroon-800 truncate">{survey.title}</h3>
-                                                {getStatusBadge(survey.status)}
-                                            </div>
-
-                                            <p className="text-sm text-gray-600 mb-3 line-clamp-2">{survey.description}</p>
-
-                                            <div className="space-y-2">
-                                                <div className="flex items-center justify-between text-sm">
-                                                    <span className="text-gray-600">Responses:</span>
-                                                    <span className="font-medium text-blue-600">{survey.responses_count}</span>
+                            {filteredSurveys.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <BarChart3 className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                                    <h3 className="text-lg font-medium text-gray-900 mb-2">No surveys found</h3>
+                                    <p className="text-gray-500">
+                                        {searchTerm ? 'Try adjusting your search' : 'Create surveys to see analytics'}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {filteredSurveys.map((survey) => (
+                                        <Card
+                                            key={survey.id}
+                                            className={`cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1 border-2 ${selectedSurvey === survey.id
+                                                ? 'border-maroon-400 bg-maroon-50'
+                                                : 'border-beige-200 hover:border-maroon-300'
+                                                }`}
+                                            onClick={() => setSelectedSurvey(survey.id)}
+                                        >
+                                            <CardContent className="p-5">
+                                                <div className="flex items-start justify-between mb-3">
+                                                    <h3 className="font-semibold text-maroon-800 line-clamp-2">{survey.title}</h3>
+                                                    {getStatusBadge(survey.status)}
                                                 </div>
 
-                                                <div className="flex items-center justify-between text-sm">
-                                                    <span className="text-gray-600">Completion Rate:</span>
-                                                    <span className="font-medium text-green-600">{survey.completion_rate}%</span>
+                                                <p className="text-sm text-gray-600 mb-4 line-clamp-2">{survey.description}</p>
+
+                                                <div className="grid grid-cols-3 gap-2 text-center">
+                                                    <div className="bg-blue-50 rounded-lg p-2">
+                                                        <div className="text-lg font-bold text-blue-600">{survey.responses_count}</div>
+                                                        <div className="text-xs text-gray-600">Responses</div>
+                                                    </div>
+                                                    <div className="bg-green-50 rounded-lg p-2">
+                                                        <div className="text-lg font-bold text-green-600">{survey.completion_rate}%</div>
+                                                        <div className="text-xs text-gray-600">Complete</div>
+                                                    </div>
+                                                    <div className="bg-purple-50 rounded-lg p-2">
+                                                        <div className="text-lg font-bold text-purple-600">{formatTime(survey.avg_completion_time)}</div>
+                                                        <div className="text-xs text-gray-600">Avg Time</div>
+                                                    </div>
                                                 </div>
 
-                                                <div className="flex items-center justify-between text-sm">
-                                                    <span className="text-gray-600">Avg Time:</span>
-                                                    <span className="font-medium text-purple-600">{formatTime(survey.avg_completion_time)}</span>
-                                                </div>
-
-                                                <div className="text-xs text-gray-500 mt-2">
+                                                <div className="text-xs text-gray-500 mt-3 pt-3 border-t border-beige-100">
                                                     Created {formatDate(survey.created_at)}
                                                 </div>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                ))}
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
 
-                {/* Analytics Dashboard */}
+                {/* Selected Survey Analytics */}
                 {selectedSurvey && analytics && (
                     <div className="space-y-6">
-                        {/* Survey Overview */}
-                        <Card className="border-beige-200 shadow-lg">
-                            <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800">{analytics.survey.title} - Analytics</CardTitle>
-                                <CardDescription className="text-maroon-600">
-                                    Detailed insights for the selected survey
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
+                        {/* Tabs */}
+                        <div className="bg-white rounded-xl shadow-sm border border-beige-200 p-1 inline-flex">
+                            <button
+                                onClick={() => setActiveTab('overview')}
+                                className={`px-6 py-2.5 rounded-lg font-medium transition-all ${activeTab === 'overview'
+                                    ? 'bg-maroon-700 text-white shadow-md'
+                                    : 'text-gray-600 hover:text-maroon-700 hover:bg-maroon-50'
+                                    }`}
+                            >
+                                <BarChart3 className="h-4 w-4 inline mr-2" />
+                                Overview
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('responses')}
+                                className={`px-6 py-2.5 rounded-lg font-medium transition-all ${activeTab === 'responses'
+                                    ? 'bg-maroon-700 text-white shadow-md'
+                                    : 'text-gray-600 hover:text-maroon-700 hover:bg-maroon-50'
+                                    }`}
+                            >
+                                <Users className="h-4 w-4 inline mr-2" />
+                                Individual Responses ({analytics.total_responses})
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('questions')}
+                                className={`px-6 py-2.5 rounded-lg font-medium transition-all ${activeTab === 'questions'
+                                    ? 'bg-maroon-700 text-white shadow-md'
+                                    : 'text-gray-600 hover:text-maroon-700 hover:bg-maroon-50'
+                                    }`}
+                            >
+                                <ListChecks className="h-4 w-4 inline mr-2" />
+                                Question Analysis
+                            </button>
+                        </div>
+
+                        {/* Overview Tab */}
+                        {activeTab === 'overview' && (
+                            <div className="space-y-6">
+                                {/* Key Metrics */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div className="text-center p-4 bg-blue-50 rounded-lg">
-                                        <Users className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                                        <div className="text-2xl font-bold text-blue-800">{analytics.total_responses}</div>
-                                        <p className="text-sm text-blue-600">Total Responses</p>
-                                    </div>
+                                    <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-blue-50 to-white">
+                                        <CardContent className="p-6 text-center">
+                                            <Users className="h-10 w-10 text-blue-600 mx-auto mb-3" />
+                                            <div className="text-4xl font-bold text-blue-800">{analytics.total_responses}</div>
+                                            <p className="text-sm text-blue-600 mt-1">Total Responses</p>
+                                        </CardContent>
+                                    </Card>
 
-                                    <div className="text-center p-4 bg-green-50 rounded-lg">
-                                        <Target className="h-8 w-8 text-green-600 mx-auto mb-2" />
-                                        <div className="text-2xl font-bold text-green-800">{analytics.completion_rate}%</div>
-                                        <p className="text-sm text-green-600">Completion Rate</p>
-                                    </div>
+                                    <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-green-50 to-white">
+                                        <CardContent className="p-6 text-center">
+                                            <Target className="h-10 w-10 text-green-600 mx-auto mb-3" />
+                                            <div className="text-4xl font-bold text-green-800">{analytics.completion_rate}%</div>
+                                            <p className="text-sm text-green-600 mt-1">Completion Rate</p>
+                                        </CardContent>
+                                    </Card>
 
-                                    <div className="text-center p-4 bg-purple-50 rounded-lg">
-                                        <Clock className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-                                        <div className="text-2xl font-bold text-purple-800">{formatTime(analytics.avg_completion_time)}</div>
-                                        <p className="text-sm text-purple-600">Avg Completion Time</p>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Response Trends */}
-                        <Card className="border-beige-200 shadow-lg">
-                            <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800 flex items-center">
-                                    <TrendingUp className="h-5 w-5 mr-2" />
-                                    Response Trends
-                                </CardTitle>
-                                <CardDescription className="text-maroon-600">
-                                    Daily response activity over time
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="mb-4 flex justify-end">
-                                    <div className="flex items-center space-x-2">
-                                        <label className="text-sm text-gray-600">Chart Type:</label>
-                                        <select
-                                            className="text-sm border border-beige-300 rounded px-2 py-1"
-                                            value={analytics.response_rate_by_date.length > 10 ? 'area' : 'line'}
-                                            onChange={() => {
-                                                // Could add state to control chart type
-                                            }}
-                                        >
-                                            <option value="line">Line Chart</option>
-                                            <option value="area">Area Chart</option>
-                                        </select>
-                                    </div>
+                                    <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-purple-50 to-white">
+                                        <CardContent className="p-6 text-center">
+                                            <Clock className="h-10 w-10 text-purple-600 mx-auto mb-3" />
+                                            <div className="text-4xl font-bold text-purple-800">{formatTime(analytics.avg_completion_time)}</div>
+                                            <p className="text-sm text-purple-600 mt-1">Avg Completion Time</p>
+                                        </CardContent>
+                                    </Card>
                                 </div>
 
-                                <ResponseTrendsChart
-                                    data={analytics.response_rate_by_date}
-                                    height={350}
-                                    showArea={analytics.response_rate_by_date.length > 10}
-                                />
-
+                                {/* Response Trends Chart */}
                                 {analytics.response_rate_by_date.length > 0 && (
-                                    <div className="mt-4 p-3 bg-beige-50 rounded-lg">
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                                            <div className="text-center">
-                                                <div className="font-medium text-maroon-700">Peak Day</div>
-                                                <div className="text-gray-600">
-                                                    {analytics.response_rate_by_date.reduce((max, curr) =>
-                                                        curr.responses > max.responses ? curr : max
-                                                    ).date}
-                                                </div>
-                                            </div>
-                                            <div className="text-center">
-                                                <div className="font-medium text-maroon-700">Total Days</div>
-                                                <div className="text-gray-600">
-                                                    {analytics.response_rate_by_date.length} days
-                                                </div>
-                                            </div>
-                                            <div className="text-center">
-                                                <div className="font-medium text-maroon-700">Avg per Day</div>
-                                                <div className="text-gray-600">
-                                                    {Math.round(analytics.response_rate_by_date.reduce((sum, curr) => sum + curr.responses, 0) / analytics.response_rate_by_date.length)} responses
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <Card className="border-beige-200 shadow-lg">
+                                        <CardHeader>
+                                            <CardTitle className="text-xl text-maroon-800 flex items-center">
+                                                <TrendingUp className="h-5 w-5 mr-2" />
+                                                Response Trends
+                                            </CardTitle>
+                                            <CardDescription>Daily response activity over time</CardDescription>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <ResponseTrendsChart
+                                                data={analytics.response_rate_by_date}
+                                                height={350}
+                                                showArea={analytics.response_rate_by_date.length > 10}
+                                            />
+                                        </CardContent>
+                                    </Card>
                                 )}
-                            </CardContent>
-                        </Card>
 
-                        {/* Employment Status Distribution */}
-                        {analytics.employment_status_distribution.length > 0 && (
+                                {/* Employment Distribution */}
+                                {analytics.employment_status_distribution.length > 0 && (
+                                    <Card className="border-beige-200 shadow-lg">
+                                        <CardHeader>
+                                            <CardTitle className="text-xl text-maroon-800 flex items-center">
+                                                <PieChart className="h-5 w-5 mr-2" />
+                                                Employment Status Distribution
+                                            </CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <EmploymentDistributionChart
+                                                data={analytics.employment_status_distribution}
+                                                height={400}
+                                                chartType="pie"
+                                            />
+                                        </CardContent>
+                                    </Card>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Individual Responses Tab */}
+                        {activeTab === 'responses' && (
                             <Card className="border-beige-200 shadow-lg">
                                 <CardHeader>
-                                    <CardTitle className="text-xl text-maroon-800 flex items-center">
-                                        <PieChart className="h-5 w-5 mr-2" />
-                                        Employment Status Distribution
-                                    </CardTitle>
-                                    <CardDescription className="text-maroon-600">
-                                        Breakdown of employment status from survey responses
-                                    </CardDescription>
+                                    <div className="flex flex-col gap-4">
+                                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                                            <div>
+                                                <CardTitle className="text-xl text-maroon-800">Individual Responses</CardTitle>
+                                                <CardDescription>View each respondent's answers ({responsesTotal} matching)</CardDescription>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="relative">
+                                                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                                                    <Input
+                                                        placeholder="Search responses..."
+                                                        value={responseSearch}
+                                                        onChange={(e) => setResponseSearch(e.target.value)}
+                                                        onKeyDown={(e) => e.key === 'Enter' && handleResponseSearch()}
+                                                        className="pl-10 w-64 border-beige-300"
+                                                    />
+                                                </div>
+                                                <Button
+                                                    onClick={handleResponseSearch}
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="border-maroon-300"
+                                                >
+                                                    Search
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        {/* Filter Controls */}
+                                        <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-beige-200">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-gray-600">Status:</span>
+                                                <select
+                                                    value={statusFilter}
+                                                    onChange={(e) => {
+                                                        setStatusFilter(e.target.value as 'all' | 'completed' | 'in_progress');
+                                                        setResponsesPage(1);
+                                                    }}
+                                                    className="text-sm border border-beige-300 rounded-md px-2 py-1 focus:ring-maroon-500 focus:border-maroon-500"
+                                                >
+                                                    <option value="all">All</option>
+                                                    <option value="completed">Completed</option>
+                                                    <option value="in_progress">In Progress</option>
+                                                </select>
+                                            </div>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={withAnswersOnly}
+                                                    onChange={(e) => {
+                                                        setWithAnswersOnly(e.target.checked);
+                                                        setResponsesPage(1);
+                                                    }}
+                                                    className="w-4 h-4 text-maroon-600 border-beige-300 rounded focus:ring-maroon-500"
+                                                />
+                                                <span className="text-sm text-gray-600">Show only responses with answers</span>
+                                            </label>
+                                            {withAnswersOnly && (
+                                                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                                    Hiding empty sessions
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="mb-4">
-                                        <EmploymentDistributionChart
-                                            data={analytics.employment_status_distribution}
-                                            height={400}
-                                            chartType="pie"
-                                        />
-                                    </div>
+                                    {responsesLoading ? (
+                                        <div className="flex items-center justify-center py-12">
+                                            <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
+                                            <span className="ml-2 text-maroon-700">Loading responses...</span>
+                                        </div>
+                                    ) : responses.length === 0 ? (
+                                        <div className="text-center py-12">
+                                            <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                                            <h3 className="text-lg font-medium text-gray-900 mb-2">No responses found</h3>
+                                            <p className="text-gray-500">
+                                                {responseSearch
+                                                    ? 'Try adjusting your search'
+                                                    : withAnswersOnly
+                                                        ? 'No responses with answers. Try unchecking "Show only responses with answers".'
+                                                        : 'No responses yet for this survey'}
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {/* Response Table */}
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full">
+                                                    <thead>
+                                                        <tr className="bg-beige-50 border-b border-beige-200">
+                                                            <th className="text-left px-4 py-3 text-sm font-semibold text-maroon-800">Respondent</th>
+                                                            <th className="text-left px-4 py-3 text-sm font-semibold text-maroon-800">Email</th>
+                                                            <th className="text-center px-4 py-3 text-sm font-semibold text-maroon-800">Progress</th>
+                                                            <th className="text-center px-4 py-3 text-sm font-semibold text-maroon-800">Status</th>
+                                                            <th className="text-left px-4 py-3 text-sm font-semibold text-maroon-800">Submitted</th>
+                                                            <th className="text-center px-4 py-3 text-sm font-semibold text-maroon-800">Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-beige-100">
+                                                        {responses.map((response) => (
+                                                            <tr key={response.id} className="hover:bg-beige-50 transition-colors">
+                                                                <td className="px-4 py-4">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="bg-maroon-100 p-2 rounded-full">
+                                                                            <User className="h-4 w-4 text-maroon-700" />
+                                                                        </div>
+                                                                        <span className="font-medium text-gray-800">{response.respondent_name}</span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-4 text-gray-600">{response.respondent_email}</td>
+                                                                <td className="px-4 py-4">
+                                                                    <div className="flex items-center justify-center gap-2">
+                                                                        <div className="w-24 bg-gray-200 rounded-full h-2">
+                                                                            <div
+                                                                                className="bg-maroon-600 h-2 rounded-full transition-all"
+                                                                                style={{ width: `${(response.answered_count / response.total_questions) * 100}%` }}
+                                                                            />
+                                                                        </div>
+                                                                        <span className="text-sm text-gray-600">
+                                                                            {response.answered_count}/{response.total_questions}
+                                                                        </span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-4 text-center">
+                                                                    {getStatusBadge(response.status)}
+                                                                </td>
+                                                                <td className="px-4 py-4 text-gray-600 text-sm">
+                                                                    {formatDateTime(response.created_at)}
+                                                                </td>
+                                                                <td className="px-4 py-4 text-center">
+                                                                    <Button
+                                                                        onClick={() => viewResponseDetails(response)}
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                                                    >
+                                                                        <Eye className="h-4 w-4 mr-1" />
+                                                                        View
+                                                                    </Button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
 
-                                    {/* Summary stats below the chart */}
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-beige-200">
-                                        <div className="text-center">
-                                            <div className="text-2xl font-bold text-maroon-800">
-                                                {analytics.employment_status_distribution.length}
-                                            </div>
-                                            <div className="text-sm text-gray-600">Categories</div>
-                                        </div>
-                                        <div className="text-center">
-                                            <div className="text-2xl font-bold text-blue-600">
-                                                {analytics.employment_status_distribution.reduce((sum, item) => sum + item.count, 0)}
-                                            </div>
-                                            <div className="text-sm text-gray-600">Total Responses</div>
-                                        </div>
-                                        <div className="text-center">
-                                            <div className="text-2xl font-bold text-green-600">
-                                                {analytics.employment_status_distribution.length > 0
-                                                    ? analytics.employment_status_distribution.reduce((max, item) => item.count > max.count ? item : max).status.slice(0, 12)
-                                                    : 'N/A'
-                                                }
-                                            </div>
-                                            <div className="text-sm text-gray-600">Most Common</div>
-                                        </div>
-                                    </div>
+                                            {/* Pagination */}
+                                            {responsesTotalPages > 1 && (
+                                                <div className="flex items-center justify-between mt-6 pt-4 border-t border-beige-200">
+                                                    <p className="text-sm text-gray-600">
+                                                        Showing {((responsesPage - 1) * 15) + 1} - {Math.min(responsesPage * 15, responsesTotal)} of {responsesTotal} responses
+                                                    </p>
+                                                    <div className="flex items-center gap-2">
+                                                        <Button
+                                                            onClick={() => setResponsesPage(p => Math.max(1, p - 1))}
+                                                            disabled={responsesPage === 1}
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="border-beige-300"
+                                                        >
+                                                            <ChevronLeft className="h-4 w-4" />
+                                                            Previous
+                                                        </Button>
+                                                        <span className="px-3 py-1 bg-maroon-100 text-maroon-800 rounded-md font-medium">
+                                                            {responsesPage} / {responsesTotalPages}
+                                                        </span>
+                                                        <Button
+                                                            onClick={() => setResponsesPage(p => Math.min(responsesTotalPages, p + 1))}
+                                                            disabled={responsesPage === responsesTotalPages}
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="border-beige-300"
+                                                        >
+                                                            Next
+                                                            <ChevronRight className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
                                 </CardContent>
                             </Card>
                         )}
 
-                        {/* Question Analytics */}
-                        <Card className="border-beige-200 shadow-lg">
-                            <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800">Question Performance</CardTitle>
-                                <CardDescription className="text-maroon-600">
-                                    Response rates and completion times by question
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {analytics.question_analytics.length === 0 ? (
-                                    <div className="text-center py-8">
-                                        <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                                        <p className="text-gray-600">No question analytics available</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-4">
-                                        {analytics.question_analytics.map((question, index) => (
-                                            <div key={index} className="border border-beige-200 rounded-lg p-4">
-                                                <div className="flex items-start justify-between mb-2">
-                                                    <h4 className="font-medium text-maroon-800 flex-1">{question.question_text}</h4>
-                                                    <Badge className="bg-blue-100 text-blue-800 ml-2">
-                                                        {question.question_type}
-                                                    </Badge>
+                        {/* Question Analysis Tab */}
+                        {activeTab === 'questions' && (
+                            <Card className="border-beige-200 shadow-lg">
+                                <CardHeader>
+                                    <CardTitle className="text-xl text-maroon-800">Question Performance</CardTitle>
+                                    <CardDescription>Response rates and statistics by question</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    {analytics.question_analytics.length === 0 ? (
+                                        <div className="text-center py-12">
+                                            <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                                            <p className="text-gray-600">No question analytics available</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            {analytics.question_analytics.map((question, index) => (
+                                                <div
+                                                    key={index}
+                                                    className="bg-white border border-beige-200 rounded-xl p-5 hover:shadow-md transition-shadow"
+                                                >
+                                                    <div className="flex items-start justify-between mb-4">
+                                                        <div className="flex items-start gap-3">
+                                                            <span className="bg-maroon-700 text-white text-sm font-bold px-3 py-1 rounded-lg">
+                                                                Q{index + 1}
+                                                            </span>
+                                                            <h4 className="font-medium text-gray-800 text-lg">{question.question_text}</h4>
+                                                        </div>
+                                                        <Badge className={getQuestionTypeBadge(question.question_type)}>
+                                                            {question.question_type}
+                                                        </Badge>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-3 gap-4">
+                                                        <div className="bg-blue-50 rounded-lg p-4 text-center">
+                                                            <div className="text-2xl font-bold text-blue-600">{question.total_responses ?? 0}</div>
+                                                            <p className="text-sm text-blue-700">Responses</p>
+                                                        </div>
+                                                        <div className="bg-orange-50 rounded-lg p-4 text-center">
+                                                            <div className="text-2xl font-bold text-orange-600">{(question.skip_rate ?? 0).toFixed(1)}%</div>
+                                                            <p className="text-sm text-orange-700">Skip Rate</p>
+                                                        </div>
+                                                        <div className="bg-purple-50 rounded-lg p-4 text-center">
+                                                            <div className="text-2xl font-bold text-purple-600">{formatTime(question.avg_response_time)}</div>
+                                                            <p className="text-sm text-purple-700">Avg Time</p>
+                                                        </div>
+                                                    </div>
                                                 </div>
-
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
-                                                    <div className="text-center">
-                                                        <div className="text-lg font-bold text-green-600">{question.total_responses}</div>
-                                                        <p className="text-xs text-gray-600">Responses</p>
-                                                    </div>
-
-                                                    <div className="text-center">
-                                                        <div className="text-lg font-bold text-red-600">{question.skip_rate.toFixed(1)}%</div>
-                                                        <p className="text-xs text-gray-600">Skip Rate</p>
-                                                    </div>
-
-                                                    <div className="text-center">
-                                                        <div className="text-lg font-bold text-purple-600">{formatTime(question.avg_response_time)}</div>
-                                                        <p className="text-xs text-gray-600">Avg Time</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
+                                            ))}
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        )}
                     </div>
                 )}
 
-                {analyticsLoading && (
+                {analyticsLoading && !analytics && (
                     <Card className="border-beige-200 shadow-lg">
-                        <CardContent className="p-6">
+                        <CardContent className="p-8">
                             <div className="flex items-center justify-center">
-                                <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin mr-2" />
+                                <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin mr-3" />
                                 <span className="text-maroon-800 font-medium">Loading analytics...</span>
                             </div>
                         </CardContent>

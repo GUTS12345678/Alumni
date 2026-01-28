@@ -99,6 +99,9 @@ export default function AlumniBank({ user }: Props) {
     const [filterYear, setFilterYear] = useState<string>('');
     const [filtersOpen, setFiltersOpen] = useState(false);
 
+    // Batch/graduation years for filter
+    const [availableYears, setAvailableYears] = useState<number[]>([]);
+
     // Multi-select state
     const multiSelect = useMultiSelect<number>();
     const [isDeleting, setIsDeleting] = useState(false); const fetchAlumniCallback = React.useCallback(async () => {
@@ -153,9 +156,43 @@ export default function AlumniBank({ user }: Props) {
         }
     }, [currentPage, searchTerm, filterStatus, filterYear]);
 
+    // Fetch available graduation years/batches
+    const fetchAvailableYears = React.useCallback(async () => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            if (!token) return;
+
+            const response = await fetch('/api/v1/admin/batches?per_page=100', {
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.data?.data) {
+                    // Extract unique graduation years and sort descending
+                    const years = data.data.data
+                        .map((batch: { graduation_year: number }) => batch.graduation_year)
+                        .filter((year: number) => year != null)
+                        .sort((a: number, b: number) => b - a);
+                    setAvailableYears([...new Set(years)] as number[]);
+                }
+            }
+        } catch (err) {
+            console.error('Failed to fetch batches:', err);
+        }
+    }, []);
+
     useEffect(() => {
         fetchAlumniCallback();
     }, [fetchAlumniCallback]);
+
+    useEffect(() => {
+        fetchAvailableYears();
+    }, [fetchAvailableYears]);
 
     // Debounced search effect
     useEffect(() => {
@@ -519,15 +556,11 @@ export default function AlumniBank({ user }: Props) {
                                     <DropdownMenuItem onClick={() => setFilterStatus('pursuing_education')}>
                                         Filter by: Pursuing Education
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => setFilterYear('2024')}>
-                                        Filter by: Class of 2024
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => setFilterYear('2023')}>
-                                        Filter by: Class of 2023
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => setFilterYear('2022')}>
-                                        Filter by: Class of 2022
-                                    </DropdownMenuItem>
+                                    {availableYears.map((year) => (
+                                        <DropdownMenuItem key={year} onClick={() => setFilterYear(year.toString())}>
+                                            Filter by: Class of {year}
+                                        </DropdownMenuItem>
+                                    ))}
                                     <DropdownMenuItem
                                         onClick={() => {
                                             setFilterStatus('');

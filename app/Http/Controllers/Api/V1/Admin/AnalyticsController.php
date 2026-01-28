@@ -95,46 +95,50 @@ class AnalyticsController extends Controller
 
     /**
      * Get yearly time-to-job data
-     * Uses employments table for actual job data, falls back to alumni_profiles
+     * Uses alumni_profiles table directly (graduation_year field)
+     * Falls back to employments table if available
      */
     private function getYearlyTimeToJobData($yearFilter = null): array
     {
-        // Get data from employments table (first job after graduation)
-        // Use fixed graduation date: June 1st of graduation year
-        $queryFromJobs = DB::table('alumni_profiles as ap')
-            ->join('batches as b', 'ap.batch_id', '=', 'b.id')
-            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+        // First, check if we have data in employments table
+        $hasEmploymentRecords = DB::table('employments')->exists();
+        
+        // Get data directly from alumni_profiles using graduation_year field
+        $queryFromProfiles = DB::table('alumni_profiles')
             ->select(
-                'b.graduation_year',
-                DB::raw('AVG(DATEDIFF(e.start_date, CONCAT(b.graduation_year, "-06-01"))) as avg_days_to_job'),
-                DB::raw('COUNT(DISTINCT ap.id) as total_alumni_with_jobs')
+                'graduation_year',
+                DB::raw('COUNT(id) as total_alumni'),
+                DB::raw('SUM(CASE WHEN employment_status IN ("employed_full_time", "employed_part_time", "self_employed") THEN 1 ELSE 0 END) as employed_alumni'),
+                DB::raw('AVG(CASE WHEN job_start_date IS NOT NULL AND employment_status IN ("employed_full_time", "employed_part_time", "self_employed") THEN DATEDIFF(job_start_date, CONCAT(graduation_year, "-06-01")) ELSE NULL END) as avg_days_from_profile')
             )
-            ->whereNotNull('b.graduation_year')
-            ->whereNotNull('e.start_date')
+            ->whereNotNull('graduation_year')
             ->when($yearFilter, function ($q) use ($yearFilter) {
-                return $q->whereIn('b.graduation_year', $yearFilter);
+                return $q->whereIn('graduation_year', $yearFilter);
             })
-            ->groupBy('b.graduation_year')
-            ->orderBy('b.graduation_year')
-            ->get()
-            ->keyBy('graduation_year');
-
-        // Get total alumni count and employment status from profiles
-        $queryFromProfiles = DB::table('alumni_profiles as ap')
-            ->join('batches as b', 'ap.batch_id', '=', 'b.id')
-            ->select(
-                DB::raw('b.graduation_year'),
-                DB::raw('COUNT(ap.id) as total_alumni'),
-                DB::raw('SUM(CASE WHEN ap.employment_status IN ("employed_full_time", "employed_part_time", "self_employed") THEN 1 ELSE 0 END) as employed_alumni'),
-                DB::raw('AVG(DATEDIFF(ap.job_start_date, CONCAT(b.graduation_year, "-06-01"))) as avg_days_from_profile')
-            )
-            ->whereNotNull('b.graduation_year')
-            ->when($yearFilter, function ($q) use ($yearFilter) {
-                return $q->whereIn('b.graduation_year', $yearFilter);
-            })
-            ->groupBy('b.graduation_year')
-            ->orderBy('b.graduation_year')
+            ->groupBy('graduation_year')
+            ->orderBy('graduation_year')
             ->get();
+
+        // If we have employment records, also get data from there
+        $queryFromJobs = collect();
+        if ($hasEmploymentRecords) {
+            $queryFromJobs = DB::table('alumni_profiles as ap')
+                ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+                ->select(
+                    'ap.graduation_year',
+                    DB::raw('AVG(DATEDIFF(e.start_date, CONCAT(ap.graduation_year, "-06-01"))) as avg_days_to_job'),
+                    DB::raw('COUNT(DISTINCT ap.id) as total_alumni_with_jobs')
+                )
+                ->whereNotNull('ap.graduation_year')
+                ->whereNotNull('e.start_date')
+                ->when($yearFilter, function ($q) use ($yearFilter) {
+                    return $q->whereIn('ap.graduation_year', $yearFilter);
+                })
+                ->groupBy('ap.graduation_year')
+                ->orderBy('ap.graduation_year')
+                ->get()
+                ->keyBy('graduation_year');
+        }
 
         $data = [];
         foreach ($queryFromProfiles as $yearData) {
@@ -170,80 +174,73 @@ class AnalyticsController extends Controller
 
     /**
      * Get program breakdown for a specific year
-     * Uses employments table + alumni_profiles
+     * Uses alumni_profiles directly (graduation_year field)
      */
     private function getProgramBreakdownForYear($year): array
     {
-        // Get data from employments table (actual job records)
-        // Use fixed graduation date: June 1st of graduation year
-        $programsFromJobs = DB::table('alumni_profiles as ap')
-            ->join('batches as b', 'ap.batch_id', '=', 'b.id')
-            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+        // First, check if we have data in employments table
+        $hasEmploymentRecords = DB::table('employments')->exists();
+        
+        // Get data from profiles directly using graduation_year field
+        $programsFromProfiles = DB::table('alumni_profiles')
             ->select(
-                'ap.degree_program as program',
-                DB::raw('AVG(DATEDIFF(e.start_date, CONCAT(b.graduation_year, "-06-01"))) as avg_days'),
-                DB::raw('COUNT(DISTINCT ap.id) as alumni_count')
+                'degree_program as program',
+                DB::raw('AVG(CASE WHEN job_start_date IS NOT NULL THEN DATEDIFF(job_start_date, CONCAT(graduation_year, "-06-01")) ELSE NULL END) as avg_days'),
+                DB::raw('COUNT(id) as alumni_count')
             )
-            ->where('b.graduation_year', $year)
-            ->whereNotNull('e.start_date')
-            ->groupBy('ap.degree_program')
-            ->having('alumni_count', '>', 0)
-            ->get()
-            ->keyBy('program');
-            
-        // Get data from profiles (fallback for alumni without employment records)
-        $programsFromProfiles = DB::table('alumni_profiles as ap')
-            ->join('batches as b', 'ap.batch_id', '=', 'b.id')
-            ->select(
-                'ap.degree_program as program',
-                DB::raw('AVG(DATEDIFF(ap.job_start_date, CONCAT(b.graduation_year, "-06-01"))) as avg_days'),
-                DB::raw('COUNT(ap.id) as alumni_count')
-            )
-            ->where('b.graduation_year', $year)
-            ->whereNotNull('ap.job_start_date')
-            ->whereIn('ap.employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
-            ->whereNotExists(function ($query) use ($year) {
-                $query->select(DB::raw(1))
-                      ->from('employments')
-                      ->whereColumn('employments.alumni_id', 'ap.id');
-            })
-            ->groupBy('ap.degree_program')
+            ->where('graduation_year', $year)
+            ->whereNotNull('degree_program')
+            ->where('degree_program', '!=', '')
+            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->groupBy('degree_program')
             ->having('alumni_count', '>', 0)
             ->get();
         
-        // Combine both sources
-        $combinedPrograms = [];
-        
-        // Add programs from jobs
-        foreach ($programsFromJobs as $program => $data) {
-            $combinedPrograms[$program] = [
-                'avg_days' => $data->avg_days,
-                'alumni_count' => $data->alumni_count,
-            ];
+        // If we have employment records, also get data from there
+        $programsFromJobs = collect();
+        if ($hasEmploymentRecords) {
+            $programsFromJobs = DB::table('alumni_profiles as ap')
+                ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+                ->select(
+                    'ap.degree_program as program',
+                    DB::raw('AVG(DATEDIFF(e.start_date, CONCAT(ap.graduation_year, "-06-01"))) as avg_days'),
+                    DB::raw('COUNT(DISTINCT ap.id) as alumni_count')
+                )
+                ->where('ap.graduation_year', $year)
+                ->whereNotNull('e.start_date')
+                ->whereNotNull('ap.degree_program')
+                ->where('ap.degree_program', '!=', '')
+                ->groupBy('ap.degree_program')
+                ->having('alumni_count', '>', 0)
+                ->get()
+                ->keyBy('program');
         }
         
-        // Add programs from profiles (if not already in jobs)
+        // Combine both sources, preferring jobs data when available
+        $combinedPrograms = [];
+        
+        // Add programs from profiles first
         foreach ($programsFromProfiles as $data) {
-            if (!isset($combinedPrograms[$data->program])) {
-                $combinedPrograms[$data->program] = [
-                    'avg_days' => $data->avg_days,
-                    'alumni_count' => $data->alumni_count,
+            $program = $data->program;
+            $jobData = $programsFromJobs->get($program);
+            
+            // Use jobs data if available, otherwise use profile data
+            if ($jobData && $jobData->alumni_count > 0) {
+                $combinedPrograms[$program] = [
+                    'avg_days' => $jobData->avg_days,
+                    'alumni_count' => $jobData->alumni_count,
                 ];
             } else {
-                // Merge counts if program exists in both
-                $existingData = $combinedPrograms[$data->program];
-                $totalCount = $existingData['alumni_count'] + $data->alumni_count;
-                $combinedPrograms[$data->program] = [
-                    'avg_days' => (($existingData['avg_days'] * $existingData['alumni_count']) + 
-                                  ($data->avg_days * $data->alumni_count)) / $totalCount,
-                    'alumni_count' => $totalCount,
+                $combinedPrograms[$program] = [
+                    'avg_days' => $data->avg_days,
+                    'alumni_count' => $data->alumni_count,
                 ];
             }
         }
         
         // Sort by avg_days (ascending)
         uasort($combinedPrograms, function ($a, $b) {
-            return $a['avg_days'] <=> $b['avg_days'];
+            return ($a['avg_days'] ?? 0) <=> ($b['avg_days'] ?? 0);
         });
 
         $colors = ['#800000', '#B22222', '#D4AF37', '#DAA520', '#CD853F', '#8B4513'];
@@ -265,37 +262,36 @@ class AnalyticsController extends Controller
 
     /**
      * Get median days for a specific year
-     * Uses employments table + alumni_profiles
+     * Uses alumni_profiles directly (graduation_year field)
      */
     private function getMedianDaysForYear($year): float
     {
-        // Get days from employments table
-        $daysFromJobs = DB::table('alumni_profiles as ap')
-            ->join('batches as b', 'ap.batch_id', '=', 'b.id')
-            ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
-            ->select(DB::raw('DATEDIFF(e.start_date, CONCAT(b.graduation_year, "-06-01")) as days_to_job'))
-            ->where('b.graduation_year', $year)
-            ->whereNotNull('e.start_date')
+        // First, check if we have data in employments table
+        $hasEmploymentRecords = DB::table('employments')->exists();
+        
+        // Get days from profiles directly
+        $daysFromProfiles = DB::table('alumni_profiles')
+            ->select(DB::raw('DATEDIFF(job_start_date, CONCAT(graduation_year, "-06-01")) as days_to_job'))
+            ->where('graduation_year', $year)
+            ->whereNotNull('job_start_date')
+            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->pluck('days_to_job')
             ->toArray();
             
-        // Get days from profiles (for alumni without employment records)
-        $daysFromProfiles = DB::table('alumni_profiles as ap')
-            ->join('batches as b', 'ap.batch_id', '=', 'b.id')
-            ->select(DB::raw('DATEDIFF(ap.job_start_date, CONCAT(b.graduation_year, "-06-01")) as days_to_job'))
-            ->where('b.graduation_year', $year)
-            ->whereNotNull('ap.job_start_date')
-            ->whereIn('ap.employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
-            ->whereNotExists(function ($query) {
-                $query->select(DB::raw(1))
-                      ->from('employments')
-                      ->whereColumn('employments.alumni_id', 'ap.id');
-            })
-            ->pluck('days_to_job')
-            ->toArray();
+        // Get days from employments table if available
+        $daysFromJobs = [];
+        if ($hasEmploymentRecords) {
+            $daysFromJobs = DB::table('alumni_profiles as ap')
+                ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+                ->select(DB::raw('DATEDIFF(e.start_date, CONCAT(ap.graduation_year, "-06-01")) as days_to_job'))
+                ->where('ap.graduation_year', $year)
+                ->whereNotNull('e.start_date')
+                ->pluck('days_to_job')
+                ->toArray();
+        }
         
-        // Combine and sort
-        $days = array_merge($daysFromJobs, $daysFromProfiles);
+        // Use jobs data if available, otherwise use profiles
+        $days = !empty($daysFromJobs) ? $daysFromJobs : $daysFromProfiles;
         sort($days);
 
         if (empty($days)) {
@@ -654,97 +650,128 @@ class AnalyticsController extends Controller
             $completionRate = $totalResponses > 0 ? ($completedResponses / $totalResponses) * 100 : 0;
 
             // Average completion time (in minutes)
-            $avgCompletionTime = DB::table('survey_responses')
-                ->where('survey_id', $surveyId)
-                ->whereNotNull('completed_at')
-                ->selectRaw('AVG(TIMESTAMPDIFF(MINUTE, created_at, completed_at)) as avg_time')
-                ->when($days !== 'all', function ($query) use ($days) {
-                    return $query->where('created_at', '>=', Carbon::now()->subDays((int) $days));
-                })
-                ->value('avg_time') ?? 0;
+            $avgCompletionTime = 0;
+            try {
+                $avgCompletionTime = DB::table('survey_responses')
+                    ->where('survey_id', $surveyId)
+                    ->whereNotNull('completed_at')
+                    ->selectRaw('AVG(TIMESTAMPDIFF(MINUTE, created_at, completed_at)) as avg_time')
+                    ->when($days !== 'all', function ($query) use ($days) {
+                        return $query->where('created_at', '>=', Carbon::now()->subDays((int) $days));
+                    })
+                    ->value('avg_time') ?? 0;
+            } catch (\Exception $e) {
+                // If time calculation fails, default to 0
+                $avgCompletionTime = 0;
+            }
 
             // Response rate by date
-            $responsesByDate = DB::table('survey_responses')
-                ->where('survey_id', $surveyId)
-                ->when($days !== 'all', function ($query) use ($days) {
-                    return $query->where('created_at', '>=', Carbon::now()->subDays((int) $days));
-                })
-                ->select(
-                    DB::raw('DATE(created_at) as date'),
-                    DB::raw('COUNT(*) as responses')
-                )
-                ->groupBy(DB::raw('DATE(created_at)'))
-                ->orderBy('date')
-                ->get()
-                ->map(function ($item) {
-                    return [
-                        'date' => $item->date,
-                        'responses' => (int) $item->responses
-                    ];
-                })
-                ->toArray();
+            $responsesByDate = [];
+            try {
+                $responsesByDate = DB::table('survey_responses')
+                    ->where('survey_id', $surveyId)
+                    ->when($days !== 'all', function ($query) use ($days) {
+                        return $query->where('created_at', '>=', Carbon::now()->subDays((int) $days));
+                    })
+                    ->select(
+                        DB::raw('DATE(created_at) as date'),
+                        DB::raw('COUNT(*) as responses')
+                    )
+                    ->groupBy(DB::raw('DATE(created_at)'))
+                    ->orderBy('date')
+                    ->get()
+                    ->map(function ($item) {
+                        return [
+                            'date' => $item->date,
+                            'responses' => (int) $item->responses
+                        ];
+                    })
+                    ->toArray();
+            } catch (\Exception $e) {
+                $responsesByDate = [];
+            }
 
             // Employment status distribution (if available)
             $employmentDistribution = [];
-            $employmentData = DB::table('survey_responses')
-                ->join('survey_answers', 'survey_responses.id', '=', 'survey_answers.response_id')
-                ->join('survey_questions', 'survey_answers.question_id', '=', 'survey_questions.id')
-                ->where('survey_responses.survey_id', $surveyId)
-                ->where(function ($query) {
-                    $query->where('survey_questions.question_text', 'LIKE', '%employment%')
-                          ->orWhere('survey_questions.question_text', 'LIKE', '%job%')
-                          ->orWhere('survey_questions.question_text', 'LIKE', '%work%');
-                })
-                ->select('survey_answers.answer_text')
-                ->get();
+            try {
+                $employmentQuestion = DB::table('survey_questions')
+                    ->where('survey_id', $surveyId)
+                    ->where(function ($query) {
+                        $query->where('question_text', 'LIKE', '%employment status%')
+                              ->orWhere('question_text', 'LIKE', '%current employment%')
+                              ->orWhere('question_text', 'LIKE', '%work status%');
+                    })
+                    ->first();
 
-            if ($employmentData->count() > 0) {
-                $statusCounts = $employmentData->groupBy('answer_text');
-                $total = $employmentData->count();
-                
-                foreach ($statusCounts as $status => $answers) {
-                    $count = $answers->count();
-                    $employmentDistribution[] = [
-                        'status' => $status,
-                        'count' => $count,
-                        'percentage' => ($count / $total) * 100
-                    ];
+                if ($employmentQuestion) {
+                    $employmentData = DB::table('survey_answers')
+                        ->join('survey_responses', 'survey_answers.survey_response_id', '=', 'survey_responses.id')
+                        ->where('survey_answers.survey_question_id', $employmentQuestion->id)
+                        ->where('survey_responses.survey_id', $surveyId)
+                        ->when($days !== 'all', function ($query) use ($days) {
+                            return $query->where('survey_responses.created_at', '>=', Carbon::now()->subDays((int) $days));
+                        })
+                        ->whereNotNull('survey_answers.answer_text')
+                        ->where('survey_answers.answer_text', '!=', '')
+                        ->select('survey_answers.answer_text')
+                        ->get();
+
+                    if ($employmentData->count() > 0) {
+                        $statusCounts = $employmentData->groupBy('answer_text');
+                        $total = $employmentData->count();
+                        
+                        foreach ($statusCounts as $status => $answers) {
+                            $count = $answers->count();
+                            $employmentDistribution[] = [
+                                'status' => $status ?: 'Not Specified',
+                                'count' => $count,
+                                'percentage' => round(($count / $total) * 100, 1)
+                            ];
+                        }
+                    }
                 }
+            } catch (\Exception $e) {
+                // If employment distribution fails, continue without it
+                $employmentDistribution = [];
             }
 
-            // Question analytics
-            $questionAnalytics = DB::table('survey_questions')
-                ->leftJoin('survey_answers', 'survey_questions.id', '=', 'survey_answers.question_id')
-                ->leftJoin('survey_responses', function ($join) use ($surveyId, $days) {
-                    $join->on('survey_answers.response_id', '=', 'survey_responses.id')
-                         ->where('survey_responses.survey_id', $surveyId);
-                    if ($days !== 'all') {
-                        $join->where('survey_responses.created_at', '>=', Carbon::now()->subDays((int) $days));
-                    }
-                })
-                ->where('survey_questions.survey_id', $surveyId)
-                ->select(
-                    'survey_questions.id as question_id',
-                    'survey_questions.question_text',
-                    'survey_questions.question_type',
-                    DB::raw('COUNT(survey_answers.id) as total_responses'),
-                    DB::raw('COUNT(CASE WHEN survey_answers.answer_text IS NULL OR survey_answers.answer_text = "" THEN 1 END) as skipped_count')
-                )
-                ->groupBy('survey_questions.id', 'survey_questions.question_text', 'survey_questions.question_type')
-                ->get()
-                ->map(function ($question) use ($totalResponses) {
-                    $skipRate = $totalResponses > 0 ? (($question->skipped_count / $totalResponses) * 100) : 0;
+            // Question analytics - Simplified approach
+            $questionAnalytics = [];
+            try {
+                $questions = DB::table('survey_questions')
+                    ->where('survey_id', $surveyId)
+                    ->select('id', 'question_text', 'question_type', 'order')
+                    ->orderBy('order')
+                    ->get();
+
+                foreach ($questions as $question) {
+                    // Count answers for this question
+                    $answersQuery = DB::table('survey_answers')
+                        ->join('survey_responses', 'survey_answers.survey_response_id', '=', 'survey_responses.id')
+                        ->where('survey_answers.survey_question_id', $question->id)
+                        ->where('survey_responses.survey_id', $surveyId);
                     
-                    return [
-                        'question_id' => $question->question_id,
+                    if ($days !== 'all') {
+                        $answersQuery->where('survey_responses.created_at', '>=', Carbon::now()->subDays((int) $days));
+                    }
+                    
+                    $totalAnswers = $answersQuery->count();
+                    $skippedCount = $totalResponses - $totalAnswers;
+                    $skipRate = $totalResponses > 0 ? (($skippedCount / $totalResponses) * 100) : 0;
+                    
+                    $questionAnalytics[] = [
+                        'question_id' => $question->id,
                         'question_text' => $question->question_text,
                         'question_type' => $question->question_type,
-                        'total_responses' => (int) $question->total_responses,
+                        'total_responses' => (int) $totalAnswers,
                         'skip_rate' => round($skipRate, 1),
-                        'response_distribution' => [] // Could be enhanced with actual distribution data
+                        'response_distribution' => []
                     ];
-                })
-                ->toArray();
+                }
+            } catch (\Exception $e) {
+                // If question analytics fails, continue with empty array
+                $questionAnalytics = [];
+            }
 
             return response()->json([
                 'success' => true,
@@ -752,30 +779,215 @@ class AnalyticsController extends Controller
                     'survey' => [
                         'id' => $survey->id,
                         'title' => $survey->title,
-                        'description' => $survey->description,
+                        'description' => $survey->description ?? '',
                         'status' => $survey->status,
                         'created_at' => $survey->created_at,
                         'responses_count' => $totalResponses,
                         'completion_rate' => round($completionRate, 1),
                         'avg_completion_time' => round($avgCompletionTime, 1),
-                        'target_audience' => json_decode($survey->target_audience ?? '[]')
+                        'target_audience' => !empty($survey->target_audience) ? json_decode($survey->target_audience, true) : []
                     ],
                     'total_responses' => (int) $totalResponses,
                     'completion_rate' => round($completionRate, 1),
                     'avg_completion_time' => round($avgCompletionTime, 1),
                     'response_rate_by_date' => $responsesByDate,
-                    'completion_rate_by_batch' => [], // Could be implemented if batch data is available
+                    'completion_rate_by_batch' => [],
                     'employment_status_distribution' => $employmentDistribution,
                     'question_analytics' => $questionAnalytics,
-                    'demographic_insights' => [] // Could be implemented with additional demographic questions
+                    'demographic_insights' => []
                 ]
             ]);
 
         } catch (\Exception $e) {
+            \Log::error('Survey Analytics Error', [
+                'survey_id' => $surveyId,
+                'days' => $request->get('days', 30),
+                'error' => $e->getMessage(),
+                'line' => $e->getLine(),
+                'file' => $e->getFile(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch survey analytics',
-                'error' => $e->getMessage()
+                'error' => config('app.debug') ? $e->getMessage() : 'An error occurred while fetching analytics'
+            ], 500);
+        }
+    }
+
+    /**
+     * Get individual survey responses with their answers
+     */
+    public function getSurveyResponses(Request $request, $surveyId): JsonResponse
+    {
+        try {
+            $days = $request->get('days', 'all');
+            $page = $request->get('page', 1);
+            $perPage = $request->get('per_page', 20);
+            $search = $request->get('search', '');
+            $withAnswersOnly = $request->get('with_answers', 'false') === 'true';
+            $statusFilter = $request->get('status', 'all'); // all, completed, in_progress
+            
+            // Get survey details
+            $survey = DB::table('surveys')->where('id', $surveyId)->first();
+            if (!$survey) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Survey not found'
+                ], 404);
+            }
+
+            // Get questions for this survey
+            $questions = DB::table('survey_questions')
+                ->where('survey_id', $surveyId)
+                ->orderBy('order')
+                ->get();
+
+            // Build response query
+            $responseQuery = DB::table('survey_responses')
+                ->where('survey_id', $surveyId);
+            
+            // Apply date filter
+            if ($days !== 'all') {
+                $responseQuery->where('created_at', '>=', Carbon::now()->subDays((int) $days));
+            }
+            
+            // Apply status filter
+            if ($statusFilter !== 'all') {
+                $responseQuery->where('status', $statusFilter);
+            }
+            
+            // Apply "with answers only" filter
+            if ($withAnswersOnly) {
+                $responseQuery->whereIn('id', function ($subQuery) {
+                    $subQuery->select('survey_response_id')
+                        ->from('survey_answers')
+                        ->distinct();
+                });
+            }
+            
+            // Apply search filter (search in answers)
+            if ($search) {
+                $responseQuery->where(function ($q) use ($search) {
+                    $q->where('respondent_name', 'LIKE', "%{$search}%")
+                      ->orWhere('respondent_email', 'LIKE', "%{$search}%")
+                      ->orWhereIn('id', function ($subQuery) use ($search) {
+                          $subQuery->select('survey_response_id')
+                              ->from('survey_answers')
+                              ->where('answer_text', 'LIKE', "%{$search}%");
+                      });
+                });
+            }
+
+            // Get total count
+            $totalResponses = $responseQuery->count();
+            
+            // Get paginated responses
+            $responses = $responseQuery
+                ->orderBy('created_at', 'desc')
+                ->offset(($page - 1) * $perPage)
+                ->limit($perPage)
+                ->get();
+
+            // Get answers for these responses
+            $responseIds = $responses->pluck('id')->toArray();
+            $allAnswers = DB::table('survey_answers')
+                ->whereIn('survey_response_id', $responseIds)
+                ->get()
+                ->groupBy('survey_response_id');
+
+            // Build response data with answers
+            $responseData = $responses->map(function ($response) use ($questions, $allAnswers) {
+                $answers = $allAnswers->get($response->id, collect());
+                
+                // Build answers array keyed by question_id
+                $answersMap = [];
+                foreach ($answers as $answer) {
+                    $answersMap[$answer->survey_question_id] = [
+                        'answer_text' => $answer->answer_text,
+                        'answer_json' => $answer->answer_json ? json_decode($answer->answer_json, true) : null,
+                        'answered_at' => $answer->answered_at,
+                    ];
+                }
+
+                // Get respondent name from first/last name answers if not set
+                $respondentName = $response->respondent_name;
+                if (!$respondentName) {
+                    $firstName = '';
+                    $lastName = '';
+                    foreach ($questions as $q) {
+                        if (stripos($q->question_text, 'first name') !== false && isset($answersMap[$q->id])) {
+                            $firstName = $answersMap[$q->id]['answer_text'] ?? '';
+                        }
+                        if (stripos($q->question_text, 'last name') !== false && isset($answersMap[$q->id])) {
+                            $lastName = $answersMap[$q->id]['answer_text'] ?? '';
+                        }
+                    }
+                    $respondentName = trim($firstName . ' ' . $lastName) ?: 'Anonymous';
+                }
+
+                // Get email from answers if not set
+                $respondentEmail = $response->respondent_email;
+                if (!$respondentEmail) {
+                    foreach ($questions as $q) {
+                        if (stripos($q->question_text, 'email') !== false && isset($answersMap[$q->id])) {
+                            $respondentEmail = $answersMap[$q->id]['answer_text'] ?? '';
+                            break;
+                        }
+                    }
+                }
+
+                return [
+                    'id' => $response->id,
+                    'respondent_name' => $respondentName,
+                    'respondent_email' => $respondentEmail ?: 'N/A',
+                    'status' => $response->status,
+                    'started_at' => $response->started_at ?? $response->created_at,
+                    'completed_at' => $response->completed_at,
+                    'created_at' => $response->created_at,
+                    'answers' => $answersMap,
+                    'answered_count' => count($answersMap),
+                    'total_questions' => count($questions),
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'survey' => [
+                        'id' => $survey->id,
+                        'title' => $survey->title,
+                    ],
+                    'questions' => $questions->map(function ($q) {
+                        return [
+                            'id' => $q->id,
+                            'question_text' => $q->question_text,
+                            'question_type' => $q->question_type,
+                            'order' => $q->order,
+                        ];
+                    }),
+                    'responses' => $responseData,
+                    'pagination' => [
+                        'current_page' => (int) $page,
+                        'per_page' => (int) $perPage,
+                        'total' => $totalResponses,
+                        'last_page' => ceil($totalResponses / $perPage),
+                    ]
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Survey Responses Error', [
+                'survey_id' => $surveyId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch survey responses',
+                'error' => config('app.debug') ? $e->getMessage() : 'An error occurred'
             ], 500);
         }
     }

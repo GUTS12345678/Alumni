@@ -1,23 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
-import { 
-    Building, 
-    Plus, 
-    Edit, 
-    Trash2, 
-    Search, 
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+    Building,
+    Plus,
+    Edit,
+    Trash2,
+    Search,
     Filter,
-    MoreVertical,
     CheckCircle,
-    XCircle,
     RotateCcw,
     AlertCircle,
     BookOpen,
     Users,
-    TrendingUp,
-    ArrowRight,
-    Eye
+    Eye,
+    Settings,
+    BarChart3,
+    ChevronDown,
+    RefreshCw,
+    Briefcase,
+    Activity,
+    UserCheck,
+    Clock
 } from 'lucide-react';
 
 interface Department {
@@ -26,6 +31,10 @@ interface Department {
     code: string;
     description: string | null;
     status: 'active' | 'inactive';
+    logo_path?: string | null;
+    background_image_path?: string | null;
+    primary_color?: string;
+    secondary_color?: string;
     courses_count: number;
     alumni_profiles_count: number;
     created_at: string;
@@ -40,6 +49,36 @@ interface DepartmentStats {
     deleted_departments: number;
     total_courses: number;
     departments_with_alumni: number;
+}
+
+interface DepartmentAnalytics {
+    department_id: number;
+    basic: {
+        total_courses: number;
+        total_alumni: number;
+    };
+    employment: {
+        total_employed: number;
+        employment_rate: number;
+        avg_time_to_employment: number | null;
+    };
+    surveys: {
+        total_sent: number;
+        total_completed: number;
+        response_rate: number;
+        last_participation: string | null;
+    };
+    activity: {
+        active_alumni: number;
+        active_percentage: number;
+        recent_logins_30d: number;
+        profile_completion_avg: number;
+    };
+    growth: {
+        new_alumni_6m: number;
+        graduation_years: Array<{ year: number; count: number }>;
+        total_batches: number;
+    };
 }
 
 interface PageProps {
@@ -61,13 +100,18 @@ export default function DepartmentManagement({ auth }: PageProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
     const [showDeleted, setShowDeleted] = useState(false);
-    
+
+    // Analytics states
+    const [expandedAnalytics, setExpandedAnalytics] = useState<number | null>(null);
+    const [analyticsData, setAnalyticsData] = useState<Record<number, DepartmentAnalytics>>({});
+    const [loadingAnalytics, setLoadingAnalytics] = useState<Record<number, boolean>>({});
+
     // Modal states
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
-    
+
     // Form states
     const [formData, setFormData] = useState({
         name: '',
@@ -80,15 +124,18 @@ export default function DepartmentManagement({ auth }: PageProps) {
 
     // Helper function to get CSRF token
     const getCsrfToken = () => {
-        return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        return document.querySelector('meta[name="csrf-token"')?.getAttribute('content') || '';
     };
 
-    useEffect(() => {
-        fetchDepartments();
-        fetchStats();
-    }, [statusFilter, showDeleted]);
+    // Helper function to get the correct image URL
+    const getImageUrl = (path: string | null | undefined): string | undefined => {
+        if (!path) return undefined;
+        if (path.startsWith('/storage')) return path;
+        if (path.startsWith('http')) return path;
+        return `/storage/${path}`;
+    };
 
-    const fetchDepartments = async () => {
+    const fetchDepartments = useCallback(async () => {
         try {
             setLoading(true);
             const params = new URLSearchParams({
@@ -105,7 +152,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
             });
 
             if (!response.ok) throw new Error('Failed to fetch departments');
-            
+
             const data = await response.json();
             setDepartments(data.data);
         } catch (error) {
@@ -114,9 +161,9 @@ export default function DepartmentManagement({ auth }: PageProps) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [statusFilter, showDeleted]);
 
-    const fetchStats = async () => {
+    const fetchStats = useCallback(async () => {
         try {
             const response = await fetch('/api/v1/admin/super-admin/departments/statistics', {
                 headers: {
@@ -126,13 +173,18 @@ export default function DepartmentManagement({ auth }: PageProps) {
             });
 
             if (!response.ok) throw new Error('Failed to fetch stats');
-            
+
             const data = await response.json();
             setStats(data.data);
         } catch (error) {
             console.error('Error fetching stats:', error);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        fetchDepartments();
+        fetchStats();
+    }, [fetchDepartments, fetchStats]);
 
     const handleCreateSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -245,9 +297,10 @@ export default function DepartmentManagement({ auth }: PageProps) {
             setSelectedDepartment(null);
             fetchDepartments();
             fetchStats();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error deleting department:', error);
-            alert(error.message || 'Failed to delete department');
+            const message = error instanceof Error ? error.message : 'Failed to delete department';
+            alert(message);
         } finally {
             setSubmitting(false);
         }
@@ -274,9 +327,48 @@ export default function DepartmentManagement({ auth }: PageProps) {
             alert('Department restored successfully!');
             fetchDepartments();
             fetchStats();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error restoring department:', error);
-            alert(error.message || 'Failed to restore department');
+            const message = error instanceof Error ? error.message : 'Failed to restore department';
+            alert(message);
+        }
+    };
+
+    const fetchDepartmentAnalytics = async (departmentId: number) => {
+        // Don't fetch if already loaded
+        if (analyticsData[departmentId]) return;
+
+        setLoadingAnalytics(prev => ({ ...prev, [departmentId]: true }));
+
+        try {
+            const response = await fetch(`/api/v1/admin/departments/${departmentId}/analytics`, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            });
+
+            if (!response.ok) throw new Error('Failed to fetch analytics');
+
+            const data = await response.json();
+
+            if (data.success) {
+                setAnalyticsData(prev => ({ ...prev, [departmentId]: data.data }));
+            }
+        } catch (error) {
+            console.error('Error fetching analytics:', error);
+            alert('Failed to load analytics data');
+        } finally {
+            setLoadingAnalytics(prev => ({ ...prev, [departmentId]: false }));
+        }
+    };
+
+    const toggleAnalytics = (departmentId: number) => {
+        if (expandedAnalytics === departmentId) {
+            setExpandedAnalytics(null);
+        } else {
+            setExpandedAnalytics(departmentId);
+            fetchDepartmentAnalytics(departmentId);
         }
     };
 
@@ -314,7 +406,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
 
     const filteredDepartments = departments.filter(dept => {
         const matchesSearch = dept.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            dept.code.toLowerCase().includes(searchTerm.toLowerCase());
+            dept.code.toLowerCase().includes(searchTerm.toLowerCase());
         return matchesSearch;
     });
 
@@ -415,7 +507,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                             <Filter className="h-5 w-5 text-gray-400" />
                             <select
                                 value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value as any)}
+                                onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
                                 className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
                             >
                                 <option value="all">All Status</option>
@@ -453,40 +545,53 @@ export default function DepartmentManagement({ auth }: PageProps) {
                         {filteredDepartments.map((department) => (
                             <div
                                 key={department.id}
-                                className={`bg-white rounded-lg border-2 ${
-                                    department.deleted_at 
-                                        ? 'border-red-200 bg-red-50' 
-                                        : 'border-gray-200 hover:border-maroon-300'
-                                } transition-all duration-200 overflow-hidden group`}
+                                className={`bg-white rounded-lg border-2 ${department.deleted_at
+                                    ? 'border-red-200 bg-red-50'
+                                    : 'border-gray-200 hover:border-maroon-300'
+                                    } transition-all duration-200 overflow-hidden group`}
                             >
                                 {/* Card Header */}
-                                <div className={`p-6 ${
-                                    department.deleted_at 
-                                        ? 'bg-red-100' 
-                                        : department.status === 'active' 
-                                        ? 'bg-gradient-to-br from-maroon-600 to-maroon-800' 
-                                        : 'bg-gray-600'
-                                } text-white`}>
-                                    <div className="flex items-start justify-between mb-3">
-                                        <Building className="h-8 w-8" />
-                                        <div className="flex items-center gap-2">
-                                            {department.deleted_at ? (
-                                                <span className="px-2 py-1 text-xs font-semibold bg-red-200 text-red-800 rounded">
-                                                    Deleted
-                                                </span>
+                                <div className="relative overflow-hidden">
+                                    <div
+                                        className={`p-6 relative ${department.deleted_at ? 'bg-red-100' : 'text-white'}`}
+                                        style={!department.deleted_at ? {
+                                            background: department.background_image_path
+                                                ? `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url(${getImageUrl(department.background_image_path)}) center/cover`
+                                                : department.primary_color && department.secondary_color
+                                                    ? `linear-gradient(135deg, ${department.primary_color} 0%, ${department.secondary_color} 100%)`
+                                                    : department.status === 'active'
+                                                        ? 'linear-gradient(to bottom right, #7f1d1d, #991b1b)'
+                                                        : '#4b5563'
+                                        } : {}}
+                                    >
+                                        <div className="flex items-start justify-between mb-3">
+                                            {department.logo_path ? (
+                                                <img
+                                                    src={getImageUrl(department.logo_path)}
+                                                    alt={`${department.name} logo`}
+                                                    className="h-12 w-12 object-contain bg-white/10 rounded-lg p-1"
+                                                />
                                             ) : (
-                                                <span className={`px-2 py-1 text-xs font-semibold rounded ${
-                                                    department.status === 'active'
+                                                <Building className="h-8 w-8" />
+                                            )}
+                                            <div className="flex items-center gap-2">
+                                                {department.deleted_at ? (
+                                                    <span className="px-2 py-1 text-xs font-semibold bg-red-200 text-red-800 rounded">
+                                                        Deleted
+                                                    </span>
+                                                ) : (
+                                                    <span className={`px-2 py-1 text-xs font-semibold rounded ${department.status === 'active'
                                                         ? 'bg-green-500 bg-opacity-30 text-white'
                                                         : 'bg-gray-500 bg-opacity-30 text-white'
-                                                }`}>
-                                                    {department.status === 'active' ? 'Active' : 'Inactive'}
-                                                </span>
-                                            )}
+                                                        }`}>
+                                                        {department.status === 'active' ? 'Active' : 'Inactive'}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
+                                        <h3 className="text-xl font-bold mb-1 line-clamp-2">{department.name}</h3>
+                                        <p className="text-sm opacity-90">{department.code}</p>
                                     </div>
-                                    <h3 className="text-xl font-bold mb-1 line-clamp-2">{department.name}</h3>
-                                    <p className="text-sm opacity-90">{department.code}</p>
                                 </div>
 
                                 {/* Card Body */}
@@ -519,6 +624,148 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                         </div>
                                     </div>
 
+                                    {/* Analytics Toggle Button */}
+                                    {!department.deleted_at && (
+                                        <button
+                                            onClick={() => toggleAnalytics(department.id)}
+                                            className="w-full py-2 mb-2 text-sm font-medium text-maroon-600 hover:bg-maroon-50 rounded-lg transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <BarChart3 className="h-4 w-4" />
+                                            <span>View Analytics</span>
+                                            <ChevronDown className={`h-4 w-4 transition-transform ${expandedAnalytics === department.id ? 'rotate-180' : ''
+                                                }`} />
+                                        </button>
+                                    )}
+
+                                    {/* Analytics Expandable Section */}
+                                    <AnimatePresence>
+                                        {expandedAnalytics === department.id && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: "auto", opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.3 }}
+                                                className="border-t border-gray-200 bg-gray-50 rounded-lg overflow-hidden mb-4"
+                                            >
+                                                {loadingAnalytics[department.id] ? (
+                                                    <div className="p-6 flex justify-center">
+                                                        <RefreshCw className="h-6 w-6 animate-spin text-maroon-600" />
+                                                    </div>
+                                                ) : analyticsData[department.id] ? (
+                                                    <div className="p-4 space-y-4">
+                                                        {/* Employment Stats */}
+                                                        <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                                            <div className="flex items-center gap-2 mb-3">
+                                                                <div className="p-2 rounded-lg bg-green-100">
+                                                                    <Briefcase className="h-4 w-4 text-green-600" />
+                                                                </div>
+                                                                <h4 className="text-sm font-semibold text-gray-900">Employment</h4>
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-xs text-gray-600">Employment Rate</span>
+                                                                    <span className="text-sm font-bold text-green-600">
+                                                                        {analyticsData[department.id].employment.employment_rate}%
+                                                                    </span>
+                                                                </div>
+                                                                {analyticsData[department.id].employment.avg_time_to_employment && (
+                                                                    <div className="flex justify-between items-center">
+                                                                        <span className="text-xs text-gray-600">Avg. Time to Employment</span>
+                                                                        <span className="text-sm font-medium text-gray-700">
+                                                                            {analyticsData[department.id].employment.avg_time_to_employment} days
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Survey Engagement */}
+                                                        <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                                            <div className="flex items-center gap-2 mb-3">
+                                                                <div className="p-2 rounded-lg bg-blue-100">
+                                                                    <Activity className="h-4 w-4 text-blue-600" />
+                                                                </div>
+                                                                <h4 className="text-sm font-semibold text-gray-900">Survey Engagement</h4>
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-xs text-gray-600">Response Rate</span>
+                                                                    <span className="text-sm font-bold text-blue-600">
+                                                                        {analyticsData[department.id].surveys.response_rate}%
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-xs text-gray-600">Completed Surveys</span>
+                                                                    <span className="text-sm font-medium text-gray-700">
+                                                                        {analyticsData[department.id].surveys.total_completed}/{analyticsData[department.id].surveys.total_sent}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Alumni Activity */}
+                                                        <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                                            <div className="flex items-center gap-2 mb-3">
+                                                                <div className="p-2 rounded-lg bg-purple-100">
+                                                                    <UserCheck className="h-4 w-4 text-purple-600" />
+                                                                </div>
+                                                                <h4 className="text-sm font-semibold text-gray-900">Alumni Activity</h4>
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-xs text-gray-600">Active Alumni</span>
+                                                                    <span className="text-sm font-bold text-purple-600">
+                                                                        {analyticsData[department.id].activity.active_percentage}%
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-xs text-gray-600">Recent Logins (30d)</span>
+                                                                    <span className="text-sm font-medium text-gray-700">
+                                                                        {analyticsData[department.id].activity.recent_logins_30d}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-xs text-gray-600">Profile Completion</span>
+                                                                    <span className="text-sm font-medium text-gray-700">
+                                                                        {analyticsData[department.id].activity.profile_completion_avg}%
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Growth Trends */}
+                                                        <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                                            <div className="flex items-center gap-2 mb-3">
+                                                                <div className="p-2 rounded-lg bg-orange-100">
+                                                                    <Clock className="h-4 w-4 text-orange-600" />
+                                                                </div>
+                                                                <h4 className="text-sm font-semibold text-gray-900">Growth Trends</h4>
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-xs text-gray-600">New Alumni (6 months)</span>
+                                                                    <span className="text-sm font-bold text-orange-600">
+                                                                        {analyticsData[department.id].growth.new_alumni_6m}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-xs text-gray-600">Total Batches</span>
+                                                                    <span className="text-sm font-medium text-gray-700">
+                                                                        {analyticsData[department.id].growth.total_batches}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="p-6 text-center text-gray-500 text-sm">
+                                                        No analytics data available
+                                                    </div>
+                                                )}
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+
                                     {/* Actions */}
                                     <div className="flex items-center gap-2 pt-4 border-t border-gray-200">
                                         {department.deleted_at ? (
@@ -537,6 +784,13 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                                 >
                                                     <Eye className="h-4 w-4" />
                                                     <span className="text-sm font-medium">View</span>
+                                                </Link>
+                                                <Link
+                                                    href={`/super-admin/department-settings?department=${department.id}`}
+                                                    className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                                    title="Department Settings"
+                                                >
+                                                    <Settings className="h-5 w-5" />
                                                 </Link>
                                                 <button
                                                     onClick={() => openEditModal(department)}
@@ -624,7 +878,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                 </label>
                                 <select
                                     value={formData.status}
-                                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                                    onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
                                     required
                                 >
@@ -714,7 +968,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                 </label>
                                 <select
                                     value={formData.status}
-                                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                                    onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
                                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
                                     required
                                 >

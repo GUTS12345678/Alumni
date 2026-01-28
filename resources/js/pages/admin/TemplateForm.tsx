@@ -86,6 +86,12 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
         'reset_link'
     ];
 
+    // Helper function to get CSRF token
+    const getCsrfToken = () => {
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.getAttribute('content') || '' : '';
+    };
+
     useEffect(() => {
         if (mode === 'edit' && templateId) {
             fetchTemplate();
@@ -169,7 +175,9 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
                     'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': getCsrfToken(),
                 },
+                credentials: 'same-origin',
                 body: JSON.stringify(formData),
             });
 

@@ -7,6 +7,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { GraduationCap, ArrowLeft, Eye, EyeOff, RefreshCw, Mail, Lock as LockIcon, Sparkles, AlertCircle, Smartphone, Users, TrendingUp, Globe, Award, Heart } from 'lucide-react';
 import axios from 'axios';
 
+interface LoginErrors {
+    email?: string;
+    password?: string;
+    otp_code?: string;
+    general?: string;
+    message?: string;
+    [key: string]: string | undefined;
+}
+
 export default function Login() {
     const [formData, setFormData] = useState({
         email: '',
@@ -15,9 +24,14 @@ export default function Login() {
     });
     const [showPassword, setShowPassword] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [errors, setErrors] = useState<Record<string, string>>({});
+    const [errors, setErrors] = useState<LoginErrors>({});
     const [csrfError, setCsrfError] = useState(false);
     const [show2FAInput, setShow2FAInput] = useState(false);
+    const [emailValidation, setEmailValidation] = useState<{
+        checking: boolean;
+        exists: boolean;
+        message: string;
+    }>({ checking: false, exists: false, message: '' });
 
     // Setup axios to include CSRF token from meta tag
     useEffect(() => {
@@ -26,6 +40,43 @@ export default function Login() {
             axios.defaults.headers.common['X-CSRF-TOKEN'] = token;
         }
     }, []);
+
+    // Debounced email validation - check if email exists in database
+    useEffect(() => {
+        const checkEmailExists = async () => {
+            if (!formData.email || !/\S+@\S+\.\S+/.test(formData.email)) {
+                setEmailValidation({ checking: false, exists: false, message: '' });
+                return;
+            }
+
+            setEmailValidation({ checking: true, exists: false, message: 'Checking email...' });
+
+            try {
+                const response = await axios.post('/api/v1/check-email', {
+                    email: formData.email
+                });
+
+                if (response.data.exists) {
+                    setEmailValidation({
+                        checking: false,
+                        exists: true,
+                        message: 'Email found'
+                    });
+                } else {
+                    setEmailValidation({
+                        checking: false,
+                        exists: false,
+                        message: 'Email not registered. Please register first or check your email.'
+                    });
+                }
+            } catch {
+                setEmailValidation({ checking: false, exists: false, message: '' });
+            }
+        };
+
+        const timer = setTimeout(checkEmailExists, 800);
+        return () => clearTimeout(timer);
+    }, [formData.email]);
 
     const handleInputChange = (key: string, value: string | boolean) => {
         setFormData(prev => ({ ...prev, [key]: value }));
@@ -37,7 +88,8 @@ export default function Login() {
         // Auto-submit when 6 digits are entered for OTP
         if (key === 'otp_code' && typeof value === 'string' && value.length === 6 && show2FAInput) {
             setTimeout(() => {
-                handleSubmit(new Event('submit') as any);
+                const submitEvent = { preventDefault: () => { } } as React.FormEvent;
+                handleSubmit(submitEvent);
             }, 100);
         }
     };
@@ -49,6 +101,8 @@ export default function Login() {
             newErrors.email = 'Email is required';
         } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
             newErrors.email = 'Please enter a valid email address';
+        } else if (!emailValidation.exists && !emailValidation.checking) {
+            newErrors.email = 'This email is not registered. Please register first.';
         }
 
         if (!formData.password) {
@@ -86,7 +140,7 @@ export default function Login() {
         }, {
             preserveState: false,  // Changed to false to allow redirect
             preserveScroll: false,
-            onError: (errors: any) => {
+            onError: (errors: LoginErrors) => {
                 console.error('Login error:', errors);
 
                 // Handle CSRF errors
@@ -122,7 +176,7 @@ export default function Login() {
     };
 
     const handleBackToSurvey = () => {
-        window.location.href = '/';
+        window.location.href = '/survey/register';
     };
 
     return (
@@ -132,9 +186,9 @@ export default function Login() {
             <div className="min-h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 flex relative overflow-hidden">
                 {/* Decorative Background Elements */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <div className="absolute -top-40 -right-40 w-80 h-80 bg-maroon-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-                    <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-beige-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style={{ animationDelay: '2s' }}></div>
-                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-maroon-100 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-pulse" style={{ animationDelay: '4s' }}></div>
+                    <div className="absolute -top-40 -right-40 w-80 h-80 bg-maroon-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
+                    <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-beige-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" style={{ animationDelay: '2s' }}></div>
+                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-maroon-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style={{ animationDelay: '4s' }}></div>
                 </div>
 
                 {/* Left Side - Branding & Info */}
@@ -142,36 +196,36 @@ export default function Login() {
                     <div className="max-w-xl">
                         <div className="flex items-center mb-8">
                             <div className="relative">
-                                <div className="absolute inset-0 bg-maroon-400 rounded-full blur-xl opacity-30 animate-pulse"></div>
+                                <div className="absolute inset-0 bg-maroon-400 rounded-full blur-xl opacity-40 animate-pulse"></div>
                                 <GraduationCap className="h-16 w-16 text-maroon-700 relative z-10" />
                             </div>
                         </div>
 
-                        <h1 className="text-5xl font-bold text-maroon-900 mb-4 tracking-tight">
+                        <h1 className="text-5xl font-bold bg-gradient-to-r from-maroon-700 to-maroon-900 bg-clip-text text-transparent mb-4 tracking-tight">
                             Alumni Tracer System
                         </h1>
-                        <p className="text-xl text-maroon-600 mb-12 leading-relaxed">
+                        <p className="text-xl text-maroon-700 mb-12 leading-relaxed">
                             Stay connected, track your career journey, and contribute to the growth of our alumni community.
                         </p>
 
                         {/* Features Grid */}
                         <div className="grid grid-cols-2 gap-6 mb-12">
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-5 border border-maroon-100 shadow-lg hover:shadow-xl transition-shadow">
+                            <div className="bg-white/95 backdrop-blur-sm rounded-xl p-5 border border-maroon-200 shadow-lg hover:shadow-xl hover:bg-white transition-all">
                                 <Users className="h-8 w-8 text-maroon-600 mb-3" />
                                 <h3 className="font-semibold text-maroon-900 mb-1">Connect</h3>
                                 <p className="text-sm text-maroon-600">Build your professional network</p>
                             </div>
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-5 border border-maroon-100 shadow-lg hover:shadow-xl transition-shadow">
+                            <div className="bg-white/95 backdrop-blur-sm rounded-xl p-5 border border-maroon-200 shadow-lg hover:shadow-xl hover:bg-white transition-all">
                                 <TrendingUp className="h-8 w-8 text-maroon-600 mb-3" />
                                 <h3 className="font-semibold text-maroon-900 mb-1">Track Progress</h3>
                                 <p className="text-sm text-maroon-600">Monitor your career growth</p>
                             </div>
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-5 border border-maroon-100 shadow-lg hover:shadow-xl transition-shadow">
+                            <div className="bg-white/95 backdrop-blur-sm rounded-xl p-5 border border-maroon-200 shadow-lg hover:shadow-xl hover:bg-white transition-all">
                                 <Globe className="h-8 w-8 text-maroon-600 mb-3" />
                                 <h3 className="font-semibold text-maroon-900 mb-1">Global Reach</h3>
                                 <p className="text-sm text-maroon-600">Connect worldwide</p>
                             </div>
-                            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-5 border border-maroon-100 shadow-lg hover:shadow-xl transition-shadow">
+                            <div className="bg-white/95 backdrop-blur-sm rounded-xl p-5 border border-maroon-200 shadow-lg hover:shadow-xl hover:bg-white transition-all">
                                 <Award className="h-8 w-8 text-maroon-600 mb-3" />
                                 <h3 className="font-semibold text-maroon-900 mb-1">Opportunities</h3>
                                 <p className="text-sm text-maroon-600">Discover career paths</p>
@@ -203,12 +257,12 @@ export default function Login() {
                         <div className="lg:hidden text-center mb-8 animate-fade-in">
                             <div className="flex items-center justify-center mb-6">
                                 <div className="relative">
-                                    <div className="absolute inset-0 bg-maroon-400 rounded-full blur-xl opacity-30 animate-pulse"></div>
+                                    <div className="absolute inset-0 bg-maroon-400 rounded-full blur-xl opacity-40 animate-pulse"></div>
                                     <GraduationCap className="h-14 w-14 text-maroon-700 relative z-10" />
                                 </div>
                             </div>
-                            <h1 className="text-3xl font-bold text-maroon-900 mb-2">Alumni Tracer System</h1>
-                            <p className="text-maroon-600 font-medium">Welcome back! Please sign in</p>
+                            <h1 className="text-3xl font-bold bg-gradient-to-r from-maroon-700 to-maroon-900 bg-clip-text text-transparent mb-2">Alumni Tracer System</h1>
+                            <p className="text-maroon-700 font-medium">Welcome back! Please sign in</p>
                         </div>
 
                         <Card className="border-maroon-200 shadow-2xl bg-white/95 backdrop-blur-sm">
@@ -221,7 +275,7 @@ export default function Login() {
                                 <CardTitle className="text-2xl text-maroon-900 font-bold text-center">
                                     Sign In to Your Account
                                 </CardTitle>
-                                <CardDescription className="text-maroon-600 text-base mt-2 text-center">
+                                <CardDescription className="text-maroon-700 text-base mt-2 text-center">
                                     Enter your credentials to access your portal
                                 </CardDescription>
                             </CardHeader>
@@ -251,21 +305,49 @@ export default function Login() {
                                 <form onSubmit={handleSubmit} className="space-y-6">
                                     <div className="space-y-2">
                                         <Label htmlFor="email" className="text-base font-semibold text-maroon-900">
-                                            Email Address <span className="text-red-500">*</span>
+                                            Email Address <span className="text-maroon-600">*</span>
                                         </Label>
                                         <div className="relative">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <Mail className="h-5 w-5 text-maroon-400" />
+                                                <Mail className="h-5 w-5 text-maroon-600" />
                                             </div>
                                             <Input
                                                 id="email"
                                                 type="email"
                                                 value={formData.email}
                                                 onChange={(e) => handleInputChange('email', e.target.value)}
-                                                className="pl-12 h-12 border-maroon-200 focus:border-maroon-500 focus:ring-maroon-500 bg-white text-base"
+                                                className={`pl-12 pr-10 h-12 border-maroon-200 focus:border-maroon-600 focus:ring-maroon-600 bg-white text-maroon-900 placeholder:text-maroon-400 text-base ${formData.email && !emailValidation.checking && !emailValidation.exists && /\S+@\S+\.\S+/.test(formData.email)
+                                                    ? 'border-red-400'
+                                                    : emailValidation.exists
+                                                        ? 'border-green-400'
+                                                        : ''
+                                                    }`}
                                                 placeholder="you@example.com"
                                             />
+                                            {/* Email validation indicator */}
+                                            {formData.email && /\S+@\S+\.\S+/.test(formData.email) && (
+                                                <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                                                    {emailValidation.checking ? (
+                                                        <RefreshCw className="h-5 w-5 text-maroon-500 animate-spin" />
+                                                    ) : emailValidation.exists ? (
+                                                        <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center">
+                                                            <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                        </div>
+                                                    ) : (
+                                                        <AlertCircle className="h-5 w-5 text-red-500" />
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
+                                        {/* Show email validation message */}
+                                        {formData.email && /\S+@\S+\.\S+/.test(formData.email) && !emailValidation.checking && !emailValidation.exists && (
+                                            <p className="text-sm text-amber-600 flex items-center mt-1">
+                                                <AlertCircle className="h-4 w-4 mr-1" />
+                                                This email is not registered. Did you mean to register?
+                                            </p>
+                                        )}
                                         {errors.email && (
                                             <p className="text-sm text-red-600 flex items-center mt-1">
                                                 <AlertCircle className="h-4 w-4 mr-1" />
@@ -276,24 +358,24 @@ export default function Login() {
 
                                     <div className="space-y-2">
                                         <Label htmlFor="password" className="text-base font-semibold text-maroon-900">
-                                            Password <span className="text-red-500">*</span>
+                                            Password <span className="text-maroon-600">*</span>
                                         </Label>
                                         <div className="relative">
                                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <LockIcon className="h-5 w-5 text-maroon-400" />
+                                                <LockIcon className="h-5 w-5 text-maroon-600" />
                                             </div>
                                             <Input
                                                 id="password"
                                                 type={showPassword ? 'text' : 'password'}
                                                 value={formData.password}
                                                 onChange={(e) => handleInputChange('password', e.target.value)}
-                                                className="pl-12 pr-12 h-12 border-maroon-200 focus:border-maroon-500 focus:ring-maroon-500 bg-white text-base"
+                                                className="pl-12 pr-12 h-12 border-maroon-200 focus:border-maroon-600 focus:ring-maroon-600 bg-white text-maroon-900 placeholder:text-maroon-400 text-base"
                                                 placeholder="Enter your password"
                                             />
                                             <button
                                                 type="button"
                                                 onClick={() => setShowPassword(!showPassword)}
-                                                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-maroon-400 hover:text-maroon-600 transition-colors"
+                                                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-maroon-600 hover:text-maroon-700 transition-colors"
                                             >
                                                 {showPassword ? (
                                                     <EyeOff className="h-5 w-5" />
@@ -308,6 +390,16 @@ export default function Login() {
                                                 {errors.password}
                                             </p>
                                         )}
+
+                                        {/* Forgot Password Link */}
+                                        <div className="text-right">
+                                            <a
+                                                href="/forgot-password"
+                                                className="text-sm text-maroon-600 hover:text-maroon-800 hover:underline font-medium transition-colors"
+                                            >
+                                                Forgot your password?
+                                            </a>
+                                        </div>
                                     </div>
 
                                     {/* Google Authenticator Input - Shows when 2FA is required */}
@@ -316,7 +408,7 @@ export default function Login() {
                                             <div className="flex items-center mb-2">
                                                 <Smartphone className="h-5 w-5 text-maroon-600 mr-2" />
                                                 <Label htmlFor="otp-code" className="text-sm font-semibold text-maroon-900 mb-0">
-                                                    Google Authenticator Code <span className="text-red-500">*</span>
+                                                    Google Authenticator Code <span className="text-maroon-600">*</span>
                                                 </Label>
                                             </div>
                                             <Input
@@ -327,7 +419,7 @@ export default function Login() {
                                                     const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
                                                     handleInputChange('otp_code', value);
                                                 }}
-                                                className="h-12 border-maroon-200 focus:border-maroon-500 focus:ring-maroon-500 bg-white text-base text-center tracking-widest font-mono"
+                                                className="h-12 border-maroon-200 focus:border-maroon-600 focus:ring-maroon-600 bg-white text-maroon-900 placeholder:text-maroon-400 text-base text-center tracking-widest font-mono"
                                                 placeholder="000000"
                                                 maxLength={6}
                                                 autoComplete="off"
@@ -348,7 +440,7 @@ export default function Login() {
                                     <Button
                                         type="submit"
                                         disabled={isSubmitting}
-                                        className="w-full h-12 bg-gradient-to-r from-maroon-600 to-maroon-700 hover:from-maroon-700 hover:to-maroon-800 text-white text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
+                                        className="w-full h-12 bg-gradient-to-r from-maroon-600 to-maroon-700 hover:from-maroon-700 hover:to-maroon-800 text-white text-base font-semibold shadow-lg hover:shadow-xl hover:shadow-maroon-500/50 transition-all duration-300"
                                     >
                                         {isSubmitting ? (
                                             <>
@@ -364,13 +456,13 @@ export default function Login() {
                                     </Button>
                                 </form>
 
-                                <div className="mt-6 pt-6 border-t border-maroon-100">
+                                <div className="mt-6 pt-6 border-t border-maroon-200">
                                     <div className="text-center">
                                         <Button
                                             variant="ghost"
                                             size="sm"
                                             onClick={handleBackToSurvey}
-                                            className="text-sm text-maroon-600 hover:text-maroon-800 hover:bg-maroon-50"
+                                            className="text-sm text-maroon-600 hover:text-maroon-900 hover:bg-maroon-50"
                                         >
                                             <ArrowLeft className="w-4 h-4 mr-2" />
                                             Back to Alumni Registration
@@ -382,7 +474,7 @@ export default function Login() {
 
                         {/* Security Notice */}
                         <div className="mt-6 text-center">
-                            <p className="text-xs text-maroon-500 flex items-center justify-center gap-2">
+                            <p className="text-xs text-maroon-600 flex items-center justify-center gap-2">
                                 <span>🔒</span>
                                 <span>Your connection is secure and encrypted</span>
                             </p>

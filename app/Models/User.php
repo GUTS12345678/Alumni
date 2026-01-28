@@ -23,8 +23,18 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'role_id',
         'status',
         'last_login_at',
+        'phone_number',
+        'bio',
+        'location',
+        'website',
+        'social_links',
+        'profile_picture_path',
+        'cover_photo_path',
+        'preferred_theme',
+        'preferred_language',
     ];
 
     /**
@@ -89,6 +99,120 @@ class User extends Authenticatable
     public function hasAdminPrivileges(): bool
     {
         return in_array($this->role, ['super_admin', 'admin']);
+    }
+
+    /**
+     * Get the role assigned to this user
+     */
+    public function assignedRole()
+    {
+        return $this->belongsTo(Role::class, 'role_id');
+    }
+
+    /**
+     * Get custom permissions assigned directly to this user
+     */
+    public function customPermissions()
+    {
+        return $this->belongsToMany(Permission::class, 'user_permissions')
+            ->withPivot('is_granted')
+            ->withTimestamps();
+    }
+
+    /**
+     * Get all permissions for this user (from role + custom permissions)
+     */
+    public function getAllPermissions()
+    {
+        $rolePermissions = collect();
+        if ($this->assignedRole) {
+            $rolePermissions = $this->assignedRole->permissions;
+        }
+
+        $customGranted = $this->customPermissions()->wherePivot('is_granted', true)->get();
+        $customDenied = $this->customPermissions()->wherePivot('is_granted', false)->pluck('name');
+
+        return $rolePermissions->merge($customGranted)->reject(function ($permission) use ($customDenied) {
+            return $customDenied->contains($permission->name);
+        })->unique('id');
+    }
+
+    /**
+     * Check if user has a specific permission
+     */
+    public function hasPermission($permissionName)
+    {
+        // Super admin always has all permissions
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        // Check if permission is denied
+        $denied = $this->customPermissions()
+            ->wherePivot('is_granted', false)
+            ->where('name', $permissionName)
+            ->exists();
+
+        if ($denied) {
+            return false;
+        }
+
+        // Check custom granted permissions
+        $customGranted = $this->customPermissions()
+            ->wherePivot('is_granted', true)
+            ->where('name', $permissionName)
+            ->exists();
+
+        if ($customGranted) {
+            return true;
+        }
+
+        // Check role permissions
+        if ($this->assignedRole) {
+            return $this->assignedRole->hasPermission($permissionName);
+        }
+
+        return false;
+    }
+
+    /**
+     * Grant permission to user
+     */
+    public function givePermission($permission)
+    {
+        if (is_string($permission)) {
+            $permission = Permission::where('name', $permission)->firstOrFail();
+        }
+
+        return $this->customPermissions()->syncWithoutDetaching([
+            $permission->id => ['is_granted' => true]
+        ]);
+    }
+
+    /**
+     * Deny permission to user
+     */
+    public function denyPermission($permission)
+    {
+        if (is_string($permission)) {
+            $permission = Permission::where('name', $permission)->firstOrFail();
+        }
+
+        return $this->customPermissions()->syncWithoutDetaching([
+            $permission->id => ['is_granted' => false]
+        ]);
+    }
+
+    /**
+     * Remove custom permission from user (revert to role default)
+     */
+    public function revokePermission($permission)
+    {
+        if (is_string($permission)) {
+            $permission = Permission::where('name', $permission)->firstOrFail();
+        }
+
+        return $this->customPermissions()->detach($permission);
     }
 
     /**

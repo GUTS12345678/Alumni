@@ -77,7 +77,7 @@ const alumniNavigation = [
 export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: AlumniBaseLayoutProps) {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-    
+
     // Get user from Inertia's shared props
     const { auth } = usePage<{ auth: { user: UserData } }>().props;
     const currentUser = auth?.user;
@@ -159,13 +159,21 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                     "flex items-center",
                     sidebarCollapsed ? "justify-center" : "space-x-3"
                 )}>
-                    <div className="h-8 w-8 bg-maroon-600 rounded-full flex items-center justify-center flex-shrink-0">
-                        <User className="h-4 w-4 text-white" />
+                    <div className="h-8 w-8 bg-maroon-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        {currentUser?.profile_picture_path ? (
+                            <img
+                                src={currentUser.profile_picture_path.startsWith('/storage') ? currentUser.profile_picture_path : `/storage/${currentUser.profile_picture_path}`}
+                                alt="Profile"
+                                className="w-full h-full object-cover"
+                            />
+                        ) : (
+                            <User className="h-4 w-4 text-white" />
+                        )}
                     </div>
                     {!sidebarCollapsed && (
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-gray-900 truncate">
-                                {currentUser?.alumniProfile?.first_name && currentUser?.alumniProfile?.last_name 
+                                {currentUser?.alumniProfile?.first_name && currentUser?.alumniProfile?.last_name
                                     ? `${currentUser.alumniProfile.first_name} ${currentUser.alumniProfile.last_name}`
                                     : currentUser?.email?.split('@')[0] || 'Alumni User'}
                             </p>

@@ -32,9 +32,12 @@ import {
     RefreshCw,
     UserCheck,
     UserX,
-    Key
+    Key,
+    AlertCircle,
+    CheckCircle
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import axios from 'axios';
 
 interface User {
     id: number;
@@ -107,6 +110,64 @@ export default function UserManagement({ user }: Props) {
         status: 'active',
     });
     const [saving, setSaving] = useState(false);
+
+    // Email validation state for add user form
+    const [addEmailValidation, setAddEmailValidation] = useState<{
+        checking: boolean;
+        exists: boolean;
+        valid: boolean;
+        message: string;
+    }>({ checking: false, exists: false, valid: false, message: '' });
+
+    // Debounced email validation for add user form
+    useEffect(() => {
+        const checkEmailExists = async () => {
+            if (!addFormData.email) {
+                setAddEmailValidation({ checking: false, exists: false, valid: false, message: '' });
+                return;
+            }
+
+            // Check email format
+            if (!/\S+@\S+\.\S+/.test(addFormData.email)) {
+                setAddEmailValidation({
+                    checking: false,
+                    exists: false,
+                    valid: false,
+                    message: 'Please enter a valid email address'
+                });
+                return;
+            }
+
+            setAddEmailValidation({ checking: true, exists: false, valid: false, message: 'Checking email...' });
+
+            try {
+                const response = await axios.post('/api/v1/check-email', {
+                    email: addFormData.email
+                });
+
+                if (response.data.exists) {
+                    setAddEmailValidation({
+                        checking: false,
+                        exists: true,
+                        valid: false,
+                        message: 'This email is already registered'
+                    });
+                } else {
+                    setAddEmailValidation({
+                        checking: false,
+                        exists: false,
+                        valid: true,
+                        message: 'Email is available'
+                    });
+                }
+            } catch {
+                setAddEmailValidation({ checking: false, exists: false, valid: false, message: '' });
+            }
+        };
+
+        const timer = setTimeout(checkEmailExists, 800);
+        return () => clearTimeout(timer);
+    }, [addFormData.email]);
 
     // Helper function to get CSRF token
     const getCsrfToken = () => {
@@ -288,6 +349,24 @@ export default function UserManagement({ user }: Props) {
                 return;
             }
 
+            // Email format validation
+            if (!/\S+@\S+\.\S+/.test(addFormData.email)) {
+                alert('Please enter a valid email address');
+                return;
+            }
+
+            // Check if email already exists
+            if (addEmailValidation.exists) {
+                alert('This email is already registered. Please use a different email.');
+                return;
+            }
+
+            // Wait for email validation to complete
+            if (addEmailValidation.checking) {
+                alert('Please wait for email validation to complete');
+                return;
+            }
+
             if (addFormData.password.length < 8) {
                 alert('Password must be at least 8 characters');
                 return;
@@ -311,6 +390,7 @@ export default function UserManagement({ user }: Props) {
                 const data = await response.json();
                 setShowAddUserDialog(false);
                 setAddFormData({ name: '', email: '', password: '', role: 'alumni', status: 'active' });
+                setAddEmailValidation({ checking: false, exists: false, valid: false, message: '' });
                 alert(data.message || 'User created successfully!');
                 fetchUsers(); // Refresh the list
                 setError(null);
@@ -427,7 +507,7 @@ export default function UserManagement({ user }: Props) {
                 payload.confirm_super_admin = true;
             }
 
-            const response = await fetch(`/api/v1/admin/users/${selectedUser.id}/change-role`, {
+            const response = await fetch(`/api/v1/admin/role-management/users/${selectedUser.id}/change-role`, {
                 method: 'POST',
                 credentials: 'include',
                 headers: getAuthHeaders(),
@@ -1178,13 +1258,44 @@ export default function UserManagement({ user }: Props) {
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
                                         Email Address *
                                     </label>
-                                    <Input
-                                        type="email"
-                                        value={addFormData.email}
-                                        onChange={(e) => setAddFormData({ ...addFormData, email: e.target.value })}
-                                        placeholder="Enter email address"
-                                        className="border-beige-300"
-                                    />
+                                    <div className="relative">
+                                        <Input
+                                            type="email"
+                                            value={addFormData.email}
+                                            onChange={(e) => setAddFormData({ ...addFormData, email: e.target.value })}
+                                            placeholder="Enter email address"
+                                            className={`border-beige-300 pr-10 ${addFormData.email && !addEmailValidation.checking && addEmailValidation.exists
+                                                ? 'border-red-400 focus:border-red-500'
+                                                : addEmailValidation.valid
+                                                    ? 'border-green-400 focus:border-green-500'
+                                                    : ''
+                                                }`}
+                                        />
+                                        {/* Email validation indicator */}
+                                        {addFormData.email && /\S+@\S+\.\S+/.test(addFormData.email) && (
+                                            <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                                                {addEmailValidation.checking ? (
+                                                    <RefreshCw className="h-4 w-4 text-gray-400 animate-spin" />
+                                                ) : addEmailValidation.valid ? (
+                                                    <CheckCircle className="h-4 w-4 text-green-500" />
+                                                ) : addEmailValidation.exists ? (
+                                                    <AlertCircle className="h-4 w-4 text-red-500" />
+                                                ) : null}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Email validation message */}
+                                    {addFormData.email && addEmailValidation.message && !addEmailValidation.checking && (
+                                        <p className={`text-xs mt-1 flex items-center ${addEmailValidation.valid ? 'text-green-600' : 'text-red-600'
+                                            }`}>
+                                            {addEmailValidation.valid ? (
+                                                <CheckCircle className="h-3 w-3 mr-1" />
+                                            ) : (
+                                                <AlertCircle className="h-3 w-3 mr-1" />
+                                            )}
+                                            {addEmailValidation.message}
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div>
@@ -1237,6 +1348,7 @@ export default function UserManagement({ user }: Props) {
                                 onClick={() => {
                                     setShowAddUserDialog(false);
                                     setAddFormData({ name: '', email: '', password: '', role: 'alumni', status: 'active' });
+                                    setAddEmailValidation({ checking: false, exists: false, valid: false, message: '' });
                                 }}
                                 disabled={saving}
                             >
@@ -1245,7 +1357,7 @@ export default function UserManagement({ user }: Props) {
                             <Button
                                 className="bg-maroon-700 hover:bg-maroon-800"
                                 onClick={handleAddUser}
-                                disabled={saving}
+                                disabled={saving || addEmailValidation.checking || addEmailValidation.exists}
                             >
                                 {saving ? (
                                     <>

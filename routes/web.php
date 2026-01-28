@@ -5,12 +5,32 @@ use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 
 
-// Public Alumni Survey/Registration Route
+// Landing Page
 Route::get('/', function () {
-    // Clear any stored previous URL to prevent redirects
+    // Calculate employment rate from alumni data
+    $totalAlumni = \App\Models\AlumniProfile::count();
+    $employedAlumni = \App\Models\AlumniProfile::whereIn('employment_status', [
+        'Employed Full-time', 
+        'Employed Part-time', 
+        'Self-employed'
+    ])->count();
+    $employmentRate = $totalAlumni > 0 ? round(($employedAlumni / $totalAlumni) * 100) : 0;
+    
+    $stats = [
+        'totalAlumni' => \App\Models\User::where('role_id', 3)->count(),
+        'employmentRate' => $employmentRate,
+        'activeJobs' => 0, // No Job model - show 0
+        'surveysCompleted' => \App\Models\Survey::count(),
+    ];
+    
+    return Inertia::render('public/LandingPage', ['stats' => $stats]);
+})->name('home');
+
+// Alumni Survey Registration
+Route::get('/survey/register', function () {
     session()->forget('url.intended');
     return Inertia::render('Alumni/SurveyRegistration');
-})->name('home');
+})->name('survey.register');
 
 Route::get('/survey/{id}', function ($id) {
     return Inertia::render('Alumni/SurveyRegistration', ['surveyId' => $id]);
@@ -173,6 +193,15 @@ Route::middleware(['web', 'auth', 'super_admin'])->prefix('super-admin')->group(
             ]
         ]);
     })->name('super-admin.departments');
+
+    // Department Settings
+    Route::get('/department-settings', function () {
+        return Inertia::render('SuperAdmin/DepartmentSettings', [
+            'auth' => [
+                'user' => Auth::user()
+            ]
+        ]);
+    })->name('super-admin.department-settings');
 
     // Department Dashboard
     Route::get('/departments/{id}', function ($id) {

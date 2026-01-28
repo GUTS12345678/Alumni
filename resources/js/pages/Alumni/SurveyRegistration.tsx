@@ -1,11 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { GraduationCap, ArrowLeft, ArrowRight, User, BookOpen, Briefcase, MapPin, Heart, Lock, CheckCircle, AlertCircle, Eye, EyeOff, Shield, Sparkles, Building } from 'lucide-react';
+import { GraduationCap, ArrowLeft, ArrowRight, User, BookOpen, Briefcase, MapPin, Heart, Lock, CheckCircle, AlertCircle, Eye, EyeOff, Shield, Sparkles, Building, Mail, RefreshCw } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
 import axios from 'axios';
@@ -240,6 +240,41 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    // Validation states
+    const [emailValidation, setEmailValidation] = useState<{
+        checking: boolean;
+        exists: boolean;
+        message: string;
+    }>({ checking: false, exists: false, message: '' });
+
+    const [studentIdValidation, setStudentIdValidation] = useState<{
+        checking: boolean;
+        exists: boolean;
+        message: string;
+    }>({ checking: false, exists: false, message: '' });
+
+    // OTP verification state
+    const [otpState, setOtpState] = useState<{
+        sent: boolean;
+        verified: boolean;
+        sending: boolean;
+        verifying: boolean;
+        code: string;
+        message: string;
+        error: boolean;
+        countdown: number;
+    }>({ sent: false, verified: false, sending: false, verifying: false, code: '', message: '', error: false, countdown: 0 });
+
+    // Countdown timer for OTP resend
+    useEffect(() => {
+        if (otpState.countdown > 0) {
+            const timer = setTimeout(() => {
+                setOtpState(prev => ({ ...prev, countdown: prev.countdown - 1 }));
+            }, 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [otpState.countdown]);
+
     // Department and Course state
     const [departments, setDepartments] = useState<Department[]>([]);
     const [courses, setCourses] = useState<Course[]>([]);
@@ -294,6 +329,80 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
     const totalSections = sections.length;
     const progress = ((currentSection + 1) / totalSections) * 100;
 
+    // Debounced validation for email
+    useEffect(() => {
+        const checkEmail = async () => {
+            if (!formData.email || !formData.email.includes('@')) {
+                setEmailValidation({ checking: false, exists: false, message: '' });
+                return;
+            }
+
+            setEmailValidation({ checking: true, exists: false, message: 'Checking email...' });
+
+            try {
+                const response = await axios.post('/api/v1/check-email', {
+                    email: formData.email
+                });
+
+                if (response.data.exists) {
+                    setEmailValidation({
+                        checking: false,
+                        exists: true,
+                        message: 'This email is already registered. Please use a different email or login.'
+                    });
+                } else {
+                    setEmailValidation({
+                        checking: false,
+                        exists: false,
+                        message: 'Email is available'
+                    });
+                }
+            } catch (error) {
+                setEmailValidation({ checking: false, exists: false, message: '' });
+            }
+        };
+
+        const timer = setTimeout(checkEmail, 800);
+        return () => clearTimeout(timer);
+    }, [formData.email]);
+
+    // Debounced validation for student ID
+    useEffect(() => {
+        const checkStudentId = async () => {
+            if (!formData.studentId || formData.studentId.length < 3) {
+                setStudentIdValidation({ checking: false, exists: false, message: '' });
+                return;
+            }
+
+            setStudentIdValidation({ checking: true, exists: false, message: 'Checking student ID...' });
+
+            try {
+                const response = await axios.post('/api/v1/check-student-id', {
+                    student_id: formData.studentId
+                });
+
+                if (response.data.exists) {
+                    setStudentIdValidation({
+                        checking: false,
+                        exists: true,
+                        message: 'This student ID is already registered. Please verify your ID or contact support.'
+                    });
+                } else {
+                    setStudentIdValidation({
+                        checking: false,
+                        exists: false,
+                        message: 'Student ID is available'
+                    });
+                }
+            } catch (error) {
+                setStudentIdValidation({ checking: false, exists: false, message: '' });
+            }
+        };
+
+        const timer = setTimeout(checkStudentId, 800);
+        return () => clearTimeout(timer);
+    }, [formData.studentId]);
+
     const handleInputChange = useCallback((key: string, value: string) => {
         setFormData(prev => {
             // If department changes, reset course selection
@@ -306,7 +415,105 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
         if (errors[key]) {
             setErrors(prev => ({ ...prev, [key]: '' }));
         }
+        // Reset OTP state when email changes
+        if (key === 'email') {
+            setOtpState({ sent: false, verified: false, sending: false, verifying: false, code: '', message: '', error: false, countdown: 0 });
+        }
     }, [errors]);
+
+    // Send OTP to email
+    const handleSendOtp = useCallback(async () => {
+        if (!formData.email || !formData.email.includes('@') || emailValidation.exists || emailValidation.checking) {
+            return;
+        }
+
+        setOtpState(prev => ({ ...prev, sending: true, message: '', error: false }));
+
+        try {
+            const response = await axios.post('/api/v1/otp/send', {
+                email: formData.email,
+                purpose: 'registration'
+            });
+
+            if (response.data.success) {
+                setOtpState(prev => ({
+                    ...prev,
+                    sent: true,
+                    sending: false,
+                    message: 'Verification code sent! Check your email inbox.',
+                    error: false,
+                    countdown: 60 // 60 seconds countdown before resend
+                }));
+            }
+        } catch (error: unknown) {
+            let errorMessage = 'Failed to send verification code. Please try again.';
+            if (error && typeof error === 'object' && 'response' in error) {
+                const axiosError = error as { response?: { status?: number; data?: { message?: string } } };
+                if (axiosError.response?.status === 429) {
+                    errorMessage = axiosError.response?.data?.message || 'Too many requests. Please wait before trying again.';
+                } else if (axiosError.response?.data?.message) {
+                    errorMessage = axiosError.response.data.message;
+                }
+            }
+            setOtpState(prev => ({
+                ...prev,
+                sending: false,
+                message: errorMessage,
+                error: true
+            }));
+        }
+    }, [formData.email, emailValidation.exists, emailValidation.checking]);
+
+    // Verify OTP code
+    const handleVerifyOtp = useCallback(async () => {
+        if (!otpState.code || otpState.code.length !== 6) {
+            setOtpState(prev => ({ ...prev, message: 'Please enter a 6-digit code', error: true }));
+            return;
+        }
+
+        setOtpState(prev => ({ ...prev, verifying: true, message: '', error: false }));
+
+        try {
+            const response = await axios.post('/api/v1/otp/verify', {
+                email: formData.email,
+                otp: otpState.code,
+                purpose: 'registration'
+            });
+
+            if (response.data.success && response.data.verified) {
+                setOtpState(prev => ({
+                    ...prev,
+                    verified: true,
+                    verifying: false,
+                    message: 'Email verified successfully!',
+                    error: false
+                }));
+            }
+        } catch (error: unknown) {
+            let errorMessage = 'Invalid or expired verification code. Please try again.';
+            if (error && typeof error === 'object' && 'response' in error) {
+                const axiosError = error as { response?: { status?: number; data?: { message?: string } } };
+                if (axiosError.response?.status === 429) {
+                    errorMessage = axiosError.response?.data?.message || 'Too many attempts. Please wait before trying again.';
+                } else if (axiosError.response?.data?.message) {
+                    errorMessage = axiosError.response.data.message;
+                }
+            }
+            setOtpState(prev => ({
+                ...prev,
+                verifying: false,
+                message: errorMessage,
+                error: true
+            }));
+        }
+    }, [formData.email, otpState.code]);
+
+    // Handle OTP code input
+    const handleOtpChange = useCallback((value: string) => {
+        // Only allow digits and max 6 characters
+        const cleanValue = value.replace(/\D/g, '').slice(0, 6);
+        setOtpState(prev => ({ ...prev, code: cleanValue, message: '', error: false }));
+    }, []);
 
     const validateSection = useCallback(() => {
         const newErrors: Record<string, string> = {};
@@ -317,6 +524,21 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                 newErrors[question.key] = `${question.label} is required`;
             }
         });
+
+        // Check for duplicate email in personal section
+        if (currentSection === 0 && emailValidation.exists) {
+            newErrors.email = 'This email is already registered';
+        }
+
+        // Check for duplicate student ID in personal section
+        if (currentSection === 0 && studentIdValidation.exists) {
+            newErrors.studentId = 'This student ID is already registered';
+        }
+
+        // Require OTP verification in personal section
+        if (currentSection === 0 && formData.email && !otpState.verified) {
+            newErrors.email = 'Please verify your email with the OTP code sent to your inbox';
+        }
 
         // Special validation for password confirmation
         if (currentSection === 5) { // Account setup section
@@ -330,7 +552,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
-    }, [currentSection, formData]);
+    }, [currentSection, formData, emailValidation.exists, studentIdValidation.exists, otpState.verified]);
 
     const handleNext = useCallback(() => {
         if (validateSection()) {
@@ -648,21 +870,206 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                             {question.label}
                             {question.required && <span className="text-red-500 ml-1">*</span>}
                         </Label>
-                        <Input
-                            id={question.key}
-                            type={question.type}
-                            value={value}
-                            onChange={(e) => handleInputChange(question.key, e.target.value)}
-                            className={cn(
-                                "border-beige-300 focus:border-maroon-500 focus:ring-maroon-500",
-                                question.type === 'date' && "max-w-xs"
+                        <div className="relative">
+                            <Input
+                                id={question.key}
+                                type={question.type}
+                                value={value}
+                                onChange={(e) => handleInputChange(question.key, e.target.value)}
+                                className={cn(
+                                    "border-beige-300 focus:border-maroon-500 focus:ring-maroon-500",
+                                    question.type === 'date' && "max-w-xs",
+                                    question.key === 'email' && emailValidation.exists && "border-red-500 pr-10",
+                                    question.key === 'email' && !emailValidation.exists && emailValidation.message && "border-green-500 pr-10",
+                                    question.key === 'studentId' && studentIdValidation.exists && "border-red-500 pr-10",
+                                    question.key === 'studentId' && !studentIdValidation.exists && studentIdValidation.message && "border-green-500 pr-10"
+                                )}
+                                placeholder={`Enter your ${question.label.toLowerCase()}`}
+                                step={question.step}
+                                min={question.min}
+                                max={question.max}
+                            />
+                            {/* Email validation indicator */}
+                            {question.key === 'email' && value && (
+                                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                    {emailValidation.checking && (
+                                        <div className="h-4 w-4 border-2 border-maroon-600 border-t-transparent rounded-full animate-spin" />
+                                    )}
+                                    {!emailValidation.checking && emailValidation.exists && (
+                                        <AlertCircle className="h-5 w-5 text-red-500" />
+                                    )}
+                                    {!emailValidation.checking && !emailValidation.exists && emailValidation.message && (
+                                        <CheckCircle className="h-5 w-5 text-green-500" />
+                                    )}
+                                </div>
                             )}
-                            placeholder={`Enter your ${question.label.toLowerCase()}`}
-                            step={question.step}
-                            min={question.min}
-                            max={question.max}
-                        />
-                        {error && <p className="text-sm text-red-600">{error}</p>}
+                            {/* Student ID validation indicator */}
+                            {question.key === 'studentId' && value && (
+                                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                    {studentIdValidation.checking && (
+                                        <div className="h-4 w-4 border-2 border-maroon-600 border-t-transparent rounded-full animate-spin" />
+                                    )}
+                                    {!studentIdValidation.checking && studentIdValidation.exists && (
+                                        <AlertCircle className="h-5 w-5 text-red-500" />
+                                    )}
+                                    {!studentIdValidation.checking && !studentIdValidation.exists && studentIdValidation.message && (
+                                        <CheckCircle className="h-5 w-5 text-green-500" />
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                        {error && !question.key.includes('email') && <p className="text-sm text-red-600 flex items-center mt-1"><AlertCircle className="h-4 w-4 mr-1" />{error}</p>}
+                        {/* Email validation message */}
+                        {question.key === 'email' && !emailValidation.exists && emailValidation.message && !otpState.verified && (
+                            <p className="text-sm mt-1 flex items-center text-green-600">
+                                <CheckCircle className="h-4 w-4 mr-1" />{emailValidation.message}
+                            </p>
+                        )}
+                        {question.key === 'email' && emailValidation.exists && (
+                            <p className="text-sm mt-1 flex items-center text-red-600">
+                                <AlertCircle className="h-4 w-4 mr-1" />{emailValidation.message}
+                            </p>
+                        )}
+
+                        {/* OTP Verification Section */}
+                        {question.key === 'email' && value && !emailValidation.exists && !emailValidation.checking && emailValidation.message && (
+                            <div className="mt-4 p-4 bg-gradient-to-r from-maroon-50 to-beige-50 rounded-xl border-2 border-maroon-200">
+                                {!otpState.verified ? (
+                                    <>
+                                        <div className="flex items-center mb-3">
+                                            <Mail className="h-5 w-5 text-maroon-600 mr-2" />
+                                            <span className="text-sm font-semibold text-maroon-800">Email Verification Required</span>
+                                        </div>
+
+                                        {!otpState.sent ? (
+                                            <div className="space-y-3">
+                                                <p className="text-sm text-gray-600">
+                                                    We'll send a 6-digit verification code to <strong>{value}</strong>
+                                                </p>
+                                                <Button
+                                                    type="button"
+                                                    onClick={handleSendOtp}
+                                                    disabled={otpState.sending}
+                                                    className="bg-maroon-600 hover:bg-maroon-700 text-white h-10 px-4"
+                                                >
+                                                    {otpState.sending ? (
+                                                        <>
+                                                            <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                            Sending...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Mail className="h-4 w-4 mr-2" />
+                                                            Send Verification Code
+                                                        </>
+                                                    )}
+                                                </Button>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                <p className="text-sm text-gray-600">
+                                                    Enter the 6-digit code sent to <strong>{value}</strong>
+                                                </p>
+                                                <div className="flex flex-col sm:flex-row gap-3">
+                                                    <div className="flex-1">
+                                                        <Input
+                                                            type="text"
+                                                            value={otpState.code}
+                                                            onChange={(e) => handleOtpChange(e.target.value)}
+                                                            placeholder="Enter 6-digit code"
+                                                            maxLength={6}
+                                                            className={cn(
+                                                                "text-center text-lg tracking-widest font-mono",
+                                                                otpState.error && "border-red-500"
+                                                            )}
+                                                        />
+                                                    </div>
+                                                    <Button
+                                                        type="button"
+                                                        onClick={handleVerifyOtp}
+                                                        disabled={otpState.verifying || otpState.code.length !== 6}
+                                                        className="bg-green-600 hover:bg-green-700 text-white h-10 px-4"
+                                                    >
+                                                        {otpState.verifying ? (
+                                                            <>
+                                                                <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                                Verifying...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <CheckCircle className="h-4 w-4 mr-2" />
+                                                                Verify
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                </div>
+
+                                                {/* Resend OTP */}
+                                                <div className="flex items-center justify-between pt-2">
+                                                    <span className="text-xs text-gray-500">
+                                                        Didn't receive the code?
+                                                    </span>
+                                                    {otpState.countdown > 0 ? (
+                                                        <span className="text-xs text-gray-500">
+                                                            Resend in {otpState.countdown}s
+                                                        </span>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleSendOtp}
+                                                            disabled={otpState.sending}
+                                                            className="text-xs text-maroon-600 hover:text-maroon-800 font-medium flex items-center"
+                                                        >
+                                                            <RefreshCw className="h-3 w-3 mr-1" />
+                                                            Resend Code
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* OTP Status Message */}
+                                        {otpState.message && (
+                                            <p className={cn(
+                                                "text-sm mt-3 flex items-center",
+                                                otpState.error ? "text-red-600" : "text-green-600"
+                                            )}>
+                                                {otpState.error ? (
+                                                    <AlertCircle className="h-4 w-4 mr-1" />
+                                                ) : (
+                                                    <CheckCircle className="h-4 w-4 mr-1" />
+                                                )}
+                                                {otpState.message}
+                                            </p>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="flex items-center text-green-600">
+                                        <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center mr-3">
+                                            <CheckCircle className="h-5 w-5 text-white" />
+                                        </div>
+                                        <div>
+                                            <p className="font-semibold">Email Verified!</p>
+                                            <p className="text-sm text-gray-600">Your email has been successfully verified.</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Student ID validation message */}
+                        {question.key === 'studentId' && !error && studentIdValidation.message && (
+                            <p className={cn(
+                                "text-sm mt-1 flex items-center",
+                                studentIdValidation.exists ? "text-red-600" : "text-green-600"
+                            )}>
+                                {studentIdValidation.exists ? (
+                                    <><AlertCircle className="h-4 w-4 mr-1" />{studentIdValidation.message}</>
+                                ) : (
+                                    <><CheckCircle className="h-4 w-4 mr-1" />{studentIdValidation.message}</>
+                                )}
+                            </p>
+                        )}
                     </div>
                 );
         }
@@ -693,15 +1100,13 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                     <p className="text-maroon-200 text-sm md:text-base">Registration & Career Survey</p>
                                 </div>
                             </div>
-                            <form method="GET" action="/login" style={{ display: 'inline' }}>
-                                <button
-                                    type="submit"
-                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white border-2 border-maroon-600 bg-transparent text-maroon-100 shadow-sm hover:bg-maroon-700 hover:text-white hover:border-white h-10 px-5 py-2 cursor-pointer"
-                                >
-                                    <ArrowLeft className="w-4 h-4 mr-2" />
-                                    Skip Survey - Go to Login
-                                </button>
-                            </form>
+                            <Link
+                                href="/"
+                                className="inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-medium transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white border-2 border-maroon-600 bg-transparent text-maroon-100 shadow-sm hover:bg-maroon-700 hover:text-white hover:border-white h-10 px-5 py-2 cursor-pointer"
+                            >
+                                <ArrowLeft className="w-4 h-4 mr-2" />
+                                Back to Home
+                            </Link>
                         </div>
 
                         {/* Progress Bar */}

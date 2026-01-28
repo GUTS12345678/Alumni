@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import {
@@ -10,7 +10,6 @@ import {
     ArrowLeft,
     CheckCircle,
     XCircle,
-    RotateCcw,
     AlertCircle,
     Users,
     BookOpen,
@@ -24,6 +23,7 @@ interface Course {
     name: string;
     code: string;
     description: string | null;
+    majors: string | null;
     duration_years: number;
     status: 'active' | 'inactive';
     alumni_profiles_count: number;
@@ -57,7 +57,7 @@ interface AlumniProfile {
         code: string;
     };
     graduation_year: number;
-    current_employment_status: string;
+    employment_status: string;
 }
 
 interface Employer {
@@ -147,14 +147,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
         return '';
     };
 
-    useEffect(() => {
-        fetchDepartmentData();
-        fetchCourses();
-        fetchAlumni();
-        fetchAnalytics();
-    }, [departmentId]);
-
-    const fetchDepartmentData = async () => {
+    const fetchDepartmentData = useCallback(async () => {
         try {
             const response = await fetch(`/api/v1/admin/super-admin/departments/${departmentId}`, {
                 headers: {
@@ -172,9 +165,9 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
         } catch (error) {
             console.error('Error fetching department:', error);
         }
-    };
+    }, [departmentId]);
 
-    const fetchCourses = async () => {
+    const fetchCourses = useCallback(async () => {
         try {
             setLoading(true);
             const response = await fetch(`/api/v1/admin/super-admin/courses?department_id=${departmentId}`, {
@@ -196,9 +189,9 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [departmentId]);
 
-    const fetchAlumni = async () => {
+    const fetchAlumni = useCallback(async () => {
         try {
             const response = await fetch(`/api/v1/admin/departments/${departmentId}/alumni`, {
                 headers: {
@@ -216,9 +209,9 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
         } catch (error) {
             console.error('Error fetching alumni:', error);
         }
-    };
+    }, [departmentId]);
 
-    const fetchAnalytics = async () => {
+    const fetchAnalytics = useCallback(async () => {
         try {
             const response = await fetch(`/api/v1/admin/departments/${departmentId}/analytics`, {
                 headers: {
@@ -236,7 +229,14 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
         } catch (error) {
             console.error('Error fetching analytics:', error);
         }
-    };
+    }, [departmentId]);
+
+    useEffect(() => {
+        fetchDepartmentData();
+        fetchCourses();
+        fetchAlumni();
+        fetchAnalytics();
+    }, [fetchDepartmentData, fetchCourses, fetchAlumni, fetchAnalytics]);
 
     const handleCreateCourse = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -499,7 +499,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                 </div>
 
                 {/* Enhanced Analytics Section */}
-                {analytics && analytics.department.total_alumni > 0 && (
+                {analytics && analytics.department && analytics.department.total_alumni > 0 && (
                     <div className="space-y-6">
                         {/* Employment Metrics */}
                         <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
@@ -508,39 +508,39 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                                 <div className="bg-green-50 rounded-lg p-4 border border-green-200">
                                     <p className="text-sm font-medium text-green-800">Employment Rate</p>
                                     <p className="text-3xl font-bold text-green-600 mt-2">
-                                        {analytics.employment.employment_rate}%
+                                        {analytics.employment?.employment_rate ?? 0}%
                                     </p>
                                     <p className="text-xs text-green-600 mt-1">
-                                        {Math.round((analytics.employment.employment_rate / 100) * analytics.department.total_alumni)} employed
+                                        {Math.round(((analytics.employment?.employment_rate ?? 0) / 100) * analytics.department.total_alumni)} employed
                                     </p>
                                 </div>
 
                                 <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                                     <p className="text-sm font-medium text-blue-800">Avg. Time to Employment</p>
                                     <p className="text-3xl font-bold text-blue-600 mt-2">
-                                        {analytics.employment.avg_time_to_employment_days
+                                        {analytics.employment?.avg_time_to_employment_days
                                             ? `${Math.round(analytics.employment.avg_time_to_employment_days)}`
                                             : 'N/A'}
                                     </p>
                                     <p className="text-xs text-blue-600 mt-1">
-                                        {analytics.employment.avg_time_to_employment_days ? 'days after graduation' : 'No data yet'}
+                                        {analytics.employment?.avg_time_to_employment_days ? 'days after graduation' : 'No data yet'}
                                     </p>
                                 </div>
 
                                 <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
                                     <p className="text-sm font-medium text-purple-800">Willing to Mentor</p>
                                     <p className="text-3xl font-bold text-purple-600 mt-2">
-                                        {analytics.engagement.willing_to_mentor_rate}%
+                                        {analytics.engagement?.willing_to_mentor_rate ?? 0}%
                                     </p>
                                     <p className="text-xs text-purple-600 mt-1">
-                                        {analytics.engagement.willing_to_mentor} alumni ready to help
+                                        {analytics.engagement?.willing_to_mentor ?? 0} alumni ready to help
                                     </p>
                                 </div>
                             </div>
                         </div>
 
                         {/* Top Employers */}
-                        {analytics.employment.top_employers && analytics.employment.top_employers.length > 0 && (
+                        {analytics.employment?.top_employers && analytics.employment.top_employers.length > 0 && (
                             <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
                                 <h3 className="text-lg font-bold text-gray-900 mb-4">Top Employers</h3>
                                 <div className="space-y-3">
@@ -560,7 +560,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                         )}
 
                         {/* Salary Distribution */}
-                        {analytics.compensation.salary_distribution.some(s => s.count > 0) && (
+                        {analytics.compensation?.salary_distribution?.some(s => s.count > 0) && (
                             <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
                                 <h3 className="text-lg font-bold text-gray-900 mb-4">Salary Distribution (Monthly)</h3>
                                 <div className="space-y-2">
@@ -589,7 +589,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                         )}
 
                         {/* Career Fields */}
-                        {analytics.career_fields.distribution && analytics.career_fields.distribution.length > 0 && (
+                        {analytics.career_fields?.distribution && analytics.career_fields.distribution.length > 0 && (
                             <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
                                 <h3 className="text-lg font-bold text-gray-900 mb-4">Career Field Distribution</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -789,7 +789,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className="text-sm text-gray-900 capitalize">
-                                                    {alum.current_employment_status?.replace(/_/g, ' ') || 'Not specified'}
+                                                    {alum.employment_status?.replace(/_/g, ' ') || 'Not specified'}
                                                 </span>
                                             </td>
                                         </tr>

@@ -6,7 +6,6 @@ import {
     Users,
     GraduationCap,
     Building,
-    BookOpen,
     ClipboardList,
     Activity,
     BarChart3,
@@ -44,11 +43,9 @@ export default function Analytics({ auth }: PageProps) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('month');
-
     useEffect(() => {
         fetchSystemStats();
-    }, [timeRange]);
+    }, []);
 
     const fetchSystemStats = async () => {
         try {
@@ -155,17 +152,6 @@ export default function Analytics({ auth }: PageProps) {
                                 Comprehensive overview of system-wide metrics and trends
                             </p>
                         </div>
-                        <div className="flex items-center space-x-2">
-                            <select
-                                value={timeRange}
-                                onChange={(e) => setTimeRange(e.target.value as any)}
-                                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500"
-                            >
-                                <option value="week">Last Week</option>
-                                <option value="month">Last Month</option>
-                                <option value="year">Last Year</option>
-                            </select>
-                        </div>
                     </div>
                 </div>
 
@@ -183,7 +169,7 @@ export default function Analytics({ auth }: PageProps) {
                         </div>
                         <p className="text-sm font-medium text-gray-600">Total Users</p>
                         <p className="text-3xl font-bold text-gray-900 mt-1">{stats.totalUsers.toLocaleString()}</p>
-                        <p className="text-xs text-gray-500 mt-2">+{stats.recentRegistrations} this {timeRange}</p>
+                        <p className="text-xs text-gray-500 mt-2">+{stats.recentRegistrations} this month</p>
                     </div>
 
                     <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
@@ -335,7 +321,7 @@ export default function Analytics({ auth }: PageProps) {
                         <Activity className="h-8 w-8 mb-4 opacity-80" />
                         <p className="text-sm opacity-90">Total Activity</p>
                         <p className="text-3xl font-bold mt-2">2,847</p>
-                        <p className="text-xs opacity-80 mt-2">System actions this {timeRange}</p>
+                        <p className="text-xs opacity-80 mt-2">System actions this month</p>
                     </div>
 
                     <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-6 text-white">

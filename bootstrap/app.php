@@ -5,6 +5,7 @@ use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\AdminMiddleware;
 use App\Http\Middleware\AlumniMiddleware;
 use App\Http\Middleware\SuperAdminMiddleware;
+use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\TrustProxies;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -41,6 +42,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => AdminMiddleware::class,
             'alumni' => AlumniMiddleware::class,
             'super_admin' => SuperAdminMiddleware::class,
+            'permission' => CheckPermission::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

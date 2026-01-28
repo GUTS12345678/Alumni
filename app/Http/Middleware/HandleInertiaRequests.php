@@ -41,6 +41,11 @@ class HandleInertiaRequests extends Middleware
 
         $user = $request->user();
         
+        // Refresh user from database to get latest data
+        if ($user) {
+            $user->refresh();
+        }
+        
         // Load alumni profile if user is alumni
         if ($user && $user->role === 'alumni') {
             $user->load('alumniProfile');

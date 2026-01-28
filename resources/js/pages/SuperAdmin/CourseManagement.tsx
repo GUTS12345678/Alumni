@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import axios from 'axios';

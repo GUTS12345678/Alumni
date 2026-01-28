@@ -507,4 +507,56 @@ class AuthController extends Controller
             ]
         ]);
     }
+
+    /**
+     * Check if email already exists
+     */
+    public function checkEmail(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid email format',
+                'exists' => false
+            ], 422);
+        }
+
+        $exists = User::where('email', $request->email)->exists();
+
+        return response()->json([
+            'success' => true,
+            'exists' => $exists,
+            'message' => $exists ? 'Email already registered' : 'Email available'
+        ]);
+    }
+
+    /**
+     * Check if student ID already exists
+     */
+    public function checkStudentId(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'student_id' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid student ID',
+                'exists' => false
+            ], 422);
+        }
+
+        $exists = AlumniProfile::where('student_id', $request->student_id)->exists();
+
+        return response()->json([
+            'success' => true,
+            'exists' => $exists,
+            'message' => $exists ? 'Student ID already registered' : 'Student ID available'
+        ]);
+    }
 }

@@ -25,7 +25,8 @@ import {
     Building,
     Lock,
     UserCircle,
-    ChevronDown
+    ChevronDown,
+    Palette
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -42,6 +43,7 @@ interface User {
     email: string;
     role: string;
     status: string;
+    profile_picture_path?: string | null;
 }
 
 interface AdminBaseLayoutProps {
@@ -84,6 +86,7 @@ const adminNavigation = [
         section: "Super Admin",
         items: [
             { name: "Departments", href: "/super-admin/departments", icon: Building },
+            { name: "Department Settings", href: "/super-admin/department-settings", icon: Palette },
             { name: "Course Management", href: "/super-admin/courses", icon: BookOpen },
             { name: "Permission Matrix", href: "/super-admin/permissions", icon: Lock },
             { name: "System Metrics", href: "/super-admin/metrics", icon: Server },
@@ -95,8 +98,7 @@ const adminNavigation = [
         section: "System",
         items: [
             { name: "Email Templates", href: "/admin/email-templates", icon: Mail },
-            { name: "Backup & Export", href: "/admin/backup", icon: Download },
-            { name: "2FA Settings", href: "/admin/2fa/settings", icon: Key }
+            { name: "Backup & Export", href: "/admin/backup", icon: Download }
         ]
     }
 ];
@@ -309,8 +311,16 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                         "flex items-center",
                         sidebarCollapsed ? "justify-center" : "space-x-3"
                     )}>
-                        <div className="h-8 w-8 bg-maroon-600 rounded-full flex items-center justify-center flex-shrink-0">
-                            <User className="h-4 w-4 text-white" />
+                        <div className="h-8 w-8 bg-maroon-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                            {currentUser.profile_picture_path ? (
+                                <img
+                                    src={currentUser.profile_picture_path.startsWith('/storage') ? currentUser.profile_picture_path : `/storage/${currentUser.profile_picture_path}`}
+                                    alt="Profile"
+                                    className="w-full h-full object-cover"
+                                />
+                            ) : (
+                                <User className="h-4 w-4 text-white" />
+                            )}
                         </div>
                         {!sidebarCollapsed && (
                             <div className="flex-1 min-w-0">
@@ -402,8 +412,16 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                 {currentUser ? (
                     <>
                         <div className="flex items-center space-x-3 mb-4">
-                            <div className="h-8 w-8 bg-maroon-600 dark:bg-maroon-700 rounded-full flex items-center justify-center flex-shrink-0">
-                                <User className="h-4 w-4 text-white" />
+                            <div className="h-8 w-8 bg-maroon-600 dark:bg-maroon-700 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                {currentUser.profile_picture_path ? (
+                                    <img
+                                        src={currentUser.profile_picture_path.startsWith('/storage') ? currentUser.profile_picture_path : `/storage/${currentUser.profile_picture_path}`}
+                                        alt="Profile"
+                                        className="w-full h-full object-cover"
+                                    />
+                                ) : (
+                                    <User className="h-4 w-4 text-white" />
+                                )}
                             </div>
                             <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
@@ -547,8 +565,16 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button variant="ghost" className="flex items-center space-x-2 hover:bg-beige-50 dark:hover:bg-gray-800">
-                                            <div className="h-8 w-8 bg-maroon-600 dark:bg-maroon-700 rounded-full flex items-center justify-center flex-shrink-0">
-                                                <User className="h-4 w-4 text-white" />
+                                            <div className="h-8 w-8 bg-maroon-600 dark:bg-maroon-700 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                                {currentUser?.profile_picture_path ? (
+                                                    <img
+                                                        src={currentUser.profile_picture_path.startsWith('/storage') ? currentUser.profile_picture_path : `/storage/${currentUser.profile_picture_path}`}
+                                                        alt="Profile"
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <User className="h-4 w-4 text-white" />
+                                                )}
                                             </div>
                                             <span className="hidden sm:block text-sm text-gray-600 dark:text-gray-200 truncate max-w-32 md:max-w-48">
                                                 {currentUser?.email?.split('@')[0] || 'Admin'}
@@ -575,12 +601,6 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                                             <Link href="/admin/profile" className="flex items-center cursor-pointer">
                                                 <UserCircle className="mr-2 h-4 w-4" />
                                                 <span>Profile Settings</span>
-                                            </Link>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem asChild>
-                                            <Link href="/admin/2fa/settings" className="flex items-center cursor-pointer">
-                                                <Shield className="mr-2 h-4 w-4" />
-                                                <span>Security & 2FA</span>
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />

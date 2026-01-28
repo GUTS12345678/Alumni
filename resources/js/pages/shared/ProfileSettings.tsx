@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
 import { Card, CardContent } from '@/components/ui/card';
@@ -22,7 +22,8 @@ import {
     Shield,
     Sun,
     Moon,
-    Monitor
+    Monitor,
+    X
 } from 'lucide-react';
 
 interface PageProps {
@@ -60,6 +61,15 @@ export default function ProfileSettings({ auth }: PageProps) {
     const BaseLayout = isAlumni ? AlumniBaseLayout : AdminBaseLayout;
 
     // Profile Settings
+    // Helper function to get the correct image URL
+    const getImageUrl = (path: string | null | undefined): string | null => {
+        if (!path) return null;
+        // If path already starts with /storage, use it as is
+        if (path.startsWith('/storage')) return path;
+        // Otherwise, prepend /storage/
+        return `/storage/${path}`;
+    };
+
     const [profileData, setProfileData] = useState({
         name: auth.user.name || '',
         email: auth.user.email || '',
@@ -67,8 +77,8 @@ export default function ProfileSettings({ auth }: PageProps) {
         bio: auth.user.bio || '',
         location: auth.user.location || '',
         website: auth.user.website || '',
-        profilePicture: auth.user.profile_picture_path ? `/storage/${auth.user.profile_picture_path}` : null,
-        coverPhoto: auth.user.cover_photo_path ? `/storage/${auth.user.cover_photo_path}` : null,
+        profilePicture: getImageUrl(auth.user.profile_picture_path),
+        coverPhoto: getImageUrl(auth.user.cover_photo_path),
     });
 
     // Social Links
@@ -120,12 +130,22 @@ export default function ProfileSettings({ auth }: PageProps) {
 
             if (response.ok) {
                 const data = await response.json();
+                console.log('Upload response:', data); // Debug log
                 if (data.success) {
+                    // Update local state immediately with the new image URL
+                    const imageUrl = data.data.url;
+                    console.log('Setting image URL:', imageUrl, 'for type:', type); // Debug log
+                    if (type === 'profile_picture') {
+                        setProfileData(prev => ({ ...prev, profilePicture: imageUrl }));
+                    } else {
+                        setProfileData(prev => ({ ...prev, coverPhoto: imageUrl }));
+                    }
+
                     // Show success message
                     alert('Image uploaded successfully!');
 
-                    // Reload the page to show the new image
-                    router.reload({ only: ['auth'] });
+                    // Reload the page to update auth object and all components
+                    window.location.reload();
                 }
             } else {
                 const errorData = await response.json();
@@ -135,6 +155,66 @@ export default function ProfileSettings({ auth }: PageProps) {
         } catch (error) {
             console.error('Upload error:', error);
             alert('Failed to upload image. Please try again.');
+        }
+    };
+
+    const handleDeleteImage = async (type: 'profile_picture' | 'cover_photo') => {
+        if (!confirm(`Are you sure you want to remove this ${type === 'profile_picture' ? 'profile picture' : 'cover photo'}?`)) {
+            return;
+        }
+
+        try {
+            // Get CSRF token from meta tag
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+            // Get auth token from localStorage
+            const authToken = localStorage.getItem('auth_token');
+
+            const headers: HeadersInit = {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Content-Type': 'application/json',
+            };
+
+            if (csrfToken) {
+                headers['X-CSRF-TOKEN'] = csrfToken;
+            }
+
+            if (authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+
+            const response = await fetch('/api/v1/profile/delete-image', {
+                method: 'DELETE',
+                headers: headers,
+                body: JSON.stringify({ type }),
+                credentials: 'include',
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log('Delete response:', data); // Debug log
+                if (data.success) {
+                    // Update local state
+                    if (type === 'profile_picture') {
+                        setProfileData(prev => ({ ...prev, profilePicture: null }));
+                    } else {
+                        setProfileData(prev => ({ ...prev, coverPhoto: null }));
+                    }
+
+                    // Show success message
+                    alert('Image removed successfully!');
+
+                    // Reload the page to update auth object and all components
+                    window.location.reload();
+                }
+            } else {
+                const errorData = await response.json();
+                console.error('Delete failed:', errorData);
+                alert('Failed to remove image: ' + (errorData.message || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Delete error:', error);
+            alert('Failed to remove image. Please try again.');
         }
     };
 
@@ -202,15 +282,33 @@ export default function ProfileSettings({ auth }: PageProps) {
                                     </div>
                                 </div>
                             )}
-                            <label className="absolute bottom-4 right-4 bg-white dark:bg-gray-800 text-gray-900 dark:text-white p-2 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 shadow-lg">
-                                <Camera className="h-5 w-5" />
-                                <input
-                                    type="file"
-                                    className="hidden"
-                                    accept="image/*"
-                                    onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'cover_photo')}
-                                />
-                            </label>
+                            <div className="absolute bottom-4 right-4 flex gap-3 z-20 pointer-events-none">
+                                {profileData.coverPhoto && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleDeleteImage('cover_photo');
+                                        }}
+                                        className="bg-red-600 text-white px-4 py-3 rounded-lg hover:bg-red-700 shadow-lg flex items-center gap-2 font-medium text-sm pointer-events-auto"
+                                        title="Remove cover photo"
+                                    >
+                                        <X className="h-5 w-5 pointer-events-none" />
+                                        <span className="pointer-events-none">Remove</span>
+                                    </button>
+                                )}
+                                <label className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-4 py-3 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 shadow-lg flex items-center gap-2 font-medium text-sm pointer-events-auto">
+                                    <Camera className="h-5 w-5 pointer-events-none" />
+                                    <span className="pointer-events-none">Upload</span>
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        accept="image/*"
+                                        onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'cover_photo')}
+                                    />
+                                </label>
+                            </div>
                         </div>
 
                         {/* Profile Picture */}
@@ -226,15 +324,31 @@ export default function ProfileSettings({ auth }: PageProps) {
                                             </div>
                                         )}
                                     </div>
-                                    <label className="absolute bottom-0 right-0 bg-maroon-600 text-white p-2 rounded-full cursor-pointer hover:bg-maroon-700 shadow-lg">
-                                        <Camera className="h-4 w-4" />
-                                        <input
-                                            type="file"
-                                            className="hidden"
-                                            accept="image/*"
-                                            onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'profile_picture')}
-                                        />
-                                    </label>
+                                    <div className="absolute -bottom-2 -right-2 flex gap-2 z-20 pointer-events-none">
+                                        {profileData.profilePicture && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    handleDeleteImage('profile_picture');
+                                                }}
+                                                className="bg-red-600 text-white p-3 rounded-full hover:bg-red-700 shadow-lg pointer-events-auto"
+                                                title="Remove profile picture"
+                                            >
+                                                <X className="h-5 w-5 pointer-events-none" />
+                                            </button>
+                                        )}
+                                        <label className="bg-maroon-600 text-white p-3 rounded-full cursor-pointer hover:bg-maroon-700 shadow-lg pointer-events-auto block">
+                                            <Camera className="h-5 w-5 pointer-events-none" />
+                                            <input
+                                                type="file"
+                                                className="hidden"
+                                                accept="image/*"
+                                                onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'profile_picture')}
+                                            />
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
                             <div>

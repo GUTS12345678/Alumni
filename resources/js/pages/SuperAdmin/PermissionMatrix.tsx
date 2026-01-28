@@ -1,16 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Head } from '@inertiajs/react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
-import { 
-    Lock, 
-    Shield, 
-    User, 
-    Check, 
+import {
+    Lock,
+    Shield,
+    User,
+    Check,
     X,
     AlertCircle,
     Save,
-    Info
+    Info,
+    Users,
+    Eye,
+    UserPlus,
+    Settings,
+    CheckCircle,
+    XCircle,
+    ChevronDown,
+    ChevronUp
 } from 'lucide-react';
+import axios from 'axios';
 
 interface PageProps {
     auth: {
@@ -25,10 +34,31 @@ interface PageProps {
 }
 
 interface Permission {
-    id: string;
+    id: number;
     name: string;
+    display_name: string;
     description: string;
     category: string;
+    module: string;
+    user_count?: number;
+}
+
+interface Role {
+    id: number;
+    name: string;
+    display_name: string;
+    description: string;
+    is_system_role: boolean;
+    permissions: number[];
+}
+
+interface UserWithPermission {
+    id: number;
+    name: string;
+    email: string;
+    role: string;
+    has_through_role: boolean;
+    has_custom: boolean;
 }
 
 interface RolePermissions {
@@ -36,138 +66,141 @@ interface RolePermissions {
 }
 
 interface PermissionsState {
-    super_admin: RolePermissions;
-    admin: RolePermissions;
-    alumni: RolePermissions;
+    [roleId: number]: RolePermissions;
 }
 
-const permissionCategories = [
-    {
-        category: 'User Management',
-        permissions: [
-            { id: 'users.view', name: 'View Users', description: 'Can view user list and details' },
-            { id: 'users.create', name: 'Create Users', description: 'Can create new users' },
-            { id: 'users.edit', name: 'Edit Users', description: 'Can edit user information' },
-            { id: 'users.delete', name: 'Delete Users', description: 'Can delete users' },
-        ]
-    },
-    {
-        category: 'Alumni Management',
-        permissions: [
-            { id: 'alumni.view', name: 'View Alumni', description: 'Can view alumni profiles' },
-            { id: 'alumni.edit', name: 'Edit Alumni', description: 'Can edit alumni profiles' },
-            { id: 'alumni.approve', name: 'Approve Alumni', description: 'Can approve pending alumni registrations' },
-            { id: 'alumni.export', name: 'Export Alumni Data', description: 'Can export alumni data' },
-        ]
-    },
-    {
-        category: 'Survey Management',
-        permissions: [
-            { id: 'surveys.view', name: 'View Surveys', description: 'Can view all surveys' },
-            { id: 'surveys.create', name: 'Create Surveys', description: 'Can create new surveys' },
-            { id: 'surveys.edit', name: 'Edit Surveys', description: 'Can edit existing surveys' },
-            { id: 'surveys.delete', name: 'Delete Surveys', description: 'Can delete surveys' },
-            { id: 'surveys.publish', name: 'Publish Surveys', description: 'Can publish surveys' },
-            { id: 'surveys.analytics', name: 'View Analytics', description: 'Can view survey analytics' },
-        ]
-    },
-    {
-        category: 'Department & Course Management',
-        permissions: [
-            { id: 'departments.view', name: 'View Departments', description: 'Can view departments' },
-            { id: 'departments.manage', name: 'Manage Departments', description: 'Can create, edit, delete departments' },
-            { id: 'courses.view', name: 'View Courses', description: 'Can view courses' },
-            { id: 'courses.manage', name: 'Manage Courses', description: 'Can create, edit, delete courses' },
-        ]
-    },
-    {
-        category: 'System Administration',
-        permissions: [
-            { id: 'system.settings', name: 'System Settings', description: 'Can modify system settings' },
-            { id: 'system.backup', name: 'Backup & Restore', description: 'Can create and restore backups' },
-            { id: 'system.logs', name: 'View Activity Logs', description: 'Can view system activity logs' },
-            { id: 'system.maintenance', name: 'Maintenance Mode', description: 'Can enable/disable maintenance mode' },
-        ]
-    },
-    {
-        category: 'Permissions & Roles',
-        permissions: [
-            { id: 'roles.view', name: 'View Roles', description: 'Can view roles and permissions' },
-            { id: 'roles.manage', name: 'Manage Roles', description: 'Can create and edit roles' },
-            { id: 'permissions.assign', name: 'Assign Permissions', description: 'Can assign permissions to roles' },
-        ]
-    }
-];
-
 export default function PermissionMatrix({ auth }: PageProps) {
-    // Default permissions for each role
-    const [permissions, setPermissions] = useState<PermissionsState>({
-        super_admin: {
-            // Super Admin has all permissions
-            ...Object.fromEntries(
-                permissionCategories.flatMap(cat => 
-                    cat.permissions.map(p => [p.id, true])
-                )
-            )
-        } as RolePermissions,
-        admin: {
-            // Admin has most permissions except critical system ones
-            'users.view': true,
-            'users.create': true,
-            'users.edit': true,
-            'alumni.view': true,
-            'alumni.edit': true,
-            'alumni.approve': true,
-            'alumni.export': true,
-            'surveys.view': true,
-            'surveys.create': true,
-            'surveys.edit': true,
-            'surveys.delete': true,
-            'surveys.publish': true,
-            'surveys.analytics': true,
-            'departments.view': true,
-            'courses.view': true,
-            'system.logs': true,
-            'roles.view': true,
-        } as RolePermissions,
-        alumni: {
-            // Alumni has minimal permissions
-            'alumni.view': true,
-            'surveys.view': true,
-        } as RolePermissions
-    });
-
+    const [permissions, setPermissions] = useState<Permission[]>([]);
+    const [roles, setRoles] = useState<Role[]>([]);
+    const [rolePermissions, setRolePermissions] = useState<PermissionsState>({});
+    const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [selectedPermission, setSelectedPermission] = useState<Permission | null>(null);
+    const [usersWithPermission, setUsersWithPermission] = useState<UserWithPermission[]>([]);
+    const [showUsersModal, setShowUsersModal] = useState(false);
+    const [loadingUsers, setLoadingUsers] = useState(false);
+    const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+    const [selectedRole, setSelectedRole] = useState<number | null>(null);
 
-    const togglePermission = (role: 'super_admin' | 'admin' | 'alumni', permissionId: string) => {
-        if (role === 'super_admin') {
+    // Group permissions by category
+    const permissionsByCategory = permissions.reduce((acc, permission) => {
+        if (!acc[permission.category]) {
+            acc[permission.category] = [];
+        }
+        acc[permission.category].push(permission);
+        return acc;
+    }, {} as Record<string, Permission[]>);
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    useEffect(() => {
+        if (roles.length > 0 && selectedRole === null) {
+            // Default to first non-super-admin role (admin)
+            const defaultRole = roles.find(r => r.name === 'admin') || roles[0];
+            setSelectedRole(defaultRole.id);
+        }
+    }, [roles]);
+
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+            const [permsRes, rolesRes] = await Promise.all([
+                axios.get('/api/v1/admin/permissions'),
+                axios.get('/api/v1/admin/roles')
+            ]);
+
+            if (permsRes.data.success) {
+                setPermissions(permsRes.data.data);
+            }
+
+            if (rolesRes.data.success) {
+                const rolesData = rolesRes.data.data;
+                setRoles(rolesData);
+
+                // Build role permissions state
+                const state: PermissionsState = {};
+                rolesData.forEach((role: Role) => {
+                    state[role.id] = {};
+                    role.permissions.forEach((permId: number) => {
+                        state[role.id][permId] = true;
+                    });
+                });
+                setRolePermissions(state);
+            }
+        } catch (error) {
+            console.error('Error fetching data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const togglePermission = (roleId: number, permissionId: number) => {
+        const role = roles.find(r => r.id === roleId);
+        if (role?.is_system_role && role.name === 'super_admin') {
             // Super admin permissions cannot be changed
             return;
         }
 
-        setPermissions(prev => ({
+        setRolePermissions(prev => ({
             ...prev,
-            [role]: {
-                ...prev[role],
-                [permissionId]: !(prev[role][permissionId] || false)
+            [roleId]: {
+                ...prev[roleId],
+                [permissionId]: !(prev[roleId]?.[permissionId] || false)
             }
         }));
     };
 
     const handleSave = async () => {
         setSaving(true);
-        
-        // Simulate API call
-        setTimeout(() => {
-            setSaving(false);
+        try {
+            // Save each role's permissions
+            for (const role of roles) {
+                if (role.is_system_role && role.name === 'super_admin') {
+                    continue; // Skip super admin
+                }
+
+                const permissionIds = Object.keys(rolePermissions[role.id] || {})
+                    .filter(permId => rolePermissions[role.id][permId])
+                    .map(Number);
+
+                await axios.put(`/api/v1/admin/roles/${role.id}/permissions`, {
+                    permission_ids: permissionIds
+                });
+            }
+
             setShowSuccess(true);
             setTimeout(() => setShowSuccess(false), 3000);
-        }, 1000);
+            fetchData(); // Refresh data
+        } catch (error) {
+            console.error('Error saving permissions:', error);
+            alert('Failed to save permissions');
+        } finally {
+            setSaving(false);
+        }
     };
 
-    const getRoleColor = (role: string) => {
-        switch (role) {
+    const viewUsersWithPermission = async (permission: Permission) => {
+        setSelectedPermission(permission);
+        setShowUsersModal(true);
+        setLoadingUsers(true);
+
+        try {
+            const response = await axios.get(`/api/v1/admin/permissions/${permission.id}/users`);
+            if (response.data.success) {
+                setUsersWithPermission(response.data.data);
+            }
+        } catch (error) {
+            console.error('Error fetching users:', error);
+        } finally {
+            setLoadingUsers(false);
+        }
+    };
+
+    const getRoleColor = (roleName: string) => {
+        switch (roleName) {
             case 'super_admin':
                 return 'text-red-600 bg-red-100';
             case 'admin':
@@ -175,12 +208,12 @@ export default function PermissionMatrix({ auth }: PageProps) {
             case 'alumni':
                 return 'text-green-600 bg-green-100';
             default:
-                return 'text-gray-600 bg-gray-100';
+                return 'text-purple-600 bg-purple-100';
         }
     };
 
-    const getRoleIcon = (role: string) => {
-        switch (role) {
+    const getRoleIcon = (roleName: string) => {
+        switch (roleName) {
             case 'super_admin':
                 return <Shield className="h-5 w-5" />;
             case 'admin':
@@ -188,167 +221,360 @@ export default function PermissionMatrix({ auth }: PageProps) {
             case 'alumni':
                 return <User className="h-5 w-5" />;
             default:
-                return <User className="h-5 w-5" />;
+                return <Users className="h-5 w-5" />;
         }
     };
+
+    const getPermissionRiskLevel = (permissionName: string): 'low' | 'medium' | 'high' => {
+        const highRisk = ['delete', 'destroy', 'revoke', 'bulk_delete', 'manage', 'impersonate'];
+        const mediumRisk = ['create', 'update', 'edit', 'change', 'send', 'export'];
+
+        const lowerName = permissionName.toLowerCase();
+
+        if (highRisk.some(keyword => lowerName.includes(keyword))) return 'high';
+        if (mediumRisk.some(keyword => lowerName.includes(keyword))) return 'medium';
+        return 'low';
+    };
+
+    const getRiskBadge = (risk: 'low' | 'medium' | 'high') => {
+        const styles = {
+            low: 'bg-blue-100 text-blue-700 border-blue-200',
+            medium: 'bg-amber-100 text-amber-700 border-amber-200',
+            high: 'bg-red-100 text-red-700 border-red-200'
+        };
+        const labels = {
+            low: 'viewing',
+            medium: 'actions',
+            high: 'critical'
+        };
+
+        return (
+            <span className={`px-2 py-0.5 text-xs font-medium rounded border ${styles[risk]}`}>
+                {labels[risk]}
+            </span>
+        );
+    };
+
+    const toggleCategory = (category: string) => {
+        setCollapsedCategories(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(category)) {
+                newSet.delete(category);
+            } else {
+                newSet.add(category);
+            }
+            return newSet;
+        });
+    };
+
+    const getCategoryStats = (categoryPerms: Permission[], roleId: number) => {
+        const total = categoryPerms.length;
+        const enabled = categoryPerms.filter(p => rolePermissions[roleId]?.[p.id]).length;
+        return { enabled, total };
+    };
+
+    if (loading) {
+        return (
+            <AdminBaseLayout title="Permission Matrix" user={auth.user}>
+                <Head title="Permission Matrix" />
+                <div className="flex items-center justify-center h-96">
+                    <div className="text-center">
+                        <div className="h-12 w-12 border-4 border-maroon-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                        <p className="text-gray-600">Loading permissions...</p>
+                    </div>
+                </div>
+            </AdminBaseLayout>
+        );
+    }
 
     return (
         <AdminBaseLayout title="Permission Matrix" user={auth.user}>
             <Head title="Permission Matrix" />
 
-            <div className="space-y-6">
+            <div className="space-y-6 p-6">
                 {/* Header */}
-                <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
+                <div className="bg-gradient-to-r from-maroon-600 to-maroon-700 rounded-xl shadow-lg p-6 text-white">
                     <div className="flex items-start justify-between">
                         <div>
-                            <h1 className="text-2xl font-bold text-gray-900 mb-2">Permission Matrix</h1>
-                            <p className="text-gray-600">
-                                Manage role-based permissions for the system. Control what each user role can access and modify.
+                            <h1 className="text-3xl font-bold mb-2">Permission Matrix</h1>
+                            <p className="text-maroon-100">
+                                Manage role-based permissions for the system. View users with specific permissions and customize access.
                             </p>
                         </div>
                         <button
                             onClick={handleSave}
                             disabled={saving}
-                            className="flex items-center space-x-2 bg-maroon-600 text-white px-6 py-3 rounded-lg hover:bg-maroon-700 transition-colors disabled:opacity-50"
+                            className="flex items-center space-x-2 bg-white text-maroon-600 px-6 py-3 rounded-lg hover:bg-maroon-50 transition-all shadow-lg hover:shadow-xl disabled:opacity-50"
                         >
                             <Save className="h-5 w-5" />
-                            <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                            <span className="font-semibold">{saving ? 'Saving...' : 'Save Changes'}</span>
                         </button>
                     </div>
 
                     {showSuccess && (
-                        <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center space-x-3">
-                            <Check className="h-5 w-5 text-green-600 flex-shrink-0" />
-                            <p className="text-green-800 font-medium">Permissions updated successfully!</p>
+                        <div className="mt-4 p-4 bg-green-500 rounded-lg flex items-center space-x-3 shadow-lg animate-fade-in">
+                            <CheckCircle className="h-5 w-5 flex-shrink-0" />
+                            <p className="font-medium">Permissions updated successfully!</p>
                         </div>
                     )}
                 </div>
 
-                {/* Role Legend */}
-                <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Roles</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="flex items-center space-x-3 p-4 bg-red-50 rounded-lg border border-red-200">
-                            <div className="p-2 bg-red-100 rounded-lg">
-                                <Shield className="h-6 w-6 text-red-600" />
-                            </div>
-                            <div>
-                                <h3 className="font-semibold text-gray-900">Super Admin</h3>
-                                <p className="text-sm text-gray-600">Full system access (locked)</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center space-x-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                            <div className="p-2 bg-blue-100 rounded-lg">
-                                <Lock className="h-6 w-6 text-blue-600" />
-                            </div>
-                            <div>
-                                <h3 className="font-semibold text-gray-900">Admin</h3>
-                                <p className="text-sm text-gray-600">Manage users & content</p>
-                            </div>
-                        </div>
-                        <div className="flex items-center space-x-3 p-4 bg-green-50 rounded-lg border border-green-200">
-                            <div className="p-2 bg-green-100 rounded-lg">
-                                <User className="h-6 w-6 text-green-600" />
-                            </div>
-                            <div>
-                                <h3 className="font-semibold text-gray-900">Alumni</h3>
-                                <p className="text-sm text-gray-600">Limited access</p>
-                            </div>
-                        </div>
+                {/* Role Selector */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Select Role to Configure</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {roles.map(role => {
+                            const isSelected = selectedRole === role.id;
+                            const isLocked = role.is_system_role && role.name === 'super_admin';
+                            const permCount = Object.values(rolePermissions[role.id] || {}).filter(Boolean).length;
+
+                            return (
+                                <button
+                                    key={role.id}
+                                    onClick={() => setSelectedRole(role.id)}
+                                    disabled={isLocked}
+                                    className={`
+                                        relative p-5 rounded-xl border-2 transition-all text-left
+                                        ${isSelected
+                                            ? 'border-maroon-500 bg-maroon-50 shadow-lg scale-105'
+                                            : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
+                                        }
+                                        ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                                    `}
+                                >
+                                    <div className="flex items-start justify-between mb-3">
+                                        <div className={`p-3 rounded-lg ${getRoleColor(role.name)}`}>
+                                            {getRoleIcon(role.name)}
+                                        </div>
+                                        {isSelected && !isLocked && (
+                                            <CheckCircle className="h-6 w-6 text-maroon-600" />
+                                        )}
+                                        {isLocked && (
+                                            <Lock className="h-5 w-5 text-gray-400" />
+                                        )}
+                                    </div>
+                                    <h3 className="font-bold text-gray-900 text-lg mb-1">{role.display_name}</h3>
+                                    <p className="text-sm text-gray-600">
+                                        {isLocked ? 'Full access (locked)' : `${permCount} of ${permissions.length} permissions`}
+                                    </p>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
-                {/* Permission Matrix */}
-                {permissionCategories.map((category) => (
-                    <div key={category.category} className="bg-white rounded-lg shadow-sm border border-beige-200 overflow-hidden">
-                        <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-                            <h3 className="text-lg font-semibold text-gray-900">{category.category}</h3>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/2">
-                                            Permission
-                                        </th>
-                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            <div className="flex items-center justify-center space-x-2">
-                                                <Shield className="h-4 w-4 text-red-600" />
-                                                <span>Super Admin</span>
-                                            </div>
-                                        </th>
-                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            <div className="flex items-center justify-center space-x-2">
-                                                <Lock className="h-4 w-4 text-blue-600" />
-                                                <span>Admin</span>
-                                            </div>
-                                        </th>
-                                        <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            <div className="flex items-center justify-center space-x-2">
-                                                <User className="h-4 w-4 text-green-600" />
-                                                <span>Alumni</span>
-                                            </div>
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {category.permissions.map((permission) => (
-                                        <tr key={permission.id} className="hover:bg-gray-50">
-                                            <td className="px-6 py-4">
-                                                <div>
-                                                    <p className="text-sm font-medium text-gray-900">{permission.name}</p>
-                                                    <p className="text-sm text-gray-500">{permission.description}</p>
-                                                </div>
-                                            </td>
-                                            {['super_admin', 'admin', 'alumni'].map((role) => {
-                                                const hasPermission = permissions[role as keyof typeof permissions][permission.id] || false;
-                                                const isLocked = role === 'super_admin';
+                {/* Permission Categories */}
+                {selectedRole !== null && (
+                    <div className="space-y-4">
+                        {Object.entries(permissionsByCategory).map(([category, perms]) => {
+                            const isCollapsed = collapsedCategories.has(category);
+                            const stats = getCategoryStats(perms, selectedRole);
+                            const selectedRoleObj = roles.find(r => r.id === selectedRole);
+                            const isLocked = selectedRoleObj?.is_system_role && selectedRoleObj.name === 'super_admin';
 
-                                                return (
-                                                    <td key={role} className="px-6 py-4 text-center">
-                                                        <button
-                                                            onClick={() => !isLocked && togglePermission(role as any, permission.id)}
-                                                            disabled={isLocked}
-                                                            className={`inline-flex items-center justify-center w-10 h-10 rounded-lg transition-colors ${
-                                                                hasPermission
-                                                                    ? 'bg-green-100 text-green-600 hover:bg-green-200'
-                                                                    : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                                                            } ${isLocked ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                                                            title={isLocked ? 'Super Admin permissions cannot be changed' : hasPermission ? 'Click to revoke' : 'Click to grant'}
+                            return (
+                                <div key={category} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                                    {/* Category Header */}
+                                    <button
+                                        onClick={() => toggleCategory(category)}
+                                        className="w-full px-6 py-4 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <Lock className="h-5 w-5 text-gray-600" />
+                                            <h3 className="text-lg font-bold text-gray-900">{category}</h3>
+                                            <span className="text-sm text-gray-500">
+                                                {stats.enabled} of {stats.total} enabled
+                                            </span>
+                                        </div>
+                                        {isCollapsed ? (
+                                            <ChevronDown className="h-5 w-5 text-gray-400" />
+                                        ) : (
+                                            <ChevronUp className="h-5 w-5 text-gray-400" />
+                                        )}
+                                    </button>
+
+                                    {/* Permissions Grid */}
+                                    {!isCollapsed && (
+                                        <div className="p-6">
+                                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                                {perms.map((permission) => {
+                                                    const hasPermission = rolePermissions[selectedRole]?.[permission.id] || false;
+                                                    const riskLevel = getPermissionRiskLevel(permission.name);
+
+                                                    return (
+                                                        <div
+                                                            key={permission.id}
+                                                            className={`
+                                                                relative p-5 rounded-xl border-2 transition-all
+                                                                ${hasPermission
+                                                                    ? 'border-green-300 bg-green-50/50'
+                                                                    : 'border-gray-200 bg-white'
+                                                                }
+                                                                hover:shadow-md
+                                                            `}
                                                         >
-                                                            {hasPermission ? (
-                                                                <Check className="h-6 w-6" />
-                                                            ) : (
-                                                                <X className="h-6 w-6" />
-                                                            )}
-                                                        </button>
-                                                    </td>
-                                                );
-                                            })}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                                            <div className="flex items-start justify-between mb-3">
+                                                                <div className="flex-1">
+                                                                    <div className="flex items-center gap-2 mb-2">
+                                                                        <h4 className="font-semibold text-gray-900">
+                                                                            {permission.display_name}
+                                                                        </h4>
+                                                                        {hasPermission && (
+                                                                            <CheckCircle className="h-4 w-4 text-green-600" />
+                                                                        )}
+                                                                    </div>
+                                                                    <p className="text-sm text-gray-600 mb-3">
+                                                                        {permission.description}
+                                                                    </p>
+                                                                    <div className="flex items-center gap-2">
+                                                                        {getRiskBadge(riskLevel)}
+                                                                        <span className="text-xs text-gray-500">
+                                                                            {permission.name}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Toggle Switch */}
+                                                                <div className="ml-4 flex flex-col items-end gap-2">
+                                                                    <button
+                                                                        onClick={() => !isLocked && togglePermission(selectedRole, permission.id)}
+                                                                        disabled={isLocked}
+                                                                        className={`
+                                                                            relative inline-flex h-8 w-14 items-center rounded-full transition-colors
+                                                                            ${isLocked ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
+                                                                            ${hasPermission ? 'bg-blue-600' : 'bg-gray-300'}
+                                                                        `}
+                                                                    >
+                                                                        <span
+                                                                            className={`
+                                                                                inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform
+                                                                                ${hasPermission ? 'translate-x-7' : 'translate-x-1'}
+                                                                            `}
+                                                                        />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => viewUsersWithPermission(permission)}
+                                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 rounded-full text-blue-700 transition-colors font-medium"
+                                                                    >
+                                                                        <Users className="h-3.5 w-3.5" />
+                                                                        <span>View Users</span>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
-                ))}
+                )}
 
                 {/* Info Box */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6 shadow-sm">
                     <div className="flex items-start space-x-3">
                         <Info className="h-6 w-6 text-blue-600 mt-0.5 flex-shrink-0" />
                         <div>
                             <h3 className="font-semibold text-blue-900 mb-2">Important Notes</h3>
                             <ul className="space-y-1 text-sm text-blue-800">
-                                <li>• Super Admin permissions are locked and cannot be modified for security reasons</li>
-                                <li>• Changes to permissions will affect all users with the respective roles</li>
-                                <li>• Be cautious when modifying Admin permissions as it may affect system operations</li>
-                                <li>• Alumni role should have minimal permissions for security best practices</li>
+                                <li>• Super Admin permissions are locked and cannot be modified</li>
+                                <li>• Click "View Users" to see which users have a specific permission</li>
+                                <li>• Changes affect all users with the respective role</li>
+                                <li>• Individual user permissions can override role permissions</li>
+                                <li>• Color-coded risk levels: <span className="font-semibold">Blue (viewing)</span>, <span className="font-semibold">Amber (actions)</span>, <span className="font-semibold">Red (critical)</span></li>
                             </ul>
                         </div>
                     </div>
                 </div>
             </div>
+
+            {/* Users with Permission Modal */}
+            {showUsersModal && selectedPermission && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden border border-gray-200">
+                        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-xl font-bold text-gray-900">
+                                        Users with "{selectedPermission.display_name}"
+                                    </h3>
+                                    <p className="text-sm text-gray-600 mt-1">
+                                        {selectedPermission.description}
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setShowUsersModal(false)}
+                                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                                >
+                                    <X className="h-7 w-7" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto max-h-[calc(85vh-180px)]">
+                            {loadingUsers ? (
+                                <div className="flex items-center justify-center py-16">
+                                    <div className="text-center">
+                                        <div className="h-10 w-10 border-4 border-maroon-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                                        <p className="text-gray-600">Loading users...</p>
+                                    </div>
+                                </div>
+                            ) : usersWithPermission.length === 0 ? (
+                                <div className="text-center py-16 text-gray-500">
+                                    <Users className="h-16 w-16 mx-auto mb-4 text-gray-400" />
+                                    <p className="text-lg font-medium">No users have this permission</p>
+                                    <p className="text-sm mt-1">Assign this permission to a role or user to grant access</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {usersWithPermission.map((user) => (
+                                        <div key={user.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors border border-gray-200">
+                                            <div className="flex items-center gap-4">
+                                                <div className="h-12 w-12 bg-gradient-to-br from-maroon-600 to-maroon-700 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md">
+                                                    {(user.name || user.email || 'U').charAt(0).toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <p className="font-semibold text-gray-900">{user.name || 'No Name'}</p>
+                                                    <p className="text-sm text-gray-600">{user.email}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {user.role_name && (
+                                                    <span className={`px-3 py-1 text-xs font-medium rounded-full ${getRoleColor(user.role_name)}`}>
+                                                        {user.role_display_name}
+                                                    </span>
+                                                )}
+                                                {user.access_source === 'custom_grant' && (
+                                                    <span className="px-3 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-700 border border-purple-300">
+                                                        Custom
+                                                    </span>
+                                                )}
+                                                {user.access_source === 'custom_deny' && (
+                                                    <span className="px-3 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700 border border-red-300">
+                                                        Denied
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-6 border-t border-gray-200 bg-gradient-to-b from-gray-50 to-white">
+                            <button
+                                onClick={() => setShowUsersModal(false)}
+                                className="w-full px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AdminBaseLayout>
     );
 }

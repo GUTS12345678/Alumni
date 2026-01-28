@@ -158,10 +158,27 @@ class DepartmentController extends Controller
             'code' => ['required', 'string', 'max:50', Rule::unique('departments')->ignore($id)],
             'description' => 'nullable|string',
             'status' => 'required|in:active,inactive',
+            'logo_path' => 'nullable|string',
+            'background_image_path' => 'nullable|string',
+            'primary_color' => 'nullable|string|max:7',
+            'secondary_color' => 'nullable|string|max:7',
+            'custom_css' => 'nullable|string',
         ]);
 
         $oldData = $department->toArray();
-        $department->update($validated);
+        
+        // Handle null values for image paths (for deletion)
+        // Explicitly set null values before updating to ensure they persist
+        if ($request->has('logo_path') && is_null($request->logo_path)) {
+            $department->logo_path = null;
+        }
+        if ($request->has('background_image_path') && is_null($request->background_image_path)) {
+            $department->background_image_path = null;
+        }
+        
+        // Update other fields
+        $department->fill($validated);
+        $department->save();
 
         // Log activity
         ActivityLog::logActivity(
@@ -302,7 +319,7 @@ class DepartmentController extends Controller
                         'code' => $profile->course->code,
                     ] : null,
                     'graduation_year' => $profile->graduation_year,
-                    'current_employment_status' => $profile->current_employment_status,
+                    'employment_status' => $profile->employment_status,
                 ];
             });
 
@@ -313,23 +330,276 @@ class DepartmentController extends Controller
     }
 
     /**
-     * Get comprehensive analytics for a department
+     * Get comprehensive department analytics
      */
     public function getAnalytics($id)
     {
         try {
-            $department = Department::findOrFail($id);
+            $department = Department::withCount(['courses', 'alumniProfiles'])->findOrFail($id);
             
+            // Get comprehensive analytics from Department model
             $analytics = $department->getComprehensiveAnalytics();
-
+            
+            // Add additional quick metrics
+            $totalAlumni = $department->alumni_profiles_count;
+            $totalCourses = $department->courses_count;
+            
+            // Calculate survey statistics (if surveys exist)
+            $surveyStats = $this->calculateSurveyStats($department);
+            
+            // Calculate activity metrics
+            $activityStats = $this->calculateActivityStats($department);
+            
+            // Calculate growth trends
+            $growthStats = $this->calculateGrowthStats($department);
+            
             return response()->json([
                 'success' => true,
-                'data' => $analytics
+                'data' => [
+                    'department_id' => $department->id,
+                    'basic' => [
+                        'total_courses' => $totalCourses,
+                        'total_alumni' => $totalAlumni,
+                    ],
+                    'employment' => [
+                        'total_employed' => $analytics['employment']['status_breakdown'],
+                        'employment_rate' => $analytics['employment']['employment_rate'],
+                        'avg_time_to_employment' => $analytics['employment']['avg_time_to_employment_days'],
+                    ],
+                    'surveys' => $surveyStats,
+                    'activity' => $activityStats,
+                    'growth' => $growthStats,
+                    'comprehensive' => $analytics, // Full analytics for detailed view
+                ]
             ]);
+            
         } catch (\Exception $e) {
+            \Log::error('Department analytics error', [
+                'department_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch analytics: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Calculate survey statistics for department
+     */
+    private function calculateSurveyStats($department)
+    {
+        $totalAlumni = $department->alumniProfiles()->count();
+        
+        if ($totalAlumni === 0) {
+            return [
+                'total_sent' => 0,
+                'total_completed' => 0,
+                'response_rate' => 0,
+                'last_participation' => null,
+            ];
+        }
+        
+        // Get survey responses from alumni in this department
+        $responses = \DB::table('survey_responses')
+            ->join('alumni_profiles', 'survey_responses.user_id', '=', 'alumni_profiles.user_id')
+            ->where('alumni_profiles.department_id', $department->id)
+            ->select('survey_responses.*')
+            ->get();
+        
+        $completedCount = $responses->where('status', 'completed')->count();
+        $lastParticipation = $responses->max('updated_at');
+        
+        return [
+            'total_sent' => $totalAlumni,
+            'total_completed' => $completedCount,
+            'response_rate' => $totalAlumni > 0 ? round(($completedCount / $totalAlumni) * 100, 2) : 0,
+            'last_participation' => $lastParticipation,
+        ];
+    }
+    
+    /**
+     * Calculate activity statistics
+     */
+    private function calculateActivityStats($department)
+    {
+        $totalAlumni = $department->alumniProfiles()->count();
+        
+        if ($totalAlumni === 0) {
+            return [
+                'active_alumni' => 0,
+                'active_percentage' => 0,
+                'recent_logins_30d' => 0,
+                'profile_completion_avg' => 0,
+            ];
+        }
+        
+        // Calculate active alumni (logged in within last 90 days)
+        $activeAlumni = \DB::table('users')
+            ->join('alumni_profiles', 'users.id', '=', 'alumni_profiles.user_id')
+            ->where('alumni_profiles.department_id', $department->id)
+            ->where('users.last_login_at', '>=', now()->subDays(90))
+            ->count();
+        
+        // Recent logins (last 30 days)
+        $recentLogins = \DB::table('users')
+            ->join('alumni_profiles', 'users.id', '=', 'alumni_profiles.user_id')
+            ->where('alumni_profiles.department_id', $department->id)
+            ->where('users.last_login_at', '>=', now()->subDays(30))
+            ->count();
+        
+        // Profile completion average (based on filled fields)
+        $profiles = $department->alumniProfiles()->get();
+        $completionSum = 0;
+        
+        foreach ($profiles as $profile) {
+            $fields = [
+                'phone', 'address', 'city', 'province', 'current_employer',
+                'job_title', 'employment_status', 'salary_range', 'career_field'
+            ];
+            $filledFields = 0;
+            foreach ($fields as $field) {
+                if (!empty($profile->$field)) {
+                    $filledFields++;
+                }
+            }
+            $completionSum += ($filledFields / count($fields)) * 100;
+        }
+        
+        $avgCompletion = $totalAlumni > 0 ? round($completionSum / $totalAlumni, 1) : 0;
+        
+        return [
+            'active_alumni' => $activeAlumni,
+            'active_percentage' => round(($activeAlumni / $totalAlumni) * 100, 2),
+            'recent_logins_30d' => $recentLogins,
+            'profile_completion_avg' => $avgCompletion,
+        ];
+    }
+    
+    /**
+     * Calculate growth statistics
+     */
+    private function calculateGrowthStats($department)
+    {
+        // New alumni in last 6 months
+        $newAlumni = $department->alumniProfiles()
+            ->where('created_at', '>=', now()->subMonths(6))
+            ->count();
+        
+        // Graduation year distribution (last 5 years)
+        $graduationYears = $department->alumniProfiles()
+            ->selectRaw('YEAR(graduation_date) as year, COUNT(*) as count')
+            ->whereNotNull('graduation_date')
+            ->where('graduation_date', '>=', now()->subYears(5))
+            ->groupBy('year')
+            ->orderBy('year', 'desc')
+            ->get()
+            ->map(function($item) {
+                return [
+                    'year' => $item->year,
+                    'count' => $item->count
+                ];
+            })
+            ->toArray();
+        
+        // Total unique graduation years (batches)
+        $totalBatches = $department->alumniProfiles()
+            ->selectRaw('COUNT(DISTINCT YEAR(graduation_date)) as total')
+            ->whereNotNull('graduation_date')
+            ->value('total') ?? 0;
+        
+        return [
+            'new_alumni_6m' => $newAlumni,
+            'graduation_years' => $graduationYears,
+            'total_batches' => $totalBatches,
+        ];
+    }
+
+    /**
+     * Upload department image (logo or background)
+     */
+    public function uploadImage(Request $request)
+    {
+        try {
+            $request->validate([
+                'file' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:5120', // 5MB max
+                'type' => 'required|in:logo,background',
+                'department_id' => 'required|exists:departments,id'
+            ]);
+
+            $department = Department::findOrFail($request->department_id);
+            $type = $request->type;
+
+            if ($request->hasFile('file')) {
+                $file = $request->file('file');
+                
+                // Generate unique filename
+                $filename = time() . '_' . $type . '_' . $department->id . '.' . $file->getClientOriginalExtension();
+                
+                // Store in public/storage/departments/{id}/{type}
+                $path = $file->storeAs(
+                    "departments/{$department->id}/{$type}",
+                    $filename,
+                    'public'
+                );
+
+                // Delete old file if exists
+                if ($type === 'logo' && $department->logo_path) {
+                    \Storage::disk('public')->delete($department->logo_path);
+                } elseif ($type === 'background' && $department->background_image_path) {
+                    \Storage::disk('public')->delete($department->background_image_path);
+                }
+
+                // Update department record
+                if ($type === 'logo') {
+                    $department->logo_path = $path;
+                } else {
+                    $department->background_image_path = $path;
+                }
+                $department->save();
+
+                // Log activity
+                ActivityLog::create([
+                    'user_id' => auth()->id(),
+                    'action' => 'department_image_upload',
+                    'description' => "Uploaded {$type} image for department: {$department->name}",
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => ucfirst($type) . ' uploaded successfully',
+                    'data' => [
+                        'url' => '/storage/' . $path,
+                        'path' => $path
+                    ]
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'No file uploaded'
+            ], 400);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('Department image upload error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to upload image: ' . $e->getMessage()
             ], 500);
         }
     }

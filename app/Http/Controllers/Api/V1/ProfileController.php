@@ -97,51 +97,82 @@ class ProfileController extends Controller
      */
     public function uploadImage(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'file' => 'required|image|mimes:jpeg,png,jpg|max:10240', // 10MB max
-            'type' => 'required|in:profile_picture,cover_photo'
-        ]);
+        try {
+            $validator = Validator::make($request->all(), [
+                'file' => 'required|image|mimes:jpeg,png,jpg|max:10240', // 10MB max
+                'type' => 'required|in:profile_picture,cover_photo'
+            ]);
 
-        if ($validator->fails()) {
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $user = Auth::user();
+            
+            if (!$user) {
+                \Log::error('No authenticated user found for image upload');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
+            
+            // Log for debugging
+            \Log::info('Upload image for user', ['user_id' => $user->id, 'type' => $request->input('type')]);
+            
+            $file = $request->file('file');
+            $type = $request->input('type');
+            
+            // Delete old image if exists
+            $column = $type . '_path';
+            if ($user->$column) {
+                if (Storage::disk('public')->exists($user->$column)) {
+                    Storage::disk('public')->delete($user->$column);
+                }
+            }
+            
+            // Generate unique filename
+            $filename = $user->id . '_' . $type . '_' . time() . '.' . $file->getClientOriginalExtension();
+            
+            // Store in public storage
+            $path = $file->storeAs('profile_images', $filename, 'public');
+            
+            \Log::info('Image stored at path', ['path' => $path]);
+            
+            // Update user record
+            $updateResult = $user->update([$column => $path]);
+            
+            \Log::info('User update result', ['success' => $updateResult, 'column' => $column, 'path' => $path]);
+            
+            // Refresh user from database to confirm update
+            $user->refresh();
+            
+            // Log the updated value
+            \Log::info('Updated user image path', ['user_id' => $user->id, 'column' => $column, 'value' => $user->$column]);
+            
+            // Get full URL
+            $url = Storage::url($path);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Image uploaded successfully',
+                'data' => [
+                    'path' => $path,
+                    'url' => $url,
+                    'user_id' => $user->id, // Add for debugging
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Image upload failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return response()->json([
                 'success' => false,
-                'message' => 'Validation error',
-                'errors' => $validator->errors()
-            ], 422);
+                'message' => 'Upload failed: ' . $e->getMessage()
+            ], 500);
         }
-
-        $user = Auth::user();
-        $file = $request->file('file');
-        $type = $request->input('type');
-        
-        // Delete old image if exists
-        $column = $type . '_path';
-        if ($user->$column) {
-            if (Storage::disk('public')->exists($user->$column)) {
-                Storage::disk('public')->delete($user->$column);
-            }
-        }
-        
-        // Generate unique filename
-        $filename = $user->id . '_' . $type . '_' . time() . '.' . $file->getClientOriginalExtension();
-        
-        // Store in public storage
-        $path = $file->storeAs('profile_images', $filename, 'public');
-        
-        // Update user record
-        $user->update([$column => $path]);
-        
-        // Get full URL
-        $url = Storage::url($path);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Image uploaded successfully',
-            'data' => [
-                'path' => $path,
-                'url' => $url
-            ]
-        ]);
     }
 
     /**

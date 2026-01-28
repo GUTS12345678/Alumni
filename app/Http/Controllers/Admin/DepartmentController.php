@@ -603,5 +603,104 @@ class DepartmentController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Export department analytics to CSV
+     */
+    public function exportAnalytics($id)
+    {
+        try {
+            $department = Department::withCount(['courses', 'alumniProfiles'])->findOrFail($id);
+
+            // Get comprehensive analytics
+            $analytics = $department->getComprehensiveAnalytics();
+
+            // Prepare CSV data
+            $csvData = "Department Analytics Report\n";
+            $csvData .= "Generated on:," . date('Y-m-d H:i:s') . "\n";
+            $csvData .= "Department:," . $department->name . " (" . $department->code . ")\n";
+            $csvData .= "\n";
+
+            // Basic Information
+            $csvData .= "Basic Information\n";
+            $csvData .= "Total Courses:," . $department->courses_count . "\n";
+            $csvData .= "Total Alumni:," . $department->alumni_profiles_count . "\n";
+            $csvData .= "\n";
+
+            // Employment Statistics
+            $csvData .= "Employment Statistics\n";
+            $csvData .= "Employment Rate:," . round($analytics['employment']['employment_rate'], 1) . "%\n";
+            $csvData .= "Average Time to Employment (Days):," . ($analytics['employment']['avg_time_to_employment_days'] ?? 'N/A') . "\n";
+            $csvData .= "\n";
+
+            // Employment Status Breakdown
+            $csvData .= "Employment Status Breakdown\n";
+            $csvData .= "Status,Count,Percentage\n";
+            foreach ($analytics['employment']['status_breakdown'] as $status => $count) {
+                $percentage = $department->alumni_profiles_count > 0 ? round(($count / $department->alumni_profiles_count) * 100, 1) : 0;
+                $csvData .= ucfirst(str_replace('_', ' ', $status)) . ",$count,{$percentage}%\n";
+            }
+            $csvData .= "\n";
+
+            // Top Employers
+            if (!empty($analytics['employment']['top_employers'])) {
+                $csvData .= "Top Employers\n";
+                $csvData .= "Employer,Count\n";
+                foreach ($analytics['employment']['top_employers'] as $employer) {
+                    $csvData .= "\"{$employer['name']}\",{$employer['count']}\n";
+                }
+                $csvData .= "\n";
+            }
+
+            // Career Fields Distribution
+            if (!empty($analytics['career_fields']['distribution'])) {
+                $csvData .= "Career Fields Distribution\n";
+                $csvData .= "Field,Count,Percentage\n";
+                foreach ($analytics['career_fields']['distribution'] as $field) {
+                    $csvData .= "\"{$field['field']}\",{$field['count']},{$field['percentage']}%\n";
+                }
+                $csvData .= "\n";
+            }
+
+            // Salary Distribution
+            if (!empty($analytics['compensation']['salary_distribution'])) {
+                $csvData .= "Salary Distribution\n";
+                $csvData .= "Range,Count\n";
+                foreach ($analytics['compensation']['salary_distribution'] as $range) {
+                    $csvData .= "\"{$range['range']}\",{$range['count']}\n";
+                }
+                $csvData .= "\n";
+            }
+
+            // Survey Participation
+            $csvData .= "Survey Participation\n";
+            $csvData .= "Total Surveys Sent:," . ($analytics['surveys']['total_sent'] ?? 0) . "\n";
+            $csvData .= "Total Surveys Completed:," . ($analytics['surveys']['total_completed'] ?? 0) . "\n";
+            $csvData .= "Completion Rate:," . round($analytics['surveys']['completion_rate'] ?? 0, 1) . "%\n";
+            $csvData .= "\n";
+
+            // Alumni Engagement
+            $csvData .= "Alumni Engagement\n";
+            $csvData .= "Willing to Mentor:," . ($analytics['engagement']['willing_to_mentor'] ?? 0) . "\n";
+            $csvData .= "Mentor Rate:," . round($analytics['engagement']['willing_to_mentor_rate'] ?? 0, 1) . "%\n";
+
+            return response($csvData, 200, [
+                'Content-Type' => 'text/csv',
+                'Content-Disposition' => 'attachment; filename="department_analytics_' . $department->code . '_' . date('Y-m-d_H-i-s') . '.csv"',
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Department analytics export error', [
+                'department_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => 'false',
+                'message' => 'Failed to export department analytics'
+            ], 500);
+        }
+    }
 }
 

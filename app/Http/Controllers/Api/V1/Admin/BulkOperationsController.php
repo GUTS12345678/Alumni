@@ -336,7 +336,7 @@ class BulkOperationsController extends Controller
      */
     private function exportAlumni($file, array $ids)
     {
-        fputcsv($file, ['ID', 'First Name', 'Last Name', 'Email', 'Department', 'Course', 'Batch', 'Employment Status', 'Created At']);
+        fputcsv($file, ['ID', 'First Name', 'Last Name', 'Email', 'Department', 'Course', 'Batch', 'Employment Status', 'Current Job Title', 'Current Employer', 'Job Related to Degree', 'Job Mismatch Reason', 'Job Satisfaction', 'Created At']);
 
         $query = AlumniProfile::with(['department', 'course', 'batch']);
         
@@ -355,6 +355,11 @@ class BulkOperationsController extends Controller
                     $alum->course->name ?? 'N/A',
                     $alum->batch->name ?? 'N/A',
                     $alum->employment_status ?? 'N/A',
+                    $alum->current_job_title ?? 'N/A',
+                    $alum->current_employer ?? 'N/A',
+                    $alum->job_related_to_degree ? 'Yes' : 'No',
+                    $alum->job_mismatch_reason ?? 'N/A',
+                    $alum->job_satisfaction ?? 'N/A',
                     $alum->created_at->format('Y-m-d H:i:s')
                 ]);
             }

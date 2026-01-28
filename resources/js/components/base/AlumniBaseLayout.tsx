@@ -21,6 +21,7 @@ import {
     GraduationCap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 
 interface UserData {
     id: number;
@@ -77,10 +78,43 @@ const alumniNavigation = [
 export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: AlumniBaseLayoutProps) {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [appearanceSettings, setAppearanceSettings] = useState<{
+        logoLight: string | null;
+        logoDark: string | null;
+    }>({ logoLight: null, logoDark: null });
 
     // Get user from Inertia's shared props
     const { auth } = usePage<{ auth: { user: UserData } }>().props;
     const currentUser = auth?.user;
+
+    // Fetch appearance settings
+    useEffect(() => {
+        const fetchAppearanceSettings = async () => {
+            try {
+                const response = await fetch('/api/v1/admin/appearance', {
+                    credentials: 'include',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.data) {
+                        setAppearanceSettings({
+                            logoLight: data.data.logo_light_path,
+                            logoDark: data.data.logo_dark_path,
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch appearance settings:', error);
+            }
+        };
+
+        fetchAppearanceSettings();
+    }, []);
 
     const handleLogout = () => {
         // Create and submit a form (logout is CSRF-exempt)
@@ -102,11 +136,29 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                 "flex items-center px-6 py-4 border-b border-beige-200 flex-shrink-0",
                 sidebarCollapsed && "px-4"
             )}>
-                <GraduationCap className="h-8 w-8 text-maroon-600 flex-shrink-0" />
-                {!sidebarCollapsed && (
-                    <div className="ml-3">
-                        <h1 className="text-lg font-bold text-maroon-800">Alumni Tracer</h1>
-                        <p className="text-xs text-maroon-600">Alumni Portal</p>
+                {appearanceSettings.logoLight || appearanceSettings.logoDark ? (
+                    <div className="flex items-center">
+                        <img
+                            src={`/storage/${document.documentElement.classList.contains('dark') && appearanceSettings.logoDark ? appearanceSettings.logoDark : appearanceSettings.logoLight || appearanceSettings.logoDark}`}
+                            alt="Logo"
+                            className="h-8 w-8 object-contain flex-shrink-0"
+                        />
+                        {!sidebarCollapsed && (
+                            <div className="ml-3">
+                                <h1 className="text-lg font-bold text-maroon-800">Alumni Tracer</h1>
+                                <p className="text-xs text-maroon-600">Alumni Portal</p>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="flex items-center">
+                        <GraduationCap className="h-8 w-8 text-maroon-600 flex-shrink-0" />
+                        {!sidebarCollapsed && (
+                            <div className="ml-3">
+                                <h1 className="text-lg font-bold text-maroon-800">Alumni Tracer</h1>
+                                <p className="text-xs text-maroon-600">Alumni Portal</p>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -263,6 +315,7 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                                 <span className="hidden sm:block text-sm text-gray-600">
                                     Welcome, {currentUser?.alumniProfile?.first_name || currentUser?.email?.split('@')[0] || 'Alumni'}
                                 </span>
+                                <AppearanceToggleDropdown />
                             </div>
                         </div>
                     </header>

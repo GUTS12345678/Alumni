@@ -35,6 +35,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/departments/{id}/courses', [\App\Http\Controllers\Admin\DepartmentController::class, 'getCourses']);
         Route::get('/departments/{id}/alumni', [\App\Http\Controllers\Admin\DepartmentController::class, 'getAlumni']);
         Route::get('/departments/{id}/analytics', [\App\Http\Controllers\Admin\DepartmentController::class, 'getAnalytics']);
+        Route::get('/departments/{id}/analytics/export', [\App\Http\Controllers\Admin\DepartmentController::class, 'exportAnalytics']);
         Route::post('/departments/upload-image', [\App\Http\Controllers\Admin\DepartmentController::class, 'uploadImage']);
     });
 
@@ -86,8 +87,13 @@ Route::prefix('v1/profile')->middleware(['auth:sanctum,web'])->group(function ()
     Route::post('/password', [\App\Http\Controllers\Api\V1\ProfileController::class, 'updatePassword']);
 });
 
+// Public routes (no authentication required)
+Route::prefix('v1/public')->group(function () {
+    Route::get('/appearance', [\App\Http\Controllers\Api\V1\Admin\AppearanceController::class, 'index']);
+});
+
 // Admin-only routes (authentication + admin role required)
-Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
+Route::prefix('v1/admin')->middleware(['auth', 'admin'])->group(function () {
     // Dashboard
     Route::get('/dashboard', [AdminController::class, 'dashboard']);
 

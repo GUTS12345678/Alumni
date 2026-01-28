@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\View;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 
 class HandleAppearance
@@ -16,7 +17,12 @@ class HandleAppearance
      */
     public function handle(Request $request, Closure $next): Response
     {
+        // Share theme preference
         View::share('appearance', $request->cookie('appearance') ?? 'system');
+        
+        // Share full appearance settings for logos and favicon
+        $appearanceSettings = DB::table('system_appearance_settings')->first();
+        View::share('appearanceSettings', $appearanceSettings);
 
         return $next($request);
     }

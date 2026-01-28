@@ -14,6 +14,7 @@ import {
     Award
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 
 interface LandingPageProps {
     stats?: {
@@ -27,12 +28,44 @@ interface LandingPageProps {
 export default function LandingPage({ stats }: LandingPageProps) {
     const [scrollY, setScrollY] = useState(0);
     const [isVisible, setIsVisible] = useState(false);
+    const [appearanceSettings, setAppearanceSettings] = useState<{
+        logoLight: string | null;
+        logoDark: string | null;
+    }>({ logoLight: null, logoDark: null });
 
     useEffect(() => {
         const handleScroll = () => setScrollY(window.scrollY);
         window.addEventListener('scroll', handleScroll);
         setIsVisible(true);
         return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    // Fetch appearance settings
+    useEffect(() => {
+        const fetchAppearanceSettings = async () => {
+            try {
+                const response = await fetch('/api/v1/public/appearance', {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.data) {
+                        setAppearanceSettings({
+                            logoLight: data.data.logo_light_path,
+                            logoDark: data.data.logo_dark_path,
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch appearance settings:', error);
+            }
+        };
+
+        fetchAppearanceSettings();
     }, []);
 
     const features = [
@@ -97,9 +130,17 @@ export default function LandingPage({ stats }: LandingPageProps) {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-20">
                         <div className="flex items-center space-x-3">
-                            <div className="w-12 h-12 bg-gradient-to-br from-maroon-600 to-maroon-700 rounded-xl flex items-center justify-center transform hover:rotate-12 transition-transform">
-                                <GraduationCap className="w-7 h-7 text-white" />
-                            </div>
+                            {appearanceSettings.logoLight || appearanceSettings.logoDark ? (
+                                <img
+                                    src={`/storage/${appearanceSettings.logoLight || appearanceSettings.logoDark}`}
+                                    alt="Alumni Tracer Logo"
+                                    className="w-12 h-12 object-contain rounded-xl transform hover:rotate-12 transition-transform"
+                                />
+                            ) : (
+                                <div className="w-12 h-12 bg-gradient-to-br from-maroon-600 to-maroon-700 rounded-xl flex items-center justify-center transform hover:rotate-12 transition-transform">
+                                    <GraduationCap className="w-7 h-7 text-white" />
+                                </div>
+                            )}
                             <div>
                                 <h1 className="text-2xl font-bold text-maroon-900">
                                     Alumni Tracer
@@ -108,6 +149,7 @@ export default function LandingPage({ stats }: LandingPageProps) {
                             </div>
                         </div>
                         <div className="flex items-center space-x-4">
+                            <AppearanceToggleDropdown />
                             <Link
                                 href="/login"
                                 className="px-6 py-2.5 text-maroon-600 hover:text-maroon-900 transition-colors"

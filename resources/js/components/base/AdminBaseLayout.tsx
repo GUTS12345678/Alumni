@@ -37,6 +37,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 
 interface User {
     id: number;
@@ -108,6 +109,10 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(user || null);
     const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+    const [appearanceSettings, setAppearanceSettings] = useState<{
+        logoLight: string | null;
+        logoDark: string | null;
+    }>({ logoLight: null, logoDark: null });
 
     const checkSessionAuth = useCallback(async () => {
         try {
@@ -168,6 +173,35 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
             checkSessionAuth();
         }
     }, [user, checkSessionAuth]); // Removed currentUser from dependencies to prevent infinite loop
+
+    // Fetch appearance settings
+    useEffect(() => {
+        const fetchAppearanceSettings = async () => {
+            try {
+                const response = await fetch('/api/v1/admin/appearance', {
+                    credentials: 'include',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.data) {
+                        setAppearanceSettings({
+                            logoLight: data.data.logo_light_path,
+                            logoDark: data.data.logo_dark_path,
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to fetch appearance settings:', error);
+            }
+        };
+
+        fetchAppearanceSettings();
+    }, []);
 
     // Close mobile menu when resizing to desktop
     useEffect(() => {
@@ -246,11 +280,29 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                 "flex items-center px-6 py-4 border-b border-beige-200 dark:border-gray-800 flex-shrink-0",
                 sidebarCollapsed && "px-4"
             )}>
-                <GraduationCap className="h-8 w-8 text-maroon-600 dark:text-maroon-400 flex-shrink-0" />
-                {!sidebarCollapsed && (
-                    <div className="ml-3">
-                        <h1 className="text-lg font-bold text-maroon-800 dark:text-maroon-300">Alumni Tracer</h1>
-                        <p className="text-xs text-maroon-600 dark:text-maroon-400">Admin Panel</p>
+                {appearanceSettings.logoLight || appearanceSettings.logoDark ? (
+                    <div className="flex items-center">
+                        <img
+                            src={`/storage/${document.documentElement.classList.contains('dark') && appearanceSettings.logoDark ? appearanceSettings.logoDark : appearanceSettings.logoLight || appearanceSettings.logoDark}`}
+                            alt="Logo"
+                            className="h-8 w-8 object-contain flex-shrink-0"
+                        />
+                        {!sidebarCollapsed && (
+                            <div className="ml-3">
+                                <h1 className="text-lg font-bold text-maroon-800 dark:text-maroon-300">Alumni Tracer</h1>
+                                <p className="text-xs text-maroon-600 dark:text-maroon-400">Admin Panel</p>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="flex items-center">
+                        <GraduationCap className="h-8 w-8 text-maroon-600 dark:text-maroon-400 flex-shrink-0" />
+                        {!sidebarCollapsed && (
+                            <div className="ml-3">
+                                <h1 className="text-lg font-bold text-maroon-800 dark:text-maroon-300">Alumni Tracer</h1>
+                                <p className="text-xs text-maroon-600 dark:text-maroon-400">Admin Panel</p>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
@@ -515,7 +567,15 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                                 {/* Mobile Header with Close Button */}
                                 <div className="flex items-center justify-between p-4 border-b border-beige-200 dark:border-gray-800 bg-white dark:bg-gray-900">
                                     <div className="flex items-center">
-                                        <GraduationCap className="h-8 w-8 text-maroon-600 dark:text-maroon-300" />
+                                        {appearanceSettings.logoLight || appearanceSettings.logoDark ? (
+                                            <img
+                                                src={`/storage/${document.documentElement.classList.contains('dark') && appearanceSettings.logoDark ? appearanceSettings.logoDark : appearanceSettings.logoLight || appearanceSettings.logoDark}`}
+                                                alt="Logo"
+                                                className="h-8 w-8 object-contain"
+                                            />
+                                        ) : (
+                                            <GraduationCap className="h-8 w-8 text-maroon-600 dark:text-maroon-300" />
+                                        )}
                                         <div className="ml-3">
                                             <h1 className="text-lg font-bold text-maroon-800 dark:text-maroon-300">Alumni Tracer</h1>
                                             <p className="text-xs text-maroon-600 dark:text-maroon-400">Admin Panel</p>
@@ -561,6 +621,9 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                             </div>
 
                             <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0 ml-4">
+                                {/* Theme Toggle */}
+                                <AppearanceToggleDropdown />
+
                                 {/* User Profile Dropdown */}
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>

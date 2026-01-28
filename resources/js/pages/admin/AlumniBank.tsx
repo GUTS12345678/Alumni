@@ -82,6 +82,7 @@ export default function AlumniBank({ user }: Props) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [total, setTotal] = useState(0);
@@ -97,6 +98,9 @@ export default function AlumniBank({ user }: Props) {
     // Filter states
     const [filterStatus, setFilterStatus] = useState<string>('');
     const [filterYear, setFilterYear] = useState<string>('');
+    const [filterJobTitle, setFilterJobTitle] = useState<string>('');
+    const [filterEmployer, setFilterEmployer] = useState<string>('');
+    const [filterCareerField, setFilterCareerField] = useState<string>('');
     const [filtersOpen, setFiltersOpen] = useState(false);
 
     // Batch/graduation years for filter
@@ -104,7 +108,16 @@ export default function AlumniBank({ user }: Props) {
 
     // Multi-select state
     const multiSelect = useMultiSelect<number>();
-    const [isDeleting, setIsDeleting] = useState(false); const fetchAlumniCallback = React.useCallback(async () => {
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    // Debounce search term
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearchTerm(searchTerm);
+        }, 300); // 300ms delay
+
+        return () => clearTimeout(timer);
+    }, [searchTerm]); const fetchAlumniCallback = React.useCallback(async () => {
         try {
             setLoading(currentPage === 1);
             setRefreshing(currentPage !== 1);
@@ -116,9 +129,12 @@ export default function AlumniBank({ user }: Props) {
             }
 
             const params = new URLSearchParams();
-            if (searchTerm) params.append('search', searchTerm);
+            if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
             if (filterStatus) params.append('employment_status', filterStatus);
             if (filterYear) params.append('graduation_year', filterYear);
+            if (filterJobTitle) params.append('job_title', filterJobTitle);
+            if (filterEmployer) params.append('employer', filterEmployer);
+            if (filterCareerField) params.append('career_field', filterCareerField);
             params.append('page', currentPage.toString());
             params.append('per_page', '15');
 
@@ -154,7 +170,7 @@ export default function AlumniBank({ user }: Props) {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [currentPage, searchTerm, filterStatus, filterYear]);
+    }, [currentPage, debouncedSearchTerm, filterStatus, filterYear, filterJobTitle, filterEmployer, filterCareerField]);
 
     // Fetch available graduation years/batches
     const fetchAvailableYears = React.useCallback(async () => {
@@ -357,9 +373,12 @@ export default function AlumniBank({ user }: Props) {
 
             // Add current filters to export
             const params = new URLSearchParams();
-            if (searchTerm) params.append('search', searchTerm);
+            if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
             if (filterStatus) params.append('employment_status', filterStatus);
             if (filterYear) params.append('graduation_year', filterYear);
+            if (filterJobTitle) params.append('job_title', filterJobTitle);
+            if (filterEmployer) params.append('employer', filterEmployer);
+            if (filterCareerField) params.append('career_field', filterCareerField);
 
             const response = await fetch(`/api/v1/admin/alumni/export?${params}`, {
                 headers: {
@@ -499,40 +518,104 @@ export default function AlumniBank({ user }: Props) {
                                         className="pl-10 border-beige-300 dark:border-gray-700 focus:border-maroon-500 focus:ring-maroon-500"
                                     />
                                 </div>
-                                {/* Active Filters Display */}
-                                {(filterStatus || filterYear) && (
-                                    <div className="flex flex-wrap gap-2 mt-2">
-                                        {filterStatus && (
-                                            <Badge
-                                                variant="secondary"
-                                                className="bg-maroon-100 text-maroon-800 text-xs"
-                                            >
-                                                Status: {filterStatus.replace('_', ' ')}
-                                                <button
-                                                    onClick={() => setFilterStatus('')}
-                                                    className="ml-1 hover:text-maroon-900"
-                                                >
-                                                    ×
-                                                </button>
-                                            </Badge>
-                                        )}
-                                        {filterYear && (
-                                            <Badge
-                                                variant="secondary"
-                                                className="bg-maroon-100 text-maroon-800 text-xs"
-                                            >
-                                                Year: {filterYear}
-                                                <button
-                                                    onClick={() => setFilterYear('')}
-                                                    className="ml-1 hover:text-maroon-900"
-                                                >
-                                                    ×
-                                                </button>
-                                            </Badge>
-                                        )}
-                                    </div>
+                            </div>
+                            <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+                                <Input
+                                    placeholder="Filter by job title..."
+                                    value={filterJobTitle}
+                                    onChange={(e) => setFilterJobTitle(e.target.value)}
+                                    className="w-full sm:w-48 border-beige-300 dark:border-gray-700 focus:border-maroon-500 focus:ring-maroon-500"
+                                />
+                                <Input
+                                    placeholder="Filter by employer..."
+                                    value={filterEmployer}
+                                    onChange={(e) => setFilterEmployer(e.target.value)}
+                                    className="w-full sm:w-48 border-beige-300 dark:border-gray-700 focus:border-maroon-500 focus:ring-maroon-500"
+                                />
+                                <Input
+                                    placeholder="Filter by career field..."
+                                    value={filterCareerField}
+                                    onChange={(e) => setFilterCareerField(e.target.value)}
+                                    className="w-full sm:w-48 border-beige-300 dark:border-gray-700 focus:border-maroon-500 focus:ring-maroon-500"
+                                />
+                            </div>
+                        </div>
+                        {/* Active Filters Display */}
+                        {(filterStatus || filterYear || filterJobTitle || filterEmployer || filterCareerField) && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                                {filterStatus && (
+                                    <Badge
+                                        variant="secondary"
+                                        className="bg-maroon-100 text-maroon-800 text-xs"
+                                    >
+                                        Status: {filterStatus.replace('_', ' ')}
+                                        <button
+                                            onClick={() => setFilterStatus('')}
+                                            className="ml-1 hover:text-maroon-900"
+                                        >
+                                            ×
+                                        </button>
+                                    </Badge>
+                                )}
+                                {filterYear && (
+                                    <Badge
+                                        variant="secondary"
+                                        className="bg-maroon-100 text-maroon-800 text-xs"
+                                    >
+                                        Year: {filterYear}
+                                        <button
+                                            onClick={() => setFilterYear('')}
+                                            className="ml-1 hover:text-maroon-900"
+                                        >
+                                            ×
+                                        </button>
+                                    </Badge>
+                                )}
+                                {filterJobTitle && (
+                                    <Badge
+                                        variant="secondary"
+                                        className="bg-maroon-100 text-maroon-800 text-xs"
+                                    >
+                                        Job Title: {filterJobTitle}
+                                        <button
+                                            onClick={() => setFilterJobTitle('')}
+                                            className="ml-1 hover:text-maroon-900"
+                                        >
+                                            ×
+                                        </button>
+                                    </Badge>
+                                )}
+                                {filterEmployer && (
+                                    <Badge
+                                        variant="secondary"
+                                        className="bg-maroon-100 text-maroon-800 text-xs"
+                                    >
+                                        Employer: {filterEmployer}
+                                        <button
+                                            onClick={() => setFilterEmployer('')}
+                                            className="ml-1 hover:text-maroon-900"
+                                        >
+                                            ×
+                                        </button>
+                                    </Badge>
+                                )}
+                                {filterCareerField && (
+                                    <Badge
+                                        variant="secondary"
+                                        className="bg-maroon-100 text-maroon-800 text-xs"
+                                    >
+                                        Career Field: {filterCareerField}
+                                        <button
+                                            onClick={() => setFilterCareerField('')}
+                                            className="ml-1 hover:text-maroon-900"
+                                        >
+                                            ×
+                                        </button>
+                                    </Badge>
                                 )}
                             </div>
+                        )}
+                        <div className="flex justify-end mt-4">
                             <DropdownMenu open={filtersOpen} onOpenChange={setFiltersOpen}>
                                 <DropdownMenuTrigger asChild>
                                     <Button
@@ -565,6 +648,9 @@ export default function AlumniBank({ user }: Props) {
                                         onClick={() => {
                                             setFilterStatus('');
                                             setFilterYear('');
+                                            setFilterJobTitle('');
+                                            setFilterEmployer('');
+                                            setFilterCareerField('');
                                         }}
                                         className="text-red-600"
                                     >

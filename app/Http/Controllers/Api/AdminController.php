@@ -170,6 +170,18 @@ class AdminController extends Controller
                 $query->where('current_employer', 'like', "%{$request->company}%");
             }
 
+            if ($request->has('job_title') && $request->job_title) {
+                $query->where('current_job_title', 'like', "%{$request->job_title}%");
+            }
+
+            if ($request->has('employer') && $request->employer) {
+                $query->where('current_employer', 'like', "%{$request->employer}%");
+            }
+
+            if ($request->has('career_field') && $request->career_field) {
+                $query->where('career_field', $request->career_field);
+            }
+
             if ($request->has('location') && $request->location) {
                 $query->where(function ($q) use ($request) {
                     $location = $request->location;
@@ -987,11 +999,11 @@ class AdminController extends Controller
 
             $alumni = $query->get();
 
-            $csvData = "Name,Email,Phone,Batch,Year,Employment Status,Current Position,Company,Industry,Registration Date\n";
+            $csvData = "Name,Email,Phone,Batch,Year,Employment Status,Current Position,Company,Industry,Job Related to Degree,Job Mismatch Reason,Job Satisfaction,Registration Date\n";
 
             foreach ($alumni as $alumnus) {
                 $csvData .= sprintf(
-                    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+                    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
                     $alumnus->full_name ?? '',
                     $alumnus->user->email ?? '',
                     $alumnus->phone ?? '',
@@ -1001,6 +1013,9 @@ class AdminController extends Controller
                     $alumnus->current_job_title ?? '',
                     $alumnus->current_employer ?? '',
                     $alumnus->company_industry ?? '',
+                    $alumnus->job_related_to_degree ? 'Yes' : 'No',
+                    $alumnus->job_mismatch_reason ?? '',
+                    $alumnus->job_satisfaction ?? '',
                     $alumnus->created_at->format('Y-m-d H:i:s')
                 );
             }

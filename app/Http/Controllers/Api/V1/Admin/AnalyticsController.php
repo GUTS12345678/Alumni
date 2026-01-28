@@ -699,7 +699,9 @@ class AnalyticsController extends Controller
                     ->where(function ($query) {
                         $query->where('question_text', 'LIKE', '%employment status%')
                               ->orWhere('question_text', 'LIKE', '%current employment%')
-                              ->orWhere('question_text', 'LIKE', '%work status%');
+                              ->orWhere('question_text', 'LIKE', '%work status%')
+                              ->orWhere('question_text', 'LIKE', '%job status%')
+                              ->orWhere('question_text', 'LIKE', '%employment situation%');
                     })
                     ->first();
 
@@ -713,6 +715,7 @@ class AnalyticsController extends Controller
                         })
                         ->whereNotNull('survey_answers.answer_text')
                         ->where('survey_answers.answer_text', '!=', '')
+                        ->where('survey_answers.answer_text', '!=', 'N/A')
                         ->select('survey_answers.answer_text')
                         ->get();
 
@@ -728,6 +731,11 @@ class AnalyticsController extends Controller
                                 'percentage' => round(($count / $total) * 100, 1)
                             ];
                         }
+                        
+                        // Sort by count descending
+                        usort($employmentDistribution, function($a, $b) {
+                            return $b['count'] <=> $a['count'];
+                        });
                     }
                 }
             } catch (\Exception $e) {
@@ -1057,6 +1065,20 @@ class AnalyticsController extends Controller
             fputcsv($handle, ['Date', 'Responses']);
             foreach ($data['response_rate_by_date'] as $dateData) {
                 fputcsv($handle, [$dateData['date'], $dateData['responses']]);
+            }
+            fputcsv($handle, []);
+        }
+        
+        // Employment Status Distribution
+        if (!empty($data['employment_status_distribution'])) {
+            fputcsv($handle, ['Employment Status Distribution']);
+            fputcsv($handle, ['Status', 'Count', 'Percentage (%)']);
+            foreach ($data['employment_status_distribution'] as $statusData) {
+                fputcsv($handle, [
+                    $statusData['status'],
+                    $statusData['count'],
+                    $statusData['percentage']
+                ]);
             }
             fputcsv($handle, []);
         }

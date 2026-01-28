@@ -109,7 +109,7 @@ export default function EmploymentDistributionChart({ data, height = 350, chartT
                 <Legend
                     verticalAlign="bottom"
                     height={36}
-                    formatter={(value: string) => `${value}`}
+                    formatter={(value: string, entry: any) => `${entry.payload.status}: ${entry.payload.count} (${entry.payload.percentage}%)`}
                 />
             </PieChart>
         </ResponsiveContainer>

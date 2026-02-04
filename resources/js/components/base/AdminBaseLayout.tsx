@@ -26,7 +26,10 @@ import {
     Lock,
     UserCircle,
     ChevronDown,
-    Palette
+    Palette,
+    Briefcase,
+    Bell,
+    MessageCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -38,6 +41,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import AppearanceToggleDropdown from '@/components/appearance-dropdown';
+import { CampusSelector } from '@/components/CampusSelector';
 
 interface User {
     id: number;
@@ -74,6 +78,14 @@ const adminNavigation = [
             { name: "Survey Bank", href: "/admin/surveys", icon: ClipboardList },
             { name: "Create Survey", href: "/admin/surveys/create", icon: Plus },
             { name: "Survey Analytics", href: "/admin/survey-analytics", icon: BarChart3 }
+        ]
+    },
+    {
+        section: "Content & Communication",
+        items: [
+            { name: "Job Board", href: "/admin/job-board", icon: Briefcase },
+            { name: "Announcements", href: "/admin/announcements", icon: Bell },
+            { name: "Messages", href: "/admin/messages", icon: MessageCircle }
         ]
     },
     {
@@ -621,6 +633,9 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                             </div>
 
                             <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0 ml-4">
+                                {/* Campus Selector */}
+                                <CampusSelector variant="compact" showLabel={false} />
+
                                 {/* Theme Toggle */}
                                 <AppearanceToggleDropdown />
 

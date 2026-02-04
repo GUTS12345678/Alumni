@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { router } from '@inertiajs/react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import { useCampus } from '@/contexts/CampusContext';
+import { useCampusParams } from '@/hooks/useCampusFilter';
 
 interface DashboardStats {
     overview: {
@@ -36,6 +38,24 @@ interface DashboardStats {
         total_batches: number;
         total_responses: number;
         response_rate: number;
+    };
+    employment_metrics: {
+        employment_rate: number;
+        total_employed: number;
+        avg_days_to_job: number;
+        job_alignment_rate: number;
+        aligned_jobs_count: number;
+    };
+    mismatch_stats: {
+        overqualified: number;
+        underqualified: number;
+        unfit: number;
+        good_match: number;
+    };
+    unemployment_stats: {
+        seeking: number;
+        not_seeking: number;
+        continuing_education: number;
     };
     recent_activity: {
         recent_registrations: number;
@@ -77,6 +97,10 @@ export default function AdminDashboard({ user }: Props) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
+    // Campus context for filtering
+    const { selectedCampus } = useCampus();
+    const { campusParams } = useCampusParams();
+
     useEffect(() => {
         const fetchDashboardData = async () => {
             try {
@@ -84,7 +108,15 @@ export default function AdminDashboard({ user }: Props) {
                 setError(null);
 
                 const token = localStorage.getItem('auth_token');
-                const response = await fetch('/api/v1/admin/dashboard', {
+
+                // Build URL with campus parameter
+                const params = new URLSearchParams();
+                if (selectedCampus?.id) {
+                    params.append('campus_id', selectedCampus.id.toString());
+                }
+                const url = `/api/v1/admin/dashboard${params.toString() ? '?' + params.toString() : ''}`;
+
+                const response = await fetch(url, {
                     headers: {
                         'Authorization': `Bearer ${token}`,
                         'Accept': 'application/json',
@@ -115,7 +147,7 @@ export default function AdminDashboard({ user }: Props) {
         };
 
         fetchDashboardData();
-    }, []);
+    }, [selectedCampus?.id]); // Re-fetch when campus changes
 
     if (loading) {
         return (
@@ -177,9 +209,106 @@ export default function AdminDashboard({ user }: Props) {
                     </div>
                 </div>
 
-                {/* Key Metrics - Enhanced Design */}
+                {/* Key Metrics - Employment Focused */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <Card className="relative overflow-hidden border-none shadow-lg hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-maroon-50 to-white">
+                    {/* Employment Rate - Primary Metric */}
+                    <Card className="relative overflow-hidden border-none shadow-lg hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-green-50 to-emerald-50">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-green-200 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                            <CardTitle className="text-sm font-bold text-green-900">Employment Rate</CardTitle>
+                            <div className="p-3 bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-md group-hover:shadow-lg transition-all">
+                                <UserCheck className="h-5 w-5 text-white" />
+                            </div>
+                        </CardHeader>
+                        <CardContent className="relative z-10">
+                            <div className="text-4xl font-extrabold text-green-800 mb-1">
+                                {stats?.employment_metrics?.employment_rate ? stats.employment_metrics.employment_rate.toFixed(1) : '0.0'}%
+                            </div>
+                            <p className="text-xs text-green-600 font-medium mb-3">
+                                {stats?.employment_metrics?.total_employed || 0} of {stats?.overview.total_alumni || 0} alumni employed
+                            </p>
+                            <div className="pt-2 border-t border-green-100">
+                                <div className="flex items-center justify-between mb-1">
+                                    <span className="text-xs text-gray-600">Target: 75%</span>
+                                    <span className="text-xs font-bold text-green-700">
+                                        {stats?.employment_metrics?.employment_rate >= 75 ? '✓ Achieved' : 'In Progress'}
+                                    </span>
+                                </div>
+                                <div className="w-full bg-green-100 rounded-full h-2 overflow-hidden">
+                                    <div
+                                        className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all duration-500"
+                                        style={{ width: `${Math.min(stats?.employment_metrics?.employment_rate || 0, 100)}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Avg Days to Job */}
+                    <Card className="relative overflow-hidden border-none shadow-lg hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-blue-50 to-sky-50">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-200 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                            <CardTitle className="text-sm font-bold text-blue-900">Avg Time to Employment</CardTitle>
+                            <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-md group-hover:shadow-lg transition-all">
+                                <Clock className="h-5 w-5 text-white" />
+                            </div>
+                        </CardHeader>
+                        <CardContent className="relative z-10">
+                            <div className="text-4xl font-extrabold text-blue-800 mb-1">
+                                {stats?.employment_metrics?.avg_days_to_job || 0}
+                            </div>
+                            <p className="text-xs text-blue-600 font-medium mb-3">days after graduation</p>
+                            <div className="flex items-center gap-2 pt-2 border-t border-blue-100">
+                                {(stats?.employment_metrics?.avg_days_to_job || 0) <= 90 ? (
+                                    <div className="flex items-center text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full">
+                                        <TrendingUp className="h-3 w-3 mr-1" />
+                                        <span className="font-bold">Excellent</span>
+                                    </div>
+                                ) : (stats?.employment_metrics?.avg_days_to_job || 0) <= 180 ? (
+                                    <div className="flex items-center text-xs bg-yellow-50 text-yellow-700 px-2 py-1 rounded-full">
+                                        <Activity className="h-3 w-3 mr-1" />
+                                        <span className="font-bold">Good</span>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center text-xs bg-orange-50 text-orange-700 px-2 py-1 rounded-full">
+                                        <AlertCircle className="h-3 w-3 mr-1" />
+                                        <span className="font-bold">Needs Attention</span>
+                                    </div>
+                                )}
+                                <span className="text-xs text-gray-500">≈ {Math.round((stats?.employment_metrics?.avg_days_to_job || 0) / 30)} months</span>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Job Alignment */}
+                    <Card className="relative overflow-hidden border-none shadow-lg hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-purple-50 to-violet-50">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-purple-200 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+                            <CardTitle className="text-sm font-bold text-purple-900">Job Alignment</CardTitle>
+                            <div className="p-3 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-md group-hover:shadow-lg transition-all">
+                                <Target className="h-5 w-5 text-white" />
+                            </div>
+                        </CardHeader>
+                        <CardContent className="relative z-10">
+                            <div className="text-4xl font-extrabold text-purple-800 mb-1">
+                                {stats?.employment_metrics?.job_alignment_rate ? stats.employment_metrics.job_alignment_rate.toFixed(1) : '0.0'}%
+                            </div>
+                            <p className="text-xs text-purple-600 font-medium mb-3">
+                                {stats?.employment_metrics?.aligned_jobs_count || 0} working in their field
+                            </p>
+                            <button
+                                onClick={() => router.visit('/admin/analytics')}
+                                className="flex items-center text-xs font-semibold text-purple-600 hover:text-purple-700 pt-2 border-t border-purple-100 transition-colors"
+                            >
+                                <BarChart3 className="h-3 w-3 mr-1" />
+                                View Detailed Analysis
+                                <ArrowRight className="h-3 w-3 ml-1" />
+                            </button>
+                        </CardContent>
+                    </Card>
+
+                    {/* Total Alumni */}
+                    <Card className="relative overflow-hidden border-none shadow-lg hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-maroon-50 to-beige-50">
                         <div className="absolute top-0 right-0 w-32 h-32 bg-maroon-200 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
                             <CardTitle className="text-sm font-bold text-maroon-900">Total Alumni</CardTitle>
@@ -199,176 +328,186 @@ export default function AdminDashboard({ user }: Props) {
                             </div>
                         </CardContent>
                     </Card>
+                </div>
 
-                    <Card className="relative overflow-hidden border-none shadow-lg hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-blue-50 to-white">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-200 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                            <CardTitle className="text-sm font-bold text-blue-900">Active Surveys</CardTitle>
-                            <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-md group-hover:shadow-lg transition-all">
-                                <ClipboardList className="h-5 w-5 text-white" />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="relative z-10">
-                            <div className="text-4xl font-extrabold text-blue-800 mb-1">{stats?.overview.total_surveys || 0}</div>
-                            <p className="text-xs text-blue-600 font-medium mb-3">Created surveys</p>
-                            <button
-                                onClick={() => router.visit('/admin/surveys/create')}
-                                className="flex items-center text-xs font-semibold text-blue-600 hover:text-blue-700 pt-2 border-t border-blue-100 transition-colors"
-                            >
-                                <Sparkles className="h-3 w-3 mr-1" />
-                                Create New Survey
-                                <ArrowRight className="h-3 w-3 ml-1" />
-                            </button>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="relative overflow-hidden border-none shadow-lg hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-purple-50 to-white">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-purple-200 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                            <CardTitle className="text-sm font-bold text-purple-900">Survey Responses</CardTitle>
-                            <div className="p-3 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-md group-hover:shadow-lg transition-all">
-                                <FileText className="h-5 w-5 text-white" />
-                            </div>
-                        </CardHeader>
-                        <CardContent className="relative z-10">
-                            <div className="text-4xl font-extrabold text-purple-800 mb-1">{stats?.overview.total_responses || 0}</div>
-                            <p className="text-xs text-purple-600 font-medium mb-3">Survey submissions</p>
-                            <div className="flex items-center gap-2 pt-2 border-t border-purple-100">
-                                <div className="flex items-center text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full">
-                                    <Activity className="h-3 w-3 mr-1" />
-                                    <span className="font-bold">+{stats?.recent_activity.recent_responses || 0}</span>
+                {/* Employment Breakdown - New Section */}
+                <div>
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-2xl font-bold text-maroon-900">Employment Breakdown</h2>
+                        <Button variant="outline" size="sm" onClick={() => router.visit('/admin/alumni')} className="text-maroon-700 border-maroon-300 hover:bg-maroon-50">
+                            <Users className="h-4 w-4 mr-2" />
+                            View Alumni Bank
+                        </Button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {/* Good Match */}
+                        <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-green-50 to-emerald-50">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="p-2 bg-gradient-to-br from-green-500 to-green-600 rounded-lg">
+                                        <CheckCircle className="h-5 w-5 text-white" />
+                                    </div>
+                                    <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded-full">
+                                        Good Match
+                                    </span>
                                 </div>
-                                <span className="text-xs text-gray-500">recent</span>
-                            </div>
-                        </CardContent>
-                    </Card>
+                                <div className="text-3xl font-extrabold text-green-800">
+                                    {stats?.mismatch_stats?.good_match || 0}
+                                </div>
+                                <p className="text-xs text-green-600 font-medium">
+                                    {stats?.employment_metrics?.total_employed > 0
+                                        ? ((stats?.mismatch_stats?.good_match || 0) / stats.employment_metrics.total_employed * 100).toFixed(1)
+                                        : '0.0'
+                                    }% of employed alumni
+                                </p>
+                            </CardHeader>
+                        </Card>
 
-                    <Card className="relative overflow-hidden border-none shadow-lg hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-green-50 to-white">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-green-200 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                            <CardTitle className="text-sm font-bold text-green-900">Response Rate</CardTitle>
-                            <div className="p-3 bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-md group-hover:shadow-lg transition-all">
-                                <Target className="h-5 w-5 text-white" />
+                        {/* Overqualified */}
+                        <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-yellow-50 to-amber-50">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="p-2 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg">
+                                        <AlertCircle className="h-5 w-5 text-white" />
+                                    </div>
+                                    <span className="text-xs font-bold text-yellow-700 bg-yellow-100 px-2 py-1 rounded-full">
+                                        Overqualified
+                                    </span>
+                                </div>
+                                <div className="text-3xl font-extrabold text-yellow-800">
+                                    {stats?.mismatch_stats?.overqualified || 0}
+                                </div>
+                                <p className="text-xs text-yellow-600 font-medium">
+                                    {stats?.employment_metrics?.total_employed > 0
+                                        ? ((stats?.mismatch_stats?.overqualified || 0) / stats.employment_metrics.total_employed * 100).toFixed(1)
+                                        : '0.0'
+                                    }% of employed alumni
+                                </p>
+                            </CardHeader>
+                        </Card>
+
+                        {/* Unfit */}
+                        <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-orange-50 to-red-50">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="p-2 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg">
+                                        <TrendingDown className="h-5 w-5 text-white" />
+                                    </div>
+                                    <span className="text-xs font-bold text-orange-700 bg-orange-100 px-2 py-1 rounded-full">
+                                        Unfit
+                                    </span>
+                                </div>
+                                <div className="text-3xl font-extrabold text-orange-800">
+                                    {stats?.mismatch_stats?.unfit || 0}
+                                </div>
+                                <p className="text-xs text-orange-600 font-medium">
+                                    {stats?.employment_metrics?.total_employed > 0
+                                        ? ((stats?.mismatch_stats?.unfit || 0) / stats.employment_metrics.total_employed * 100).toFixed(1)
+                                        : '0.0'
+                                    }% working in different field
+                                </p>
+                            </CardHeader>
+                        </Card>
+
+                        {/* Underqualified */}
+                        <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-blue-50 to-indigo-50">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
+                                        <GraduationCap className="h-5 w-5 text-white" />
+                                    </div>
+                                    <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-full">
+                                        Underqualified
+                                    </span>
+                                </div>
+                                <div className="text-3xl font-extrabold text-blue-800">
+                                    {stats?.mismatch_stats?.underqualified || 0}
+                                </div>
+                                <p className="text-xs text-blue-600 font-medium">
+                                    {stats?.employment_metrics?.total_employed > 0
+                                        ? ((stats?.mismatch_stats?.underqualified || 0) / stats.employment_metrics.total_employed * 100).toFixed(1)
+                                        : '0.0'
+                                    }% need more education
+                                </p>
+                            </CardHeader>
+                        </Card>
+                    </div>
+                </div>
+
+                {/* Two Column Layout for Survey Stats and Recent Activity */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Survey & Response Stats */}
+                    <Card className="border-none shadow-lg bg-gradient-to-br from-white to-blue-50">
+                        <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
+                                        <ClipboardList className="h-5 w-5 text-white" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-xl text-maroon-900 font-bold">Survey Engagement</CardTitle>
+                                        <CardDescription className="text-xs text-gray-500">Current statistics</CardDescription>
+                                    </div>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => router.visit('/admin/surveys')}
+                                    className="text-maroon-600 hover:text-maroon-700 hover:bg-maroon-50"
+                                >
+                                    View All
+                                </Button>
                             </div>
                         </CardHeader>
-                        <CardContent className="relative z-10">
-                            <div className="text-4xl font-extrabold text-green-800 mb-1">
-                                {stats?.overview.response_rate ? stats.overview.response_rate.toFixed(1) : '0.0'}%
-                            </div>
-                            <p className="text-xs text-green-600 font-medium mb-3">Completion rate</p>
-                            <div className="pt-2 border-t border-green-100">
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="text-xs text-gray-600">Progress</span>
-                                    <span className="text-xs font-bold text-green-700">{stats?.overview.response_rate ? Math.round(stats.overview.response_rate) : 0}%</span>
+                        <CardContent className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-50 to-sky-50 p-4 border-2 border-blue-200/50">
+                                    <div className="flex flex-col">
+                                        <span className="text-xs text-blue-600 font-medium mb-1">Active Surveys</span>
+                                        <span className="text-3xl font-black text-blue-800">{stats?.overview.total_surveys || 0}</span>
+                                        <span className="text-xs text-gray-500 mt-1">Created</span>
+                                    </div>
                                 </div>
-                                <div className="w-full bg-green-100 rounded-full h-2 overflow-hidden">
+                                <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-purple-50 to-violet-50 p-4 border-2 border-purple-200/50">
+                                    <div className="flex flex-col">
+                                        <span className="text-xs text-purple-600 font-medium mb-1">Responses</span>
+                                        <span className="text-3xl font-black text-purple-800">{stats?.overview.total_responses || 0}</span>
+                                        <span className="text-xs text-gray-500 mt-1">Submitted</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 p-4 border-2 border-green-200/50">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-sm font-bold text-green-900">Response Rate</span>
+                                    <span className="text-2xl font-black text-green-700">
+                                        {stats?.overview.response_rate ? stats.overview.response_rate.toFixed(1) : '0.0'}%
+                                    </span>
+                                </div>
+                                <div className="w-full bg-green-100 rounded-full h-3 overflow-hidden">
                                     <div
-                                        className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all duration-500 shadow-sm"
+                                        className="bg-gradient-to-r from-green-500 to-emerald-600 h-3 rounded-full transition-all duration-500"
                                         style={{ width: `${Math.min(stats?.overview.response_rate || 0, 100)}%` }}
                                     ></div>
                                 </div>
+                                <p className="text-xs text-green-600 font-medium mt-2">
+                                    +{stats?.recent_activity.recent_responses || 0} new responses this month
+                                </p>
+                            </div>
+
+                            <div className="pt-3">
+                                <Button
+                                    onClick={() => router.visit('/admin/surveys/create')}
+                                    className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-md hover:shadow-lg transition-all"
+                                >
+                                    <Sparkles className="h-4 w-4 mr-2" />
+                                    Create New Survey
+                                </Button>
                             </div>
                         </CardContent>
                     </Card>
-                </div>
 
-                {/* Quick Actions - Enhanced Grid */}
-                <div>
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-2xl font-bold text-maroon-900">Quick Actions</h2>
-                        <Button variant="outline" size="sm" onClick={() => router.visit('/admin/analytics')} className="text-maroon-700 border-maroon-300 hover:bg-maroon-50">
-                            <BarChart3 className="h-4 w-4 mr-2" />
-                            View All Analytics
-                        </Button>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <Card className="border-none shadow-lg hover:shadow-2xl transition-all cursor-pointer group bg-white hover:-translate-y-1 duration-300"
-                            onClick={() => router.visit('/admin/alumni')}>
-                            <CardHeader>
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="p-4 bg-gradient-to-br from-maroon-500 to-maroon-600 rounded-2xl shadow-lg group-hover:shadow-xl group-hover:scale-110 transition-all duration-300">
-                                        <Users className="h-7 w-7 text-white" />
-                                    </div>
-                                    <div className="bg-maroon-50 text-maroon-700 px-3 py-1 rounded-full text-xs font-bold">
-                                        {stats?.overview.total_alumni || 0} Alumni
-                                    </div>
-                                </div>
-                                <CardTitle className="text-xl text-maroon-900 font-bold group-hover:text-maroon-700 transition-colors">Alumni Bank</CardTitle>
-                                <CardDescription className="text-gray-600">
-                                    Manage and view all registered alumni profiles
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-                                    View, search, and manage alumni records. Export data and track career progress.
-                                </p>
-                                <div className="flex items-center text-maroon-600 font-semibold text-sm group-hover:text-maroon-700 transition-colors">
-                                    <span>Access Alumni Bank</span>
-                                    <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-none shadow-lg hover:shadow-2xl transition-all cursor-pointer group bg-white hover:-translate-y-1 duration-300"
-                            onClick={() => router.visit('/admin/surveys')}>
-                            <CardHeader>
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="p-4 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg group-hover:shadow-xl group-hover:scale-110 transition-all duration-300">
-                                        <ClipboardList className="h-7 w-7 text-white" />
-                                    </div>
-                                    <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">
-                                        {stats?.overview.total_surveys || 0} Active
-                                    </div>
-                                </div>
-                                <CardTitle className="text-xl text-maroon-900 font-bold group-hover:text-blue-700 transition-colors">Survey Bank</CardTitle>
-                                <CardDescription className="text-gray-600">
-                                    Create and manage surveys for alumni
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-                                    Design surveys, track responses, and analyze alumni feedback and career data.
-                                </p>
-                                <div className="flex items-center text-blue-600 font-semibold text-sm group-hover:text-blue-700 transition-colors">
-                                    <span>Manage Surveys</span>
-                                    <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        <Card className="border-none shadow-lg hover:shadow-2xl transition-all cursor-pointer group bg-white hover:-translate-y-1 duration-300"
-                            onClick={() => router.visit('/admin/analytics')}>
-                            <CardHeader>
-                                <div className="flex items-start justify-between mb-4">
-                                    <div className="p-4 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl shadow-lg group-hover:shadow-xl group-hover:scale-110 transition-all duration-300">
-                                        <BarChart3 className="h-7 w-7 text-white" />
-                                    </div>
-                                    <div className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                                        <TrendingUp className="h-3 w-3" />
-                                        Live
-                                    </div>
-                                </div>
-                                <CardTitle className="text-xl text-maroon-900 font-bold group-hover:text-purple-700 transition-colors">Analytics</CardTitle>
-                                <CardDescription className="text-gray-600">
-                                    View detailed reports and insights
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-                                    Generate reports, view trends, and analyze alumni career progression data.
-                                </p>
-                                <div className="flex items-center text-purple-600 font-semibold text-sm group-hover:text-purple-700 transition-colors">
-                                    <span>View Analytics</span>
-                                    <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </div>
-
-                {/* Two Column Layout for Activity and System Info */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {/* Recent Activity - Redesigned */}
+                    {/* Recent Activity & Unemployment Stats */}
                     <Card className="border-none shadow-lg bg-gradient-to-br from-white to-gray-50">
                         <CardHeader className="pb-3">
                             <div className="flex items-center justify-between">
@@ -377,159 +516,61 @@ export default function AdminDashboard({ user }: Props) {
                                         <Activity className="h-5 w-5 text-white" />
                                     </div>
                                     <div>
-                                        <CardTitle className="text-xl text-maroon-900 font-bold">Recent Activity</CardTitle>
-                                        <CardDescription className="text-xs text-gray-500">Last 30 days</CardDescription>
+                                        <CardTitle className="text-xl text-maroon-900 font-bold">Alumni Status</CardTitle>
+                                        <CardDescription className="text-xs text-gray-500">Current overview</CardDescription>
                                     </div>
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => router.visit('/admin/activity')}
-                                    className="text-maroon-600 hover:text-maroon-700 hover:bg-maroon-50"
-                                >
-                                    View All
-                                </Button>
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                            <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 p-4 border-2 border-green-200/50 shadow-sm hover:shadow-md transition-all group">
-                                <div className="absolute top-0 right-0 w-20 h-20 bg-green-300 rounded-full -mr-10 -mt-10 opacity-20"></div>
-                                <div className="relative flex items-start justify-between">
+                            <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 p-4 border-2 border-green-200/50">
+                                <div className="flex items-center justify-between">
                                     <div className="flex items-start gap-3">
                                         <div className="p-2.5 bg-white rounded-lg shadow-sm">
-                                            <CheckCircle className="h-5 w-5 text-green-600" />
+                                            <Users className="h-5 w-5 text-green-600" />
                                         </div>
                                         <div>
-                                            <p className="font-bold text-gray-900 mb-0.5">Survey Responses</p>
-                                            <p className="text-sm text-gray-600">{stats?.recent_activity.recent_responses || 0} new responses received</p>
+                                            <p className="font-bold text-gray-900 mb-0.5">New Registrations</p>
+                                            <p className="text-sm text-gray-600">{stats?.recent_activity.recent_registrations || 0} alumni joined</p>
                                             <p className="text-xs text-green-700 font-medium mt-1 flex items-center gap-1">
-                                                <TrendingUp className="h-3 w-3" />
-                                                Active engagement
+                                                <Calendar className="h-3 w-3" />
+                                                Last 30 days
                                             </p>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <div className="text-2xl font-black text-green-600">+{stats?.recent_activity.recent_responses || 0}</div>
-                                        <p className="text-xs text-gray-500">responses</p>
+                                        <div className="text-2xl font-black text-green-600">+{stats?.recent_activity.recent_registrations || 0}</div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 border-2 border-blue-200/50 shadow-sm hover:shadow-md transition-all group">
-                                <div className="absolute top-0 right-0 w-20 h-20 bg-blue-300 rounded-full -mr-10 -mt-10 opacity-20"></div>
-                                <div className="relative flex items-start justify-between">
-                                    <div className="flex items-start gap-3">
-                                        <div className="p-2.5 bg-white rounded-lg shadow-sm">
-                                            <Users className="h-5 w-5 text-blue-600" />
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-gray-900 mb-0.5">New Registrations</p>
-                                            <p className="text-sm text-gray-600">{stats?.recent_activity.recent_registrations || 0} alumni joined the system</p>
-                                            <p className="text-xs text-blue-700 font-medium mt-1 flex items-center gap-1">
-                                                <Calendar className="h-3 w-3" />
-                                                This month
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-2xl font-black text-blue-600">+{stats?.recent_activity.recent_registrations || 0}</div>
-                                        <p className="text-xs text-gray-500">alumni</p>
-                                    </div>
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="rounded-lg bg-gradient-to-br from-orange-50 to-red-50 p-3 border border-orange-200/50">
+                                    <div className="text-xs text-orange-600 font-medium mb-1">Seeking Work</div>
+                                    <div className="text-2xl font-black text-orange-700">{stats?.unemployment_stats?.seeking || 0}</div>
+                                </div>
+                                <div className="rounded-lg bg-gradient-to-br from-gray-50 to-slate-50 p-3 border border-gray-200/50">
+                                    <div className="text-xs text-gray-600 font-medium mb-1">Not Seeking</div>
+                                    <div className="text-2xl font-black text-gray-700">{stats?.unemployment_stats?.not_seeking || 0}</div>
+                                </div>
+                                <div className="rounded-lg bg-gradient-to-br from-indigo-50 to-blue-50 p-3 border border-indigo-200/50">
+                                    <div className="text-xs text-indigo-600 font-medium mb-1">Studying</div>
+                                    <div className="text-2xl font-black text-indigo-700">{stats?.unemployment_stats?.continuing_education || 0}</div>
                                 </div>
                             </div>
 
                             <div className="pt-3">
                                 <Button
-                                    onClick={() => router.visit('/admin/activity')}
+                                    onClick={() => router.visit('/admin/alumni')}
                                     className="w-full bg-gradient-to-r from-maroon-600 to-maroon-700 hover:from-maroon-700 hover:to-maroon-800 text-white shadow-md hover:shadow-lg transition-all"
                                 >
-                                    <Bell className="h-4 w-4 mr-2" />
-                                    View Full Activity Log
+                                    <Users className="h-4 w-4 mr-2" />
+                                    View All Alumni
                                 </Button>
                             </div>
                         </CardContent>
-                    </Card >
-
-                    {/* System Management - Redesigned */}
-                    < Card className="border-none shadow-lg bg-gradient-to-br from-white to-gray-50" >
-                        <CardHeader className="pb-3">
-                            <div className="flex items-center gap-2">
-                                <div className="p-2 bg-gradient-to-br from-maroon-500 to-maroon-600 rounded-lg">
-                                    <Settings className="h-5 w-5 text-white" />
-                                </div>
-                                <div>
-                                    <CardTitle className="text-xl text-maroon-900 font-bold">System Management</CardTitle>
-                                    <CardDescription className="text-xs text-gray-500">Quick access tools</CardDescription>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                            <button
-                                onClick={() => router.visit('/admin/batches')}
-                                className="w-full flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-orange-50 to-amber-50 hover:from-orange-100 hover:to-amber-100 border border-orange-200/50 transition-all group shadow-sm hover:shadow-md"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2.5 bg-white rounded-lg shadow-sm">
-                                        <GraduationCap className="h-5 w-5 text-orange-600" />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="font-bold text-gray-900">Batch Management</p>
-                                        <p className="text-xs text-gray-600">Manage graduation batches</p>
-                                    </div>
-                                </div>
-                                <ArrowRight className="h-5 w-5 text-orange-400 group-hover:text-orange-600 group-hover:translate-x-1 transition-all" />
-                            </button>
-
-                            <button
-                                onClick={() => router.visit('/admin/users')}
-                                className="w-full flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 border border-indigo-200/50 transition-all group shadow-sm hover:shadow-md"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2.5 bg-white rounded-lg shadow-sm">
-                                        <Shield className="h-5 w-5 text-indigo-600" />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="font-bold text-gray-900">Admin Users</p>
-                                        <p className="text-xs text-gray-600">Manage system administrators</p>
-                                    </div>
-                                </div>
-                                <ArrowRight className="h-5 w-5 text-indigo-400 group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
-                            </button>
-
-                            <button
-                                onClick={() => router.visit('/admin/email-templates')}
-                                className="w-full flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-pink-50 to-rose-50 hover:from-pink-100 hover:to-rose-100 border border-pink-200/50 transition-all group shadow-sm hover:shadow-md"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2.5 bg-white rounded-lg shadow-sm">
-                                        <Mail className="h-5 w-5 text-pink-600" />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="font-bold text-gray-900">Email Templates</p>
-                                        <p className="text-xs text-gray-600">Customize email notifications</p>
-                                    </div>
-                                </div>
-                                <ArrowRight className="h-5 w-5 text-pink-400 group-hover:text-pink-600 group-hover:translate-x-1 transition-all" />
-                            </button>
-
-                            <button
-                                onClick={() => router.visit('/admin/survey-analytics')}
-                                className="w-full flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-purple-50 to-violet-50 hover:from-purple-100 hover:to-violet-100 border border-purple-200/50 transition-all group shadow-sm hover:shadow-md"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className="p-2.5 bg-white rounded-lg shadow-sm">
-                                        <BarChart3 className="h-5 w-5 text-purple-600" />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="font-bold text-gray-900">Survey Analytics</p>
-                                        <p className="text-xs text-gray-600">View survey insights & trends</p>
-                                    </div>
-                                </div>
-                                <ArrowRight className="h-5 w-5 text-purple-400 group-hover:text-purple-600 group-hover:translate-x-1 transition-all" />
-                            </button>
-                        </CardContent>
-                    </Card >
-                </div >
+                    </Card>
+                </div>
 
                 {/* Super Admin Section - Enhanced */}
                 {

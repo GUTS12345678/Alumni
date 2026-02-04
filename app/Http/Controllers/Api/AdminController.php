@@ -24,36 +24,68 @@ class AdminController extends Controller
     /**
      * Get dashboard metrics and overview data
      */
-    public function dashboard(): JsonResponse
+    public function dashboard(Request $request): JsonResponse
     {
         try {
+            // Get campus_id filter if provided
+            $campusId = $request->input('campus_id');
+            
+            // Build base queries with optional campus filtering
+            $alumniQuery = AlumniProfile::query();
+            $surveyQuery = Survey::query();
+            $batchQuery = Batch::query();
+            $responseQuery = SurveyResponse::where('status', 'completed');
+            $userQuery = User::query();
+            
+            if ($campusId) {
+                $alumniQuery->where('campus_id', $campusId);
+                $surveyQuery->where(function($q) use ($campusId) {
+                    $q->where('campus_id', $campusId)->orWhere('is_multi_campus', true);
+                });
+                $batchQuery->where('campus_id', $campusId);
+                $responseQuery->where('campus_id', $campusId);
+                $userQuery->where('campus_id', $campusId);
+            }
+            
             // Total counts
-            $totalAlumni = AlumniProfile::count();
-            $totalSurveys = Survey::count();
-            $totalBatches = Batch::count();
-            $totalResponses = SurveyResponse::where('status', 'completed')->count();
+            $totalAlumni = $alumniQuery->count();
+            $totalSurveys = (clone $surveyQuery)->count();
+            $totalBatches = $batchQuery->count();
+            $totalResponses = $responseQuery->count();
             
             // System-level counts (for Super Admin analytics)
-            $totalUsers = User::count();
-            $totalDepartments = Department::count();
-            $totalCourses = Course::count();
-            $activeSurveys = Survey::where('status', 'active')->count();
+            $totalUsers = $userQuery->count();
+            $totalDepartments = $campusId ? Department::where('campus_id', $campusId)->count() : Department::count();
+            $totalCourses = $campusId ? Course::where('campus_id', $campusId)->count() : Course::count();
+            $activeSurveys = (clone $surveyQuery)->where('status', 'active')->count();
 
             // Response rate calculation
-            $totalInvitations = SurveyResponse::count();
+            $invitationQuery = SurveyResponse::query();
+            if ($campusId) {
+                $invitationQuery->where('campus_id', $campusId);
+            }
+            $totalInvitations = $invitationQuery->count();
             $responseRate = $totalInvitations > 0 ? round(($totalResponses / $totalInvitations) * 100, 2) : 0;
 
             // Recent activity (last 30 days)
-            $recentRegistrations = AlumniProfile::where('created_at', '>=', Carbon::now()->subDays(30))->count();
-            $recentResponses = SurveyResponse::where('status', 'completed')
-                ->where('updated_at', '>=', Carbon::now()->subDays(30))
-                ->count();
+            $recentAlumniQuery = AlumniProfile::where('created_at', '>=', Carbon::now()->subDays(30));
+            $recentResponseQuery = SurveyResponse::where('status', 'completed')
+                ->where('updated_at', '>=', Carbon::now()->subDays(30));
+            if ($campusId) {
+                $recentAlumniQuery->where('campus_id', $campusId);
+                $recentResponseQuery->where('campus_id', $campusId);
+            }
+            $recentRegistrations = $recentAlumniQuery->count();
+            $recentResponses = $recentResponseQuery->count();
 
             // Batch distribution - Use graduation_year from alumni_profiles directly
             // This handles alumni who have graduation_year set but may not have batch_id
-            $batchDistribution = AlumniProfile::select('graduation_year', DB::raw('COUNT(*) as alumni_count'))
-                ->whereNotNull('graduation_year')
-                ->groupBy('graduation_year')
+            $batchDistQuery = AlumniProfile::select('graduation_year', DB::raw('COUNT(*) as alumni_count'))
+                ->whereNotNull('graduation_year');
+            if ($campusId) {
+                $batchDistQuery->where('campus_id', $campusId);
+            }
+            $batchDistribution = $batchDistQuery->groupBy('graduation_year')
                 ->orderBy('graduation_year', 'desc')
                 ->get()
                 ->map(function ($record) {
@@ -65,26 +97,38 @@ class AdminController extends Controller
                 });
 
             // Employment status distribution
-            $employmentStats = AlumniProfile::select('employment_status')
-                ->whereNotNull('employment_status')
-                ->groupBy('employment_status')
+            $empStatsQuery = AlumniProfile::select('employment_status')
+                ->whereNotNull('employment_status');
+            if ($campusId) {
+                $empStatsQuery->where('campus_id', $campusId);
+            }
+            $employmentStats = $empStatsQuery->groupBy('employment_status')
                 ->selectRaw('employment_status, COUNT(*) as count')
                 ->get()
                 ->pluck('count', 'employment_status');
 
             // Recent surveys
-            $recentSurveys = Survey::with('creator:id,email')
-                ->orderBy('created_at', 'desc')
+            $recentSurveysQuery = Survey::with('creator:id,email');
+            if ($campusId) {
+                $recentSurveysQuery->where(function($q) use ($campusId) {
+                    $q->where('campus_id', $campusId)->orWhere('is_multi_campus', true);
+                });
+            }
+            $recentSurveys = $recentSurveysQuery->orderBy('created_at', 'desc')
                 ->take(5)
                 ->get()
-                ->map(function ($survey) {
+                ->map(function ($survey) use ($campusId) {
+                    $responsesQuery = $survey->responses()->where('status', 'completed');
+                    if ($campusId) {
+                        $responsesQuery->where('campus_id', $campusId);
+                    }
                     return [
                         'id' => $survey->id,
                         'title' => $survey->title,
                         'status' => $survey->status,
                         'created_by' => $survey->creator->email ?? 'Unknown',
                         'created_at' => $survey->created_at->format('Y-m-d H:i:s'),
-                        'responses_count' => $survey->responses()->where('status', 'completed')->count()
+                        'responses_count' => $responsesQuery->count()
                     ];
                 });
 
@@ -92,15 +136,101 @@ class AdminController extends Controller
             $monthlyTrend = [];
             for ($i = 11; $i >= 0; $i--) {
                 $month = Carbon::now()->subMonths($i);
-                $count = AlumniProfile::whereYear('created_at', $month->year)
-                    ->whereMonth('created_at', $month->month)
-                    ->count();
+                $trendQuery = AlumniProfile::whereYear('created_at', $month->year)
+                    ->whereMonth('created_at', $month->month);
+                if ($campusId) {
+                    $trendQuery->where('campus_id', $campusId);
+                }
+                $count = $trendQuery->count();
 
                 $monthlyTrend[] = [
                     'month' => $month->format('Y-m'),
                     'registrations' => $count
                 ];
             }
+
+            // ============================================
+            // EMPLOYMENT METRICS - Critical for Tracer System
+            // ============================================
+            
+            // 1. Employment Rate Calculation
+            $employedAlumniQuery = AlumniProfile::whereIn('employment_status', [
+                'employed_full_time', 
+                'employed_part_time', 
+                'self_employed'
+            ]);
+            if ($campusId) {
+                $employedAlumniQuery->where('campus_id', $campusId);
+            }
+            $totalEmployed = $employedAlumniQuery->count();
+            $employmentRate = $totalAlumni > 0 ? round(($totalEmployed / $totalAlumni) * 100, 2) : 0;
+
+            // 2. Average Days to First Job
+            $timeToJobQuery = AlumniProfile::whereIn('employment_status', [
+                'employed_full_time', 
+                'employed_part_time', 
+                'self_employed'
+            ])
+            ->whereNotNull('graduation_year')
+            ->whereNotNull('job_start_date');
+            
+            if ($campusId) {
+                $timeToJobQuery->where('campus_id', $campusId);
+            }
+            
+            $alumniWithJobDates = $timeToJobQuery->get();
+            $totalDays = 0;
+            $validRecords = 0;
+            
+            foreach ($alumniWithJobDates as $alumni) {
+                // Assume graduation date is June 1st of graduation year
+                $graduationDate = Carbon::parse($alumni->graduation_year . '-06-01');
+                $jobStartDate = Carbon::parse($alumni->job_start_date);
+                
+                // Only count if job started after graduation
+                if ($jobStartDate->greaterThanOrEqualTo($graduationDate)) {
+                    $daysToJob = $graduationDate->diffInDays($jobStartDate);
+                    $totalDays += $daysToJob;
+                    $validRecords++;
+                }
+            }
+            
+            $avgDaysToJob = $validRecords > 0 ? round($totalDays / $validRecords) : 0;
+
+            // 3. Job Alignment Analysis
+            $alignmentQuery = AlumniProfile::whereIn('employment_status', [
+                'employed_full_time', 
+                'employed_part_time', 
+                'self_employed'
+            ]);
+            if ($campusId) {
+                $alignmentQuery->where('campus_id', $campusId);
+            }
+            
+            $alignedJobs = (clone $alignmentQuery)->where('job_related_to_degree', 1)->count();
+            $jobAlignmentRate = $totalEmployed > 0 ? round(($alignedJobs / $totalEmployed) * 100, 2) : 0;
+
+            // 4. Job Mismatch Breakdown
+            $mismatchStats = [
+                'overqualified' => (clone $alignmentQuery)->where('job_mismatch_reason', 'overqualified')->count(),
+                'underqualified' => (clone $alignmentQuery)->where('job_mismatch_reason', 'underqualified')->count(),
+                'unfit' => (clone $alignmentQuery)->where('job_mismatch_reason', 'unfit')->count(),
+                'good_match' => (clone $alignmentQuery)->where(function($q) {
+                    $q->whereNull('job_mismatch_reason')
+                      ->orWhere('job_mismatch_reason', 'none');
+                })->where('job_related_to_degree', 1)->count()
+            ];
+
+            // 5. Unemployment Breakdown
+            $unemployedQuery = AlumniProfile::query();
+            if ($campusId) {
+                $unemployedQuery->where('campus_id', $campusId);
+            }
+            $unemploymentStats = [
+                'seeking' => (clone $unemployedQuery)->where('employment_status', 'unemployed_seeking')->count(),
+                'not_seeking' => (clone $unemployedQuery)->where('employment_status', 'unemployed_not_seeking')->count(),
+                'continuing_education' => (clone $unemployedQuery)->where('employment_status', 'pursuing_higher_education')->count()
+            ];
 
             return response()->json([
                 'success' => true,
@@ -116,6 +246,15 @@ class AdminController extends Controller
                         'total_courses' => $totalCourses,
                         'active_surveys' => $activeSurveys
                     ],
+                    'employment_metrics' => [
+                        'employment_rate' => $employmentRate,
+                        'total_employed' => $totalEmployed,
+                        'avg_days_to_job' => $avgDaysToJob,
+                        'job_alignment_rate' => $jobAlignmentRate,
+                        'aligned_jobs_count' => $alignedJobs
+                    ],
+                    'mismatch_stats' => $mismatchStats,
+                    'unemployment_stats' => $unemploymentStats,
                     'recent_activity' => [
                         'recent_registrations' => $recentRegistrations,
                         'recent_responses' => $recentResponses
@@ -140,8 +279,13 @@ class AdminController extends Controller
     public function getAlumni(Request $request): JsonResponse
     {
         try {
-            $query = AlumniProfile::with(['user:id,email', 'batch:id,name,graduation_year'])
+            $query = AlumniProfile::with(['user:id,email', 'batch:id,name,graduation_year', 'campus:id,name,code'])
                 ->orderBy('created_at', 'desc');
+
+            // Campus filter (priority filter - always apply if provided)
+            if ($request->has('campus_id') && $request->campus_id) {
+                $query->where('campus_id', $request->campus_id);
+            }
 
             // Apply filters
             if ($request->has('batch_id') && $request->batch_id) {
@@ -155,7 +299,21 @@ class AdminController extends Controller
             }
 
             if ($request->has('employment_status') && $request->employment_status) {
-                $query->where('employment_status', $request->employment_status);
+                $status = $request->employment_status;
+                // Map frontend filter values to database values
+                $statusMapping = [
+                    'employed' => ['employed_full_time', 'employed_part_time'],
+                    'unemployed' => ['unemployed_seeking', 'unemployed_not_seeking'],
+                    'self-employed' => ['self_employed'],
+                    'pursuing_education' => ['continuing_education'],
+                ];
+                
+                if (isset($statusMapping[$status])) {
+                    $query->whereIn('employment_status', $statusMapping[$status]);
+                } else {
+                    // Direct match for exact values
+                    $query->where('employment_status', $status);
+                }
             }
 
             if ($request->has('degree_program') && $request->degree_program) {
@@ -410,6 +568,16 @@ class AdminController extends Controller
             $query = Survey::with(['creator:id,email'])
                 ->withCount(['responses', 'questions'])
                 ->orderBy('created_at', 'desc');
+
+            // Filter by campus
+            if ($request->has('campus_id') && $request->campus_id) {
+                $campusId = $request->campus_id;
+                $query->where(function ($q) use ($campusId) {
+                    $q->where('campus_id', $campusId)
+                      ->orWhere('is_multi_campus', true)
+                      ->orWhereNull('campus_id');
+                });
+            }
 
             // Filter by status
             if ($request->has('status') && $request->status) {
@@ -675,10 +843,16 @@ class AdminController extends Controller
         try {
             $perPage = (int) $request->get('per_page', 15);
             $search = $request->get('search');
+            $campusId = $request->get('campus_id');
 
             $query = Batch::withCount(['alumniProfiles as alumni_count'])
                 ->orderBy('graduation_year', 'desc')
                 ->orderBy('name');
+
+            // Apply campus filter
+            if ($campusId) {
+                $query->where('campus_id', $campusId);
+            }
 
             // Apply search filter
             if ($search) {
@@ -1754,12 +1928,17 @@ class AdminController extends Controller
         try {
             $currentUser = auth()->user();
             
-            $query = User::with('alumniProfile:id,user_id,first_name,last_name,phone')
+            $query = User::with(['alumniProfile:id,user_id,first_name,last_name,phone', 'campus:id,name,code'])
                 ->orderBy('created_at', 'desc');
 
             // Restrict admin users to super_admin only
             if ($currentUser->role !== 'super_admin') {
                 $query->where('role', '!=', 'admin');
+            }
+
+            // Campus filter
+            if ($request->has('campus_id') && $request->campus_id) {
+                $query->where('campus_id', $request->campus_id);
             }
 
             // Search filter

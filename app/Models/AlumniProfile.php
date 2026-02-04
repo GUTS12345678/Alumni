@@ -4,16 +4,18 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToCampus;
 
 class AlumniProfile extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToCampus;
 
     protected $fillable = [
         'user_id',
         'batch_id',
         'department_id',
         'course_id',
+        'campus_id',
         'profile_complete',
         'first_name',
         'last_name',

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useCampus } from '@/contexts/CampusContext';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -74,6 +75,9 @@ interface Props {
 }
 
 export default function SurveyBank({ user }: Props) {
+    // Campus context for filtering
+    const { selectedCampus } = useCampus();
+
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -121,6 +125,7 @@ export default function SurveyBank({ user }: Props) {
             if (searchTerm) params.append('search', searchTerm);
             params.append('page', currentPage.toString());
             params.append('per_page', '15');
+            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
 
             const response = await axios.get(`/api/v1/admin/surveys?${params}`, {
                 headers: {
@@ -144,7 +149,7 @@ export default function SurveyBank({ user }: Props) {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [currentPage, searchTerm]);
+    }, [currentPage, searchTerm, selectedCampus?.id]);
 
     useEffect(() => {
         fetchSurveys();

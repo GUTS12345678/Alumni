@@ -27,9 +27,11 @@ class LoginRequest extends FormRequest
      */
     public function rules(): array
     {
+        // Allow either email OR student_id for login
         return [
-            'email' => ['required', 'string', 'email'],
-            'password' => ['required', 'string'],
+            'email' => ['nullable', 'string', 'email', 'required_without:student_id'],
+            'student_id' => ['nullable', 'string', 'required_without:email'],
+            'password' => ['required', 'string', 'min:8'],
         ];
     }
 
@@ -42,12 +44,62 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        // Verify email and password
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        // Determine login credentials (email or student_id)
+        $credentials = ['password' => $this->input('password')];
+        $loginField = 'email';
+        
+        if ($this->filled('email')) {
+            $credentials['email'] = $this->input('email');
+            $loginField = 'email';
+        } elseif ($this->filled('student_id')) {
+            // Find user by student_id from alumni_profiles table
+            $profile = \App\Models\AlumniProfile::where('student_id', $this->input('student_id'))->first();
+            
+            if (!$profile) {
+                RateLimiter::hit($this->throttleKey());
+                throw ValidationException::withMessages([
+                    'login' => 'Student ID not found in our records.',
+                    'general' => 'Invalid student ID or password. Please try again.',
+                ]);
+            }
+            
+            // Get the user associated with this profile
+            $user = $profile->user;
+            if (!$user) {
+                RateLimiter::hit($this->throttleKey());
+                throw ValidationException::withMessages([
+                    'login' => 'Account not found for this student ID.',
+                    'general' => 'Invalid student ID or password. Please try again.',
+                ]);
+            }
+            
+            // Manually verify password
+            if (!\Illuminate\Support\Facades\Hash::check($this->input('password'), $user->password)) {
+                RateLimiter::hit($this->throttleKey());
+                throw ValidationException::withMessages([
+                    'login' => 'These credentials do not match our records.',
+                    'general' => 'Invalid student ID or password. Please try again.',
+                ]);
+            }
+            
+            // Manually log in the user
+            Auth::login($user, $this->boolean('remember'));
+            
+            // Update last login
+            $user->last_login_at = now();
+            $user->save();
+            
+            RateLimiter::clear($this->throttleKey());
+            return;
+        }
+
+        // Standard email authentication
+        if (! Auth::attempt($credentials, $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
-                'general' => __('auth.failed'),
+                'login' => 'These credentials do not match our records.',
+                'general' => 'Invalid email or password. Please try again.',
             ]);
         }
 
@@ -87,6 +139,10 @@ class LoginRequest extends FormRequest
      */
     public function throttleKey(): string
     {
-        return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());
+        $identifier = $this->filled('email') 
+            ? $this->string('email') 
+            : $this->string('student_id');
+            
+        return Str::transliterate(Str::lower($identifier).'|'.$this->ip());
     }
 }

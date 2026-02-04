@@ -68,7 +68,7 @@ class CareerHistory extends Model
         }
         
         $years = floor($months / 12);
-        $remainingMonths = $months % 12;
+        $remainingMonths = round($months % 12);
         
         $duration = $years == 1 ? '1 year' : "$years years";
         if ($remainingMonths > 0) {

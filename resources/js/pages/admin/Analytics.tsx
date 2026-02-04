@@ -37,6 +37,7 @@ import {
     Minus
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import { useCampus } from '@/contexts/CampusContext';
 
 interface User {
     id: number;
@@ -167,6 +168,9 @@ const COLORS = {
 };
 
 export default function Analytics({ user }: Props) {
+    // Campus context for filtering
+    const { selectedCampus } = useCampus();
+
     // Dashboard Stats State
     const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
     const [dashboardLoading, setDashboardLoading] = useState(true);
@@ -192,7 +196,11 @@ export default function Analytics({ user }: Props) {
         try {
             setDashboardLoading(true);
             const token = localStorage.getItem('auth_token');
-            const response = await fetch('/api/v1/admin/dashboard', {
+            const params = new URLSearchParams();
+            if (selectedCampus?.id) {
+                params.append('campus_id', selectedCampus.id.toString());
+            }
+            const response = await fetch(`/api/v1/admin/dashboard?${params}`, {
                 credentials: 'include',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -213,7 +221,7 @@ export default function Analytics({ user }: Props) {
         } finally {
             setDashboardLoading(false);
         }
-    }, []);
+    }, [selectedCampus]);
 
     // Fetch Time-to-Job Analytics
     const fetchTimeToJobAnalytics = useCallback(async () => {
@@ -223,6 +231,9 @@ export default function Analytics({ user }: Props) {
             const queryParams = new URLSearchParams();
             if (selectedYears.length > 0) {
                 queryParams.append('years', selectedYears.join(','));
+            }
+            if (selectedCampus?.id) {
+                queryParams.append('campus_id', selectedCampus.id.toString());
             }
 
             const response = await fetch(`/api/v1/admin/analytics/time-to-job?${queryParams}`, {
@@ -248,14 +259,18 @@ export default function Analytics({ user }: Props) {
         } finally {
             setTimeToJobLoading(false);
         }
-    }, [selectedYears]);
+    }, [selectedYears, selectedCampus]);
 
     // Fetch system stats for Super Admin features
     const fetchSystemStats = useCallback(async () => {
         if (user.role !== 'super_admin') return; // Only fetch for super admin
 
         try {
-            const response = await fetch('/api/v1/admin/dashboard', {
+            const params = new URLSearchParams();
+            if (selectedCampus?.id) {
+                params.append('campus_id', selectedCampus.id.toString());
+            }
+            const response = await fetch(`/api/v1/admin/dashboard?${params}`, {
                 credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
@@ -286,9 +301,9 @@ export default function Analytics({ user }: Props) {
         } catch (err) {
             console.error('Error fetching system stats:', err);
         }
-    }, [user.role]);
+    }, [user.role, selectedCampus]);
 
-    // Fetch all data on mount
+    // Fetch all data on mount and when campus changes
     useEffect(() => {
         fetchDashboardStats();
         fetchTimeToJobAnalytics();

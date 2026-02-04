@@ -274,7 +274,14 @@ class SurveyController extends Controller
         $validator = Validator::make($request->all(), [
             'response_token' => 'required|string',
             'email' => 'sometimes|email',
-            'password' => 'sometimes|min:6',
+            'password' => [
+                'sometimes',
+                'min:8',
+                'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/', // Must contain lowercase, uppercase, and number
+            ],
+        ], [
+            'password.min' => 'Password must be at least 8 characters long.',
+            'password.regex' => 'Password must contain at least one uppercase letter, one lowercase letter, and one number.',
         ]);
 
         if ($validator->fails()) {

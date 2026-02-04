@@ -4,16 +4,18 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\BelongsToCampus;
 
 class Batch extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToCampus;
 
     protected $fillable = [
         'name',
         'graduation_year',
         'description',
         'status',
+        'campus_id',
     ];
 
     protected $casts = [

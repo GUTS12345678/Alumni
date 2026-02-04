@@ -314,6 +314,14 @@ class AuthController extends Controller
             ], 404);
         }
 
+        // SECURITY: Prevent campus_id changes for non-admin users
+        if ($request->has('campus_id') && !in_array($user->role, ['admin', 'super_admin'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized: Campus assignment cannot be changed by alumni users.'
+            ], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'first_name' => 'sometimes|string|max:255',
             'last_name' => 'sometimes|string|max:255',
@@ -350,6 +358,7 @@ class AuthController extends Controller
             'feedback_to_institution' => 'sometimes|nullable|string',
             'willing_to_mentor' => 'sometimes|nullable|boolean',
             'willing_to_hire_alumni' => 'sometimes|nullable|boolean',
+            'campus_id' => 'prohibited', // SECURITY: Block campus_id in updates
         ]);
 
         if ($validator->fails()) {
@@ -361,7 +370,9 @@ class AuthController extends Controller
         }
 
         try {
-            $profile->update($request->all());
+            // Remove campus_id from request data (extra security layer)
+            $updateData = $request->except(['campus_id', 'user_id', 'id']);
+            $profile->update($updateData);
 
             // Check if profile should be marked as completed
             if ($profile->isProfileComplete() && !$profile->profile_completed) {
@@ -557,6 +568,43 @@ class AuthController extends Controller
             'success' => true,
             'exists' => $exists,
             'message' => $exists ? 'Student ID already registered' : 'Student ID available'
+        ]);
+    }
+
+    /**
+     * Check if login (email or student_id) exists
+     * Used by login page to validate credentials before submission
+     */
+    public function checkLogin(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'login' => 'required|string',
+            'type' => 'required|in:email,student_id',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid input',
+                'exists' => false
+            ], 422);
+        }
+
+        $exists = false;
+        $message = '';
+
+        if ($request->type === 'email') {
+            $exists = User::where('email', $request->login)->exists();
+            $message = $exists ? 'Email found in our records' : 'Email not registered';
+        } else {
+            $exists = AlumniProfile::where('student_id', $request->login)->exists();
+            $message = $exists ? 'Student ID found in our records' : 'Student ID not found';
+        }
+
+        return response()->json([
+            'success' => true,
+            'exists' => $exists,
+            'message' => $message
         ]);
     }
 }

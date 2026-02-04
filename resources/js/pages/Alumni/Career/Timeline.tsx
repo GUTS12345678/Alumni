@@ -44,7 +44,7 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null);
     const [skillInput, setSkillInput] = useState('');
     const [achievementInput, setAchievementInput] = useState('');
-    
+
     const [formData, setFormData] = useState({
         job_title: '',
         company_name: '',
@@ -71,8 +71,8 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
 
     const formatExperience = (months: number) => {
         const years = Math.floor(months / 12);
-        const remainingMonths = months % 12;
-        
+        const remainingMonths = Math.round(months % 12);
+
         if (years === 0) return `${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}`;
         if (remainingMonths === 0) return `${years} year${years !== 1 ? 's' : ''}`;
         return `${years} year${years !== 1 ? 's' : ''}, ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''}`;
@@ -120,7 +120,7 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         const data = {
             ...formData,
             salary: formData.salary ? parseFloat(formData.salary) : null,
@@ -196,7 +196,7 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
                             <p className="text-gray-600">Track your professional journey</p>
                         </div>
                     </div>
-                    <Button 
+                    <Button
                         onClick={openAddModal}
                         className="bg-maroon-700 hover:bg-maroon-800 text-white"
                     >
@@ -274,7 +274,7 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
                                 <p className="text-gray-500 mb-6">
                                     Add your work experience to build your career timeline
                                 </p>
-                                <Button 
+                                <Button
                                     onClick={openAddModal}
                                     className="bg-maroon-700 hover:bg-maroon-800 text-white"
                                 >
@@ -285,14 +285,13 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
                         ) : (
                             <div className="space-y-6">
                                 {careerHistory.map((career, index) => (
-                                    <div 
+                                    <div
                                         key={career.id}
                                         className="relative pl-8 pb-6 border-l-2 border-maroon-200 last:border-0"
                                     >
                                         {/* Timeline dot */}
-                                        <div className={`absolute left-[-9px] top-0 w-4 h-4 rounded-full border-2 border-white ${
-                                            career.is_current ? 'bg-green-500' : 'bg-maroon-600'
-                                        }`} />
+                                        <div className={`absolute left-[-9px] top-0 w-4 h-4 rounded-full border-2 border-white ${career.is_current ? 'bg-green-500' : 'bg-maroon-600'
+                                            }`} />
 
                                         <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
                                             {/* Header */}
@@ -350,7 +349,7 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
                                                 <span>
                                                     {new Date(career.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
                                                     {' - '}
-                                                    {career.is_current ? 'Present' : 
+                                                    {career.is_current ? 'Present' :
                                                         career.end_date ? new Date(career.end_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Present'
                                                     }
                                                 </span>
@@ -380,7 +379,7 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
                                                     <p className="text-sm font-semibold text-gray-700 mb-2">Skills:</p>
                                                     <div className="flex flex-wrap gap-2">
                                                         {career.skills_used.map((skill, idx) => (
-                                                            <Badge 
+                                                            <Badge
                                                                 key={idx}
                                                                 variant="outline"
                                                                 className="border-maroon-200 text-maroon-700"
@@ -426,7 +425,7 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
                                 {editingId ? 'Edit Position' : 'Add Position'}
                             </h2>
                         </div>
-                        
+
                         <form onSubmit={handleSubmit} className="p-6 space-y-6">
                             {/* Basic Info */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -514,8 +513,8 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
                                     id="is_current"
                                     type="checkbox"
                                     checked={formData.is_current}
-                                    onChange={(e) => setFormData({ 
-                                        ...formData, 
+                                    onChange={(e) => setFormData({
+                                        ...formData,
                                         is_current: e.target.checked,
                                         end_date: e.target.checked ? '' : formData.end_date
                                     })}
@@ -553,7 +552,7 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
                                 </div>
                                 <div className="flex flex-wrap gap-2">
                                     {formData.skills_used.map((skill, index) => (
-                                        <Badge 
+                                        <Badge
                                             key={index}
                                             variant="outline"
                                             className="border-maroon-300 text-maroon-700 cursor-pointer hover:bg-red-50"
@@ -579,7 +578,7 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
                                 </div>
                                 <ul className="space-y-2">
                                     {formData.achievements.map((achievement, index) => (
-                                        <li 
+                                        <li
                                             key={index}
                                             className="flex items-start gap-2 p-2 bg-gray-50 rounded border border-gray-200 cursor-pointer hover:bg-red-50"
                                             onClick={() => removeAchievement(index)}

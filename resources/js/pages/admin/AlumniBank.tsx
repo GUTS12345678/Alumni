@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import AdminBaseLayout from '../../components/base/AdminBaseLayout';
 import { useMultiSelect, BulkActionBar, SelectAllCheckbox } from '../../components/ui/multi-select';
+import { useCampus } from '@/contexts/CampusContext';
 
 interface User {
     id: number;
@@ -110,6 +111,9 @@ export default function AlumniBank({ user }: Props) {
     const multiSelect = useMultiSelect<number>();
     const [isDeleting, setIsDeleting] = useState(false);
 
+    // Campus filter
+    const { selectedCampus } = useCampus();
+
     // Debounce search term
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -129,6 +133,7 @@ export default function AlumniBank({ user }: Props) {
             }
 
             const params = new URLSearchParams();
+            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
             if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
             if (filterStatus) params.append('employment_status', filterStatus);
             if (filterYear) params.append('graduation_year', filterYear);
@@ -170,7 +175,14 @@ export default function AlumniBank({ user }: Props) {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [currentPage, debouncedSearchTerm, filterStatus, filterYear, filterJobTitle, filterEmployer, filterCareerField]);
+    }, [currentPage, debouncedSearchTerm, filterStatus, filterYear, filterJobTitle, filterEmployer, filterCareerField, selectedCampus]);
+
+    // Re-fetch when campus changes
+    useEffect(() => {
+        if (selectedCampus) {
+            setCurrentPage(1); // Reset to page 1 when campus changes
+        }
+    }, [selectedCampus]);
 
     // Fetch available graduation years/batches
     const fetchAvailableYears = React.useCallback(async () => {

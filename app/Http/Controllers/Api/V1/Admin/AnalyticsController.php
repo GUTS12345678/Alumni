@@ -24,19 +24,20 @@ class AnalyticsController extends Controller
         try {
             $years = $request->get('years');
             $yearFilter = null;
+            $campusId = $request->get('campus_id');
             
             if ($years) {
                 $yearFilter = explode(',', $years);
             }
 
             // Get yearly analytics data
-            $yearlyData = $this->getYearlyTimeToJobData($yearFilter);
+            $yearlyData = $this->getYearlyTimeToJobData($yearFilter, $campusId);
             
             // Get KPI metrics
-            $kpiMetrics = $this->getKPIMetrics($yearFilter);
+            $kpiMetrics = $this->getKPIMetrics($yearFilter, $campusId);
             
             // Get job mismatch statistics
-            $mismatchStats = $this->getJobMismatchStatistics($yearFilter);
+            $mismatchStats = $this->getJobMismatchStatistics($yearFilter, $campusId);
 
             return response()->json([
                 'success' => true,
@@ -98,7 +99,7 @@ class AnalyticsController extends Controller
      * Uses alumni_profiles table directly (graduation_year field)
      * Falls back to employments table if available
      */
-    private function getYearlyTimeToJobData($yearFilter = null): array
+    private function getYearlyTimeToJobData($yearFilter = null, $campusId = null): array
     {
         // First, check if we have data in employments table
         $hasEmploymentRecords = DB::table('employments')->exists();
@@ -114,6 +115,9 @@ class AnalyticsController extends Controller
             ->whereNotNull('graduation_year')
             ->when($yearFilter, function ($q) use ($yearFilter) {
                 return $q->whereIn('graduation_year', $yearFilter);
+            })
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
             })
             ->groupBy('graduation_year')
             ->orderBy('graduation_year')
@@ -133,6 +137,9 @@ class AnalyticsController extends Controller
                 ->whereNotNull('e.start_date')
                 ->when($yearFilter, function ($q) use ($yearFilter) {
                     return $q->whereIn('ap.graduation_year', $yearFilter);
+                })
+                ->when($campusId, function ($q) use ($campusId) {
+                    return $q->where('ap.campus_id', $campusId);
                 })
                 ->groupBy('ap.graduation_year')
                 ->orderBy('ap.graduation_year')
@@ -155,7 +162,7 @@ class AnalyticsController extends Controller
                 : 0;
             
             // Get program breakdown for this year
-            $programBreakdown = $this->getProgramBreakdownForYear($year);
+            $programBreakdown = $this->getProgramBreakdownForYear($year, $campusId);
             
             $data[] = [
                 'graduation_year' => (int) $year,
@@ -163,7 +170,7 @@ class AnalyticsController extends Controller
                 'total_alumni' => (int) $yearData->total_alumni,
                 'employed_alumni' => (int) $yearData->employed_alumni,
                 'employment_rate' => round((float) $employmentRate, 1),
-                'median_days' => $this->getMedianDaysForYear($year),
+                'median_days' => $this->getMedianDaysForYear($year, $campusId),
                 'program_breakdown' => $programBreakdown,
                 'data_source' => $jobData && $jobData->total_alumni_with_jobs > 0 ? 'employments_table' : 'profiles_only'
             ];
@@ -176,7 +183,7 @@ class AnalyticsController extends Controller
      * Get program breakdown for a specific year
      * Uses alumni_profiles directly (graduation_year field)
      */
-    private function getProgramBreakdownForYear($year): array
+    private function getProgramBreakdownForYear($year, $campusId = null): array
     {
         // First, check if we have data in employments table
         $hasEmploymentRecords = DB::table('employments')->exists();
@@ -192,6 +199,9 @@ class AnalyticsController extends Controller
             ->whereNotNull('degree_program')
             ->where('degree_program', '!=', '')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
+            })
             ->groupBy('degree_program')
             ->having('alumni_count', '>', 0)
             ->get();
@@ -210,6 +220,9 @@ class AnalyticsController extends Controller
                 ->whereNotNull('e.start_date')
                 ->whereNotNull('ap.degree_program')
                 ->where('ap.degree_program', '!=', '')
+                ->when($campusId, function ($q) use ($campusId) {
+                    return $q->where('ap.campus_id', $campusId);
+                })
                 ->groupBy('ap.degree_program')
                 ->having('alumni_count', '>', 0)
                 ->get()
@@ -264,7 +277,7 @@ class AnalyticsController extends Controller
      * Get median days for a specific year
      * Uses alumni_profiles directly (graduation_year field)
      */
-    private function getMedianDaysForYear($year): float
+    private function getMedianDaysForYear($year, $campusId = null): float
     {
         // First, check if we have data in employments table
         $hasEmploymentRecords = DB::table('employments')->exists();
@@ -275,6 +288,9 @@ class AnalyticsController extends Controller
             ->where('graduation_year', $year)
             ->whereNotNull('job_start_date')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
+            })
             ->pluck('days_to_job')
             ->toArray();
             
@@ -286,6 +302,9 @@ class AnalyticsController extends Controller
                 ->select(DB::raw('DATEDIFF(e.start_date, CONCAT(ap.graduation_year, "-06-01")) as days_to_job'))
                 ->where('ap.graduation_year', $year)
                 ->whereNotNull('e.start_date')
+                ->when($campusId, function ($q) use ($campusId) {
+                    return $q->where('ap.campus_id', $campusId);
+                })
                 ->pluck('days_to_job')
                 ->toArray();
         }
@@ -312,7 +331,7 @@ class AnalyticsController extends Controller
      * Get KPI metrics
      * Uses employments table + alumni_profiles for comprehensive tracking
      */
-    private function getKPIMetrics($yearFilter = null): array
+    private function getKPIMetrics($yearFilter = null, $campusId = null): array
     {
         // Overall average days from employments table
         $overallFromJobs = DB::table('alumni_profiles as ap')
@@ -321,6 +340,9 @@ class AnalyticsController extends Controller
             ->whereNotNull('e.start_date')
             ->when($yearFilter, function ($q) use ($yearFilter) {
                 return $q->whereIn('ap.graduation_year', $yearFilter);
+            })
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('ap.campus_id', $campusId);
             })
             ->avg(DB::raw('DATEDIFF(e.start_date, ap.graduation_date)'));
             
@@ -336,6 +358,9 @@ class AnalyticsController extends Controller
             })
             ->when($yearFilter, function ($q) use ($yearFilter) {
                 return $q->whereIn('graduation_year', $yearFilter);
+            })
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
             })
             ->avg(DB::raw('DATEDIFF(job_start_date, graduation_date)'));
         
@@ -1226,7 +1251,7 @@ class AnalyticsController extends Controller
      * Get job mismatch statistics (Overqualified/Unfit)
      * Uses employments table for job history, falls back to alumni_profiles status
      */
-    private function getJobMismatchStatistics($yearFilter = null): array
+    private function getJobMismatchStatistics($yearFilter = null, $campusId = null): array
     {
         // Get employed alumni from employments table (with current jobs)
         $employedQuery = DB::table('alumni_profiles as ap')
@@ -1235,6 +1260,9 @@ class AnalyticsController extends Controller
             
         if ($yearFilter) {
             $employedQuery->whereIn('ap.graduation_year', $yearFilter);
+        }
+        if ($campusId) {
+            $employedQuery->where('ap.campus_id', $campusId);
         }
         
         $totalEmployedFromJobs = $employedQuery->count();
@@ -1252,6 +1280,9 @@ class AnalyticsController extends Controller
         if ($yearFilter) {
             $employedFromStatusQuery->whereIn('graduation_year', $yearFilter);
         }
+        if ($campusId) {
+            $employedFromStatusQuery->where('campus_id', $campusId);
+        }
         
         $totalEmployedFromStatus = $employedFromStatusQuery->count();
         $totalEmployed = $totalEmployedFromJobs + $totalEmployedFromStatus;
@@ -1264,6 +1295,9 @@ class AnalyticsController extends Controller
             ->whereNotNull('ap.job_mismatch_reason')
             ->when($yearFilter, function ($q) use ($yearFilter) {
                 return $q->whereIn('ap.graduation_year', $yearFilter);
+            })
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('ap.campus_id', $campusId);
             })
             ->groupBy('ap.job_mismatch_reason')
             ->get();
@@ -1281,6 +1315,9 @@ class AnalyticsController extends Controller
             })
             ->when($yearFilter, function ($q) use ($yearFilter) {
                 return $q->whereIn('graduation_year', $yearFilter);
+            })
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
             })
             ->groupBy('job_mismatch_reason')
             ->get();

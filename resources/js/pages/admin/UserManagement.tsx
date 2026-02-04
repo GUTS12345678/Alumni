@@ -37,6 +37,7 @@ import {
     CheckCircle
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import { useCampus } from '@/contexts/CampusContext';
 import axios from 'axios';
 
 interface User {
@@ -76,6 +77,9 @@ interface Props {
 }
 
 export default function UserManagement({ user }: Props) {
+    // Campus context for filtering
+    const { selectedCampus } = useCampus();
+
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -197,7 +201,7 @@ export default function UserManagement({ user }: Props) {
         }, 500); // 500ms delay
 
         return () => clearTimeout(timer);
-    }, [searchTerm, roleFilter, statusFilter]);
+    }, [searchTerm, roleFilter, statusFilter, selectedCampus]);
 
     const fetchUsers = useCallback(async () => {
         try {
@@ -208,6 +212,7 @@ export default function UserManagement({ user }: Props) {
             if (searchTerm) params.append('search', searchTerm);
             if (roleFilter !== 'all') params.append('role', roleFilter);
             if (statusFilter !== 'all') params.append('status', statusFilter);
+            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
             params.append('page', currentPage.toString());
             params.append('per_page', '15');
 

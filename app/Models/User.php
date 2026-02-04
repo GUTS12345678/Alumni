@@ -7,11 +7,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use App\Traits\BelongsToCampus;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasApiTokens;
+    use HasFactory, Notifiable, HasApiTokens, BelongsToCampus;
 
     /**
      * The attributes that are mass assignable.
@@ -35,6 +36,7 @@ class User extends Authenticatable
         'cover_photo_path',
         'preferred_theme',
         'preferred_language',
+        'campus_id',
     ];
 
     /**
@@ -301,6 +303,112 @@ class User extends Authenticatable
     public function asMentee()
     {
         return $this->hasMany(Mentorship::class, 'mentee_id');
+    }
+
+    // ==========================================
+    // MESSAGING SYSTEM RELATIONSHIPS
+    // ==========================================
+
+    /**
+     * Get conversations this user is part of
+     */
+    public function conversations()
+    {
+        return $this->belongsToMany(Conversation::class, 'conversation_participants')
+            ->withPivot(['role', 'nickname', 'joined_at', 'left_at', 'last_read_at', 'is_muted', 'invitation_status'])
+            ->withTimestamps()
+            ->wherePivot('invitation_status', 'accepted')
+            ->wherePivotNull('left_at');
+    }
+
+    /**
+     * Get all conversation participations (including pending invites)
+     */
+    public function conversationParticipations()
+    {
+        return $this->hasMany(ConversationParticipant::class);
+    }
+
+    /**
+     * Get pending group invitations
+     */
+    public function pendingInvitations()
+    {
+        return $this->hasMany(ConversationParticipant::class)
+            ->where('invitation_status', 'pending')
+            ->whereNull('left_at');
+    }
+
+    /**
+     * Get messages sent by this user
+     */
+    public function sentMessages()
+    {
+        return $this->hasMany(Message::class, 'sender_id');
+    }
+
+    /**
+     * Get users blocked by this user
+     */
+    public function blockedUsers()
+    {
+        return $this->hasMany(BlockedUser::class, 'user_id');
+    }
+
+    /**
+     * Get users who blocked this user
+     */
+    public function blockedByUsers()
+    {
+        return $this->hasMany(BlockedUser::class, 'blocked_user_id');
+    }
+
+    /**
+     * Check if this user has blocked another user
+     */
+    public function hasBlocked(int $userId): bool
+    {
+        return BlockedUser::hasBlocked($this->id, $userId);
+    }
+
+    /**
+     * Check if this user is blocked by another user
+     */
+    public function isBlockedBy(int $userId): bool
+    {
+        return BlockedUser::hasBlocked($userId, $this->id);
+    }
+
+    /**
+     * Get unread message count across all conversations
+     */
+    public function getUnreadMessagesCountAttribute(): int
+    {
+        $count = 0;
+        foreach ($this->conversations as $conversation) {
+            $count += $conversation->getUnreadCountForUser($this->id);
+        }
+        return $count;
+    }
+
+    /**
+     * Get announcements for this user
+     */
+    public function announcements()
+    {
+        return Announcement::active()->forUser($this);
+    }
+
+    /**
+     * Get unread announcements count
+     */
+    public function getUnreadAnnouncementsCountAttribute(): int
+    {
+        return $this->announcements()
+            ->whereDoesntHave('reads', function ($q) {
+                $q->where('user_id', $this->id);
+            })
+            ->count();
     }
 
 }

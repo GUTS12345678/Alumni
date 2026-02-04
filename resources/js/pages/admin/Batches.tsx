@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import axios from 'axios';
+import { useCampus } from '@/contexts/CampusContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -71,6 +72,9 @@ interface Props {
 }
 
 export default function Batches({ user }: Props) {
+    // Campus context for filtering
+    const { selectedCampus } = useCampus();
+
     const [batches, setBatches] = useState<Batch[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -108,6 +112,7 @@ export default function Batches({ user }: Props) {
             if (searchTerm) params.append('search', searchTerm);
             params.append('page', currentPage.toString());
             params.append('per_page', '15');
+            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
 
             const response = await fetch(`/api/v1/admin/batches?${params}`, {
                 headers: {
@@ -143,7 +148,7 @@ export default function Batches({ user }: Props) {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [currentPage, searchTerm]);
+    }, [currentPage, searchTerm, selectedCampus?.id]);
 
     useEffect(() => {
         fetchBatches();

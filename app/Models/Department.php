@@ -5,16 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Traits\BelongsToCampus;
 
 class Department extends Model
 {
-    use SoftDeletes;
+    use SoftDeletes, BelongsToCampus;
 
     protected $fillable = [
         'name',
         'code',
         'description',
         'status',
+        'campus_id',
     ];
 
     protected $casts = [

@@ -18,10 +18,13 @@ import {
     ChevronLeft,
     ChevronRight,
     LogOut,
-    GraduationCap
+    GraduationCap,
+    MessageCircle,
+    Bell
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import AppearanceToggleDropdown from '@/components/appearance-dropdown';
+import { CampusSelector } from '@/components/CampusSelector';
 
 interface UserData {
     id: number;
@@ -50,6 +53,13 @@ const alumniNavigation = [
         ]
     },
     {
+        section: "Communication",
+        items: [
+            { name: "Messages", href: "/alumni/messages", icon: MessageCircle },
+            { name: "Announcements", href: "/alumni/announcements", icon: Bell }
+        ]
+    },
+    {
         section: "Surveys & Forms",
         items: [
             { name: "Available Surveys", href: "/alumni/surveys", icon: ClipboardList },
@@ -61,7 +71,7 @@ const alumniNavigation = [
         section: "Career & Networking",
         items: [
             { name: "Career Timeline", href: "/alumni/career", icon: TrendingUp },
-            { name: "Job Board", href: "/alumni/jobs", icon: Briefcase },
+            { name: "Job Board", href: "/alumni/job-board", icon: Briefcase },
             { name: "Alumni Network", href: "/alumni/network", icon: Users },
             { name: "Mentorship", href: "/alumni/mentorship", icon: Heart }
         ]
@@ -91,7 +101,7 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
     useEffect(() => {
         const fetchAppearanceSettings = async () => {
             try {
-                const response = await fetch('/api/v1/admin/appearance', {
+                const response = await fetch('/api/v1/public/appearance', {
                     credentials: 'include',
                     headers: {
                         'Accept': 'application/json',
@@ -312,6 +322,8 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                             </div>
 
                             <div className="flex items-center space-x-4">
+                                {/* Campus Badge */}
+                                <CampusSelector variant="minimal" />
                                 <span className="hidden sm:block text-sm text-gray-600">
                                     Welcome, {currentUser?.alumniProfile?.first_name || currentUser?.email?.split('@')[0] || 'Alumni'}
                                 </span>

@@ -22,32 +22,51 @@ class MentorshipController extends Controller
         // Check if user is a mentor
         $mentorProfile = MentorProfile::where('user_id', $user->id)->first();
 
-        // Get available mentors
-        $mentors = MentorProfile::with('user.alumniProfile')
+        // Get available mentors with search and filters
+        $query = MentorProfile::with('user.alumniProfile')
             ->active()
-            ->where('user_id', '!=', $user->id)
-            ->get();
+            ->where('user_id', '!=', $user->id);
 
-        // Get user's mentorships (as mentee)
-        $myMentorships = Mentorship::with(['mentor.alumniProfile'])
-            ->where('mentee_id', $user->id)
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        // Get mentees (if user is a mentor)
-        $myMentees = [];
-        if ($mentorProfile) {
-            $myMentees = Mentorship::with(['mentee.alumniProfile'])
-                ->where('mentor_id', $user->id)
-                ->orderBy('created_at', 'desc')
-                ->get();
+        // Search filter
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->whereHas('user', function($user) use ($search) {
+                    $user->where('name', 'like', "%{$search}%");
+                })
+                ->orWhere('expertise_area', 'like', "%{$search}%")
+                ->orWhere('bio', 'like', "%{$search}%");
+            });
         }
 
+        // Expertise filter
+        if ($request->filled('expertise')) {
+            $query->where('expertise_area', $request->expertise);
+        }
+
+        $mentors = $query->paginate(12);
+
+        // Transform mentors data for frontend
+        $mentors->getCollection()->transform(function($mentor) {
+            return [
+                'id' => $mentor->user_id,
+                'name' => $mentor->user->name,
+                'email' => $mentor->user->email,
+                'graduation_year' => $mentor->user->alumniProfile?->graduation_year,
+                'current_position' => $mentor->user->alumniProfile?->current_job_title,
+                'current_company' => $mentor->user->alumniProfile?->current_employer,
+                'expertise' => $mentor->specializations ?? [],
+                'mentoring_experience' => $mentor->bio,
+                'availability' => $mentor->availability,
+                'rating' => $mentor->rating ?? 0,
+                'review_count' => $mentor->review_count ?? 0,
+            ];
+        });
+
         return Inertia::render('Alumni/Mentorship', [
+            'mentors' => $mentors,
+            'filters' => $request->only(['search', 'expertise']),
             'mentorProfile' => $mentorProfile,
-            'availableMentors' => $mentors,
-            'myMentorships' => $myMentorships,
-            'myMentees' => $myMentees,
         ]);
     }
 
@@ -289,5 +308,29 @@ class MentorshipController extends Controller
         ]);
 
         return redirect()->back()->with('success', 'Mentorship cancelled!');
+    }
+
+    /**
+     * Express interest in becoming a mentor
+     */
+    public function becomeMentor(Request $request)
+    {
+        $user = $request->user();
+
+        // Check if user already has a mentor profile
+        if (MentorProfile::where('user_id', $user->id)->exists()) {
+            return redirect()->back()->with('error', 'You are already registered as a mentor!');
+        }
+
+        // Create a basic mentor interest record (could be a separate table or just log it)
+        ActivityLog::logActivity(
+            $user->id,
+            'mentor_interest_expressed',
+            "User expressed interest in becoming a mentor",
+            'User',
+            $user->id
+        );
+
+        return redirect()->back()->with('success', 'Thank you for your interest! Our team will contact you soon.');
     }
 }

@@ -4,11 +4,12 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
-import { GraduationCap, ArrowLeft, Eye, EyeOff, RefreshCw, Mail, Lock as LockIcon, Sparkles, AlertCircle, Smartphone, Users, TrendingUp, Globe, Award, Heart } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { GraduationCap, Eye, EyeOff, RefreshCw, Mail, Lock as LockIcon, AlertCircle, Smartphone, Users, TrendingUp, Building2, Home, IdCard, ArrowRight, CheckCircle2, XCircle } from 'lucide-react';
 import axios from 'axios';
 
 interface LoginErrors {
-    email?: string;
+    login?: string;
     password?: string;
     otp_code?: string;
     general?: string;
@@ -18,7 +19,7 @@ interface LoginErrors {
 
 export default function Login() {
     const [formData, setFormData] = useState({
-        email: '',
+        login: '',
         password: '',
         otp_code: ''
     });
@@ -27,13 +28,15 @@ export default function Login() {
     const [errors, setErrors] = useState<LoginErrors>({});
     const [csrfError, setCsrfError] = useState(false);
     const [show2FAInput, setShow2FAInput] = useState(false);
-    const [emailValidation, setEmailValidation] = useState<{
+    const [showErrorModal, setShowErrorModal] = useState(false);
+    const [errorModalMessage, setErrorModalMessage] = useState('');
+    const [loginValidation, setLoginValidation] = useState<{
         checking: boolean;
         exists: boolean;
         message: string;
-    }>({ checking: false, exists: false, message: '' });
+        isEmail: boolean;
+    }>({ checking: false, exists: false, message: '', isEmail: false });
 
-    // Setup axios to include CSRF token from meta tag
     useEffect(() => {
         const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
         if (token) {
@@ -41,42 +44,53 @@ export default function Login() {
         }
     }, []);
 
-    // Debounced email validation - check if email exists in database
     useEffect(() => {
-        const checkEmailExists = async () => {
-            if (!formData.email || !/\S+@\S+\.\S+/.test(formData.email)) {
-                setEmailValidation({ checking: false, exists: false, message: '' });
+        const checkLoginExists = async () => {
+            if (!formData.login) {
+                setLoginValidation({ checking: false, exists: false, message: '', isEmail: false });
                 return;
             }
 
-            setEmailValidation({ checking: true, exists: false, message: 'Checking email...' });
+            const isEmail = /\S+@\S+\.\S+/.test(formData.login);
+
+            if (!isEmail && formData.login.length < 3) {
+                setLoginValidation({ checking: false, exists: false, message: '', isEmail: false });
+                return;
+            }
+
+            setLoginValidation({ checking: true, exists: false, message: 'Checking...', isEmail });
 
             try {
-                const response = await axios.post('/api/v1/check-email', {
-                    email: formData.email
+                const response = await axios.post('/api/v1/check-login', {
+                    login: formData.login,
+                    type: isEmail ? 'email' : 'student_id'
                 });
 
                 if (response.data.exists) {
-                    setEmailValidation({
+                    setLoginValidation({
                         checking: false,
                         exists: true,
-                        message: 'Email found'
+                        message: isEmail ? 'Email verified' : 'Student ID verified',
+                        isEmail
                     });
                 } else {
-                    setEmailValidation({
+                    setLoginValidation({
                         checking: false,
                         exists: false,
-                        message: 'Email not registered. Please register first or check your email.'
+                        message: isEmail
+                            ? 'Email not registered'
+                            : 'Student ID not found',
+                        isEmail
                     });
                 }
             } catch {
-                setEmailValidation({ checking: false, exists: false, message: '' });
+                setLoginValidation({ checking: false, exists: false, message: '', isEmail });
             }
         };
 
-        const timer = setTimeout(checkEmailExists, 800);
+        const timer = setTimeout(checkLoginExists, 800);
         return () => clearTimeout(timer);
-    }, [formData.email]);
+    }, [formData.login]);
 
     const handleInputChange = (key: string, value: string | boolean) => {
         setFormData(prev => ({ ...prev, [key]: value }));
@@ -85,7 +99,6 @@ export default function Login() {
             setErrors(prev => ({ ...prev, [key]: '' }));
         }
 
-        // Auto-submit when 6 digits are entered for OTP
         if (key === 'otp_code' && typeof value === 'string' && value.length === 6 && show2FAInput) {
             setTimeout(() => {
                 const submitEvent = { preventDefault: () => { } } as React.FormEvent;
@@ -97,29 +110,25 @@ export default function Login() {
     const validateForm = () => {
         const newErrors: Record<string, string> = {};
 
-        if (!formData.email) {
-            newErrors.email = 'Email is required';
-        } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-            newErrors.email = 'Please enter a valid email address';
-        } else if (!emailValidation.exists && !emailValidation.checking) {
-            newErrors.email = 'This email is not registered. Please register first.';
+        if (!formData.login) {
+            newErrors.login = 'Email or Student ID is required';
+        } else {
+            const isEmail = /\S+@\S+\.\S+/.test(formData.login);
+            if (!isEmail && formData.login.length < 3) {
+                newErrors.login = 'Please enter a valid email or student ID';
+            }
         }
 
         if (!formData.password) {
             newErrors.password = 'Password is required';
         }
 
-        // Only validate OTP if 2FA is enabled and input is shown
         if (show2FAInput && formData.otp_code.length !== 6) {
             newErrors.otp_code = 'OTP code must be 6 characters';
         }
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
-    };
-
-    const handleRefreshPage = () => {
-        window.location.reload();
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -129,44 +138,57 @@ export default function Login() {
 
         setIsSubmitting(true);
         setCsrfError(false);
-        setErrors({}); // Clear previous errors
+        setErrors({});
 
-        // Use Inertia router with proper error handling
+        const isEmail = /\S+@\S+\.\S+/.test(formData.login);
+
         router.post('/login', {
-            email: formData.email,
+            [isEmail ? 'email' : 'student_id']: formData.login,
             password: formData.password,
             otp_code: formData.otp_code,
             remember: false,
         }, {
-            preserveState: false,  // Changed to false to allow redirect
-            preserveScroll: false,
+            preserveState: true,
+            preserveScroll: true,
             onError: (errors: LoginErrors) => {
                 console.error('Login error:', errors);
 
-                // Handle CSRF errors
                 if (errors.message && (errors.message.includes('419') || errors.message.includes('expired'))) {
                     setCsrfError(true);
-                    setErrors({ general: 'Session expired. Refresh page.' });
+                    setErrorModalMessage('Your session has expired. Please refresh the page and try again.');
+                    setShowErrorModal(true);
                 }
-                // Handle 2FA required (status 202 from backend)
                 else if (errors.otp_code && errors.otp_code.includes('Please enter')) {
-                    setShow2FAInput(true);  // Show the Google Authenticator input field
-                    setErrors({ otp_code: errors.otp_code }); // Show message
-                    setFormData(prev => ({ ...prev, otp_code: '' })); // Clear OTP field
+                    setShow2FAInput(true);
+                    setErrors({ otp_code: errors.otp_code });
+                    setFormData(prev => ({ ...prev, otp_code: '' }));
                 }
-                // Handle other validation errors
-                else {
+                else if (errors.password && (
+                    errors.password.includes('weak') ||
+                    errors.password.includes('requirements') ||
+                    errors.password.includes('must contain')
+                )) {
+                    setErrorModalMessage(errors.password);
+                    setShowErrorModal(true);
                     setErrors(errors);
-                    if (!errors.email && !errors.password && !errors.otp_code && !errors.general) {
-                        setErrors({ ...errors, general: errors.message || 'Login failed.' });
+                }
+                else {
+                    if (errors.general || errors.message) {
+                        setErrorModalMessage(errors.general || errors.message || 'An error occurred during login.');
+                        setShowErrorModal(true);
                     }
+
+                    const errorMessages = { ...errors };
+                    if (!errorMessages.general && errors.message) {
+                        errorMessages.general = errors.message;
+                    }
+                    setErrors(errorMessages);
                 }
 
                 setIsSubmitting(false);
             },
             onSuccess: () => {
                 console.log('Login successful - redirecting...');
-                // Inertia will handle the redirect automatically
             },
             onFinish: () => {
                 console.log('Login finished');
@@ -179,236 +201,308 @@ export default function Login() {
         window.location.href = '/survey/register';
     };
 
+    const handleGoToLanding = () => {
+        window.location.href = '/';
+    };
+
     return (
         <>
             <Head title="Login - Alumni Tracer System" />
 
+            <style>{`
+                @keyframes blob {
+                    0%, 100% { transform: translate(0px, 0px) scale(1); }
+                    33% { transform: translate(30px, -50px) scale(1.1); }
+                    66% { transform: translate(-20px, 20px) scale(0.9); }
+                }
+                .animate-blob {
+                    animation: blob 7s infinite;
+                }
+                .animation-delay-2000 {
+                    animation-delay: 2s;
+                }
+                .animation-delay-4000 {
+                    animation-delay: 4s;
+                }
+                .stat-card {
+                    backdrop-filter: blur(10px);
+                    background: rgba(255, 255, 255, 0.6);
+                    border: 1px solid rgba(139, 0, 0, 0.1);
+                    transition: all 0.3s ease;
+                }
+                .stat-card:hover {
+                    background: rgba(255, 255, 255, 0.8);
+                    border-color: rgba(139, 0, 0, 0.2);
+                    transform: translateY(-2px);
+                    box-shadow: 0 10px 30px rgba(139, 0, 0, 0.1);
+                }
+                .feature-item {
+                    position: relative;
+                    overflow: hidden;
+                }
+                .feature-item::before {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: -100%;
+                    width: 100%;
+                    height: 100%;
+                    background: linear-gradient(90deg, transparent, rgba(139, 0, 0, 0.05), transparent);
+                    transition: left 0.5s;
+                }
+                .feature-item:hover::before {
+                    left: 100%;
+                }
+            `}</style>
+
             <div className="min-h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 flex relative overflow-hidden">
-                {/* Decorative Background Elements */}
-                <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <div className="absolute -top-40 -right-40 w-80 h-80 bg-maroon-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
-                    <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-beige-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse" style={{ animationDelay: '2s' }}></div>
-                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-maroon-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style={{ animationDelay: '4s' }}></div>
+                {/* Animated Background Blobs */}
+                <div className="absolute inset-0">
+                    <div className="absolute top-0 -left-4 w-72 h-72 bg-maroon-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
+                    <div className="absolute top-0 -right-4 w-72 h-72 bg-beige-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
+                    <div className="absolute -bottom-8 left-20 w-72 h-72 bg-maroon-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
                 </div>
 
-                {/* Left Side - Branding & Info */}
+                {/* Left Side - Professional Branding */}
                 <div className="hidden lg:flex lg:w-1/2 flex-col justify-center px-12 xl:px-20 relative z-10">
-                    <div className="max-w-xl">
-                        <div className="flex items-center mb-8">
-                            <div className="relative">
-                                <div className="absolute inset-0 bg-maroon-400 rounded-full blur-xl opacity-40 animate-pulse"></div>
-                                <GraduationCap className="h-16 w-16 text-maroon-700 relative z-10" />
+                    <div className="max-w-xl space-y-10">
+                        {/* Logo Section */}
+                        <div className="space-y-6">
+                            <div className="flex items-center space-x-4">
+                                <div className="relative">
+                                    <div className="w-16 h-16 bg-gradient-to-br from-maroon-600 to-maroon-800 rounded-2xl flex items-center justify-center shadow-2xl border border-maroon-500/50">
+                                        <GraduationCap className="h-9 w-9 text-white" />
+                                    </div>
+                                    <div className="absolute -inset-1 bg-gradient-to-br from-maroon-600 to-maroon-800 rounded-2xl blur-lg opacity-50"></div>
+                                </div>
+                                <div>
+                                    <h1 className="text-4xl font-bold text-maroon-900 tracking-tight">Alumni Tracer</h1>
+                                    <p className="text-lg text-maroon-700 font-light tracking-wide">System</p>
+                                </div>
                             </div>
+                            <p className="text-lg text-maroon-700 leading-relaxed">
+                                Stay connected, track your career journey, and contribute to the growth of our alumni community.
+                            </p>
                         </div>
 
-                        <h1 className="text-5xl font-bold bg-gradient-to-r from-maroon-700 to-maroon-900 bg-clip-text text-transparent mb-4 tracking-tight">
-                            Alumni Tracer System
-                        </h1>
-                        <p className="text-xl text-maroon-700 mb-12 leading-relaxed">
-                            Stay connected, track your career journey, and contribute to the growth of our alumni community.
-                        </p>
+                        {/* Feature Grid */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="feature-item stat-card rounded-xl p-5 group cursor-pointer">
+                                <div className="flex items-center space-x-3 mb-2">
+                                    <div className="w-10 h-10 bg-maroon-600/20 rounded-lg flex items-center justify-center group-hover:bg-maroon-600/30 transition-colors">
+                                        <Users className="h-5 w-5 text-maroon-400" />
+                                    </div>
+                                    <h3 className="font-semibold text-maroon-900 text-sm">Connect</h3>
+                                </div>
+                                <p className="text-xs text-maroon-600">Build your professional network</p>
+                            </div>
 
-                        {/* Features Grid */}
-                        <div className="grid grid-cols-2 gap-6 mb-12">
-                            <div className="bg-white/95 backdrop-blur-sm rounded-xl p-5 border border-maroon-200 shadow-lg hover:shadow-xl hover:bg-white transition-all">
-                                <Users className="h-8 w-8 text-maroon-600 mb-3" />
-                                <h3 className="font-semibold text-maroon-900 mb-1">Connect</h3>
-                                <p className="text-sm text-maroon-600">Build your professional network</p>
+                            <div className="feature-item stat-card rounded-xl p-5 group cursor-pointer">
+                                <div className="flex items-center space-x-3 mb-2">
+                                    <div className="w-10 h-10 bg-yellow-600/20 rounded-lg flex items-center justify-center group-hover:bg-yellow-600/30 transition-colors">
+                                        <TrendingUp className="h-5 w-5 text-yellow-400" />
+                                    </div>
+                                    <h3 className="font-semibold text-maroon-900 text-sm">Track Progress</h3>
+                                </div>
+                                <p className="text-xs text-maroon-600">Monitor your career growth</p>
                             </div>
-                            <div className="bg-white/95 backdrop-blur-sm rounded-xl p-5 border border-maroon-200 shadow-lg hover:shadow-xl hover:bg-white transition-all">
-                                <TrendingUp className="h-8 w-8 text-maroon-600 mb-3" />
-                                <h3 className="font-semibold text-maroon-900 mb-1">Track Progress</h3>
-                                <p className="text-sm text-maroon-600">Monitor your career growth</p>
+
+                            <div className="feature-item stat-card rounded-xl p-5 group cursor-pointer">
+                                <div className="flex items-center space-x-3 mb-2">
+                                    <div className="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center group-hover:bg-blue-600/30 transition-colors">
+                                        <Building2 className="h-5 w-5 text-blue-400" />
+                                    </div>
+                                    <h3 className="font-semibold text-maroon-900 text-sm">Global Reach</h3>
+                                </div>
+                                <p className="text-xs text-maroon-600">Connect worldwide</p>
                             </div>
-                            <div className="bg-white/95 backdrop-blur-sm rounded-xl p-5 border border-maroon-200 shadow-lg hover:shadow-xl hover:bg-white transition-all">
-                                <Globe className="h-8 w-8 text-maroon-600 mb-3" />
-                                <h3 className="font-semibold text-maroon-900 mb-1">Global Reach</h3>
-                                <p className="text-sm text-maroon-600">Connect worldwide</p>
-                            </div>
-                            <div className="bg-white/95 backdrop-blur-sm rounded-xl p-5 border border-maroon-200 shadow-lg hover:shadow-xl hover:bg-white transition-all">
-                                <Award className="h-8 w-8 text-maroon-600 mb-3" />
-                                <h3 className="font-semibold text-maroon-900 mb-1">Opportunities</h3>
-                                <p className="text-sm text-maroon-600">Discover career paths</p>
+
+                            <div className="feature-item stat-card rounded-xl p-5 group cursor-pointer">
+                                <div className="flex items-center space-x-3 mb-2">
+                                    <div className="w-10 h-10 bg-green-600/20 rounded-lg flex items-center justify-center group-hover:bg-green-600/30 transition-colors">
+                                        <TrendingUp className="h-5 w-5 text-green-400" />
+                                    </div>
+                                    <h3 className="font-semibold text-maroon-900 text-sm">Opportunities</h3>
+                                </div>
+                                <p className="text-xs text-maroon-600">Discover career paths</p>
                             </div>
                         </div>
 
                         {/* Statistics */}
-                        <div className="flex items-center gap-8 text-sm">
-                            <div>
-                                <div className="text-3xl font-bold text-maroon-900">10K+</div>
-                                <div className="text-maroon-600">Alumni Members</div>
+                        <div className="stat-card rounded-xl p-6">
+                            <div className="grid grid-cols-3 gap-6">
+                                <div className="text-center">
+                                    <div className="text-3xl font-bold text-maroon-900 mb-1">10,000+</div>
+                                    <div className="text-xs text-maroon-600 uppercase tracking-wide">Alumni Members</div>
+                                </div>
+                                <div className="text-center border-x border-maroon-200">
+                                    <div className="text-3xl font-bold text-maroon-900 mb-1">95%</div>
+                                    <div className="text-xs text-maroon-600 uppercase tracking-wide">Employment Rate</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-3xl font-bold text-maroon-900 mb-1">50+</div>
+                                    <div className="text-xs text-maroon-600 uppercase tracking-wide">Countries</div>
+                                </div>
                             </div>
-                            <div>
-                                <div className="text-3xl font-bold text-maroon-900">95%</div>
-                                <div className="text-maroon-600">Employment Rate</div>
+                        </div>
+
+                        {/* Security Badge */}
+                        <div className="flex items-center space-x-3 text-maroon-600 text-sm">
+                            <div className="w-8 h-8 bg-maroon-100 rounded-lg flex items-center justify-center">
+                                <svg className="w-4 h-4 text-maroon-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
                             </div>
-                            <div>
-                                <div className="text-3xl font-bold text-maroon-900">50+</div>
-                                <div className="text-maroon-600">Countries</div>
-                            </div>
+                            <span>Enterprise-grade security & data protection</span>
                         </div>
                     </div>
                 </div>
 
                 {/* Right Side - Login Form */}
-                <div className="w-full lg:w-1/2 flex items-center justify-center px-4 py-12 relative z-10">
+                <div className="w-full lg:w-1/2 flex items-center justify-center px-6 py-12 relative z-10">
                     <div className="w-full max-w-md">
                         {/* Mobile Logo */}
-                        <div className="lg:hidden text-center mb-8 animate-fade-in">
+                        <div className="lg:hidden text-center mb-10">
                             <div className="flex items-center justify-center mb-6">
                                 <div className="relative">
-                                    <div className="absolute inset-0 bg-maroon-400 rounded-full blur-xl opacity-40 animate-pulse"></div>
-                                    <GraduationCap className="h-14 w-14 text-maroon-700 relative z-10" />
+                                    <div className="w-14 h-14 bg-gradient-to-br from-maroon-600 to-maroon-800 rounded-xl flex items-center justify-center shadow-2xl">
+                                        <GraduationCap className="h-8 w-8 text-white" />
+                                    </div>
+                                    <div className="absolute -inset-1 bg-gradient-to-br from-maroon-600 to-maroon-800 rounded-xl blur-lg opacity-50"></div>
                                 </div>
                             </div>
-                            <h1 className="text-3xl font-bold bg-gradient-to-r from-maroon-700 to-maroon-900 bg-clip-text text-transparent mb-2">Alumni Tracer System</h1>
-                            <p className="text-maroon-700 font-medium">Welcome back! Please sign in</p>
+                            <h1 className="text-3xl font-bold text-maroon-900 mb-2">Alumni Tracer System</h1>
+                            <p className="text-maroon-700">Welcome back! Please sign in</p>
                         </div>
 
-                        <Card className="border-maroon-200 shadow-2xl bg-white/95 backdrop-blur-sm">
-                            <CardHeader className="bg-gradient-to-r from-maroon-50 to-beige-50 border-b border-maroon-200 pb-6">
-                                <div className="flex items-center justify-center mb-4">
-                                    <div className="w-12 h-12 bg-gradient-to-br from-maroon-600 to-maroon-700 rounded-xl flex items-center justify-center shadow-lg">
-                                        <Heart className="h-6 w-6 text-white" />
-                                    </div>
-                                </div>
-                                <CardTitle className="text-2xl text-maroon-900 font-bold text-center">
-                                    Sign In to Your Account
-                                </CardTitle>
-                                <CardDescription className="text-maroon-700 text-base mt-2 text-center">
-                                    Enter your credentials to access your portal
-                                </CardDescription>
+                        <Card className="bg-white/95 backdrop-blur-xl border-maroon-100 shadow-2xl">
+                            <CardHeader className="pb-6 pt-8 px-8 border-b border-gray-100">
+                                <CardTitle className="text-2xl text-gray-900 font-bold text-center">Welcome Back</CardTitle>
+                                <CardDescription className="text-gray-600 text-center">Sign in to access your portal</CardDescription>
                             </CardHeader>
 
                             <CardContent className="p-8">
-                                {errors.general && (
-                                    <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg shadow-sm">
-                                        <div className="flex items-start">
-                                            <AlertCircle className="h-5 w-5 text-red-500 mr-3 mt-0.5 flex-shrink-0" />
-                                            <div className="flex-1">
-                                                <p className="text-sm font-medium text-red-800">{errors.general}</p>
-                                                {csrfError && (
-                                                    <Button
-                                                        type="button"
-                                                        onClick={handleRefreshPage}
-                                                        className="mt-3 w-full bg-red-600 hover:bg-red-700 text-white shadow-sm"
-                                                    >
-                                                        <RefreshCw className="h-4 w-4 mr-2" />
-                                                        Refresh Page
-                                                    </Button>
-                                                )}
+                                <Dialog open={showErrorModal} onOpenChange={setShowErrorModal}>
+                                    <DialogContent className="sm:max-w-md">
+                                        <DialogHeader>
+                                            <div className="flex items-center justify-center mb-4">
+                                                <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center">
+                                                    <AlertCircle className="h-7 w-7 text-red-600" />
+                                                </div>
                                             </div>
+                                            <DialogTitle className="text-center text-xl text-gray-900">Login Error</DialogTitle>
+                                            <DialogDescription className="text-center text-gray-600 mt-2">
+                                                {errorModalMessage}
+                                            </DialogDescription>
+                                        </DialogHeader>
+                                        <div className="mt-4">
+                                            <Button
+                                                onClick={() => setShowErrorModal(false)}
+                                                className="w-full bg-maroon-600 hover:bg-maroon-700 text-white"
+                                            >
+                                                Got it
+                                            </Button>
                                         </div>
-                                    </div>
-                                )}
+                                    </DialogContent>
+                                </Dialog>
 
-                                <form onSubmit={handleSubmit} className="space-y-6">
+                                <form onSubmit={handleSubmit} className="space-y-5">
                                     <div className="space-y-2">
-                                        <Label htmlFor="email" className="text-base font-semibold text-maroon-900">
-                                            Email Address <span className="text-maroon-600">*</span>
+                                        <Label htmlFor="login" className="text-sm font-semibold text-gray-700">
+                                            Email or Student ID <span className="text-red-500">*</span>
                                         </Label>
                                         <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <Mail className="h-5 w-5 text-maroon-600" />
+                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                {loginValidation.isEmail ? (
+                                                    <Mail className="h-5 w-5 text-gray-400" />
+                                                ) : (
+                                                    <IdCard className="h-5 w-5 text-gray-400" />
+                                                )}
                                             </div>
                                             <Input
-                                                id="email"
-                                                type="email"
-                                                value={formData.email}
-                                                onChange={(e) => handleInputChange('email', e.target.value)}
-                                                className={`pl-12 pr-10 h-12 border-maroon-200 focus:border-maroon-600 focus:ring-maroon-600 bg-white text-maroon-900 placeholder:text-maroon-400 text-base ${formData.email && !emailValidation.checking && !emailValidation.exists && /\S+@\S+\.\S+/.test(formData.email)
-                                                    ? 'border-red-400'
-                                                    : emailValidation.exists
-                                                        ? 'border-green-400'
+                                                id="login"
+                                                type="text"
+                                                value={formData.login}
+                                                onChange={(e) => handleInputChange('login', e.target.value)}
+                                                className={`pl-11 pr-11 h-12 border-gray-300 focus:border-maroon-500 focus:ring-maroon-500 input-glow bg-white ${formData.login && !loginValidation.checking && !loginValidation.exists && formData.login.length >= 3
+                                                    ? 'border-red-300 bg-red-50/30'
+                                                    : loginValidation.exists
+                                                        ? 'border-green-300 bg-green-50/30'
                                                         : ''
                                                     }`}
-                                                placeholder="you@example.com"
+                                                placeholder="student@earist.edu or 2020-12345"
                                             />
-                                            {/* Email validation indicator */}
-                                            {formData.email && /\S+@\S+\.\S+/.test(formData.email) && (
+                                            {formData.login && formData.login.length >= 3 && (
                                                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                                                    {emailValidation.checking ? (
-                                                        <RefreshCw className="h-5 w-5 text-maroon-500 animate-spin" />
-                                                    ) : emailValidation.exists ? (
-                                                        <div className="h-5 w-5 rounded-full bg-green-500 flex items-center justify-center">
-                                                            <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                        </div>
+                                                    {loginValidation.checking ? (
+                                                        <RefreshCw className="h-5 w-5 text-gray-400 animate-spin" />
+                                                    ) : loginValidation.exists ? (
+                                                        <CheckCircle2 className="h-5 w-5 text-green-500" />
                                                     ) : (
-                                                        <AlertCircle className="h-5 w-5 text-red-500" />
+                                                        <XCircle className="h-5 w-5 text-red-500" />
                                                     )}
                                                 </div>
                                             )}
                                         </div>
-                                        {/* Show email validation message */}
-                                        {formData.email && /\S+@\S+\.\S+/.test(formData.email) && !emailValidation.checking && !emailValidation.exists && (
-                                            <p className="text-sm text-amber-600 flex items-center mt-1">
-                                                <AlertCircle className="h-4 w-4 mr-1" />
-                                                This email is not registered. Did you mean to register?
+                                        {formData.login && formData.login.length >= 3 && !loginValidation.checking && (
+                                            <p className={`text-xs flex items-center mt-1 ${loginValidation.exists ? 'text-green-600' : 'text-red-600'}`}>
+                                                {loginValidation.message}
                                             </p>
                                         )}
-                                        {errors.email && (
-                                            <p className="text-sm text-red-600 flex items-center mt-1">
-                                                <AlertCircle className="h-4 w-4 mr-1" />
-                                                {errors.email}
+                                        {errors.login && (
+                                            <p className="text-xs text-red-600 flex items-center mt-1">
+                                                <AlertCircle className="h-3 w-3 mr-1" />
+                                                {errors.login}
                                             </p>
                                         )}
+                                        <p className="text-xs text-gray-500 mt-1">You can login using your email address or student ID number</p>
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label htmlFor="password" className="text-base font-semibold text-maroon-900">
-                                            Password <span className="text-maroon-600">*</span>
+                                        <Label htmlFor="password" className="text-sm font-semibold text-gray-700">
+                                            Password <span className="text-red-500">*</span>
                                         </Label>
                                         <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <LockIcon className="h-5 w-5 text-maroon-600" />
+                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                <LockIcon className="h-5 w-5 text-gray-400" />
                                             </div>
                                             <Input
                                                 id="password"
                                                 type={showPassword ? 'text' : 'password'}
                                                 value={formData.password}
                                                 onChange={(e) => handleInputChange('password', e.target.value)}
-                                                className="pl-12 pr-12 h-12 border-maroon-200 focus:border-maroon-600 focus:ring-maroon-600 bg-white text-maroon-900 placeholder:text-maroon-400 text-base"
+                                                className="pl-11 pr-11 h-12 border-gray-300 focus:border-maroon-500 focus:ring-maroon-500 input-glow bg-white"
                                                 placeholder="Enter your password"
                                             />
                                             <button
                                                 type="button"
                                                 onClick={() => setShowPassword(!showPassword)}
-                                                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-maroon-600 hover:text-maroon-700 transition-colors"
+                                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                                             >
-                                                {showPassword ? (
-                                                    <EyeOff className="h-5 w-5" />
-                                                ) : (
-                                                    <Eye className="h-5 w-5" />
-                                                )}
+                                                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                                             </button>
                                         </div>
                                         {errors.password && (
-                                            <p className="text-sm text-red-600 flex items-center mt-1">
-                                                <AlertCircle className="h-4 w-4 mr-1" />
+                                            <p className="text-xs text-red-600 flex items-center mt-1">
+                                                <AlertCircle className="h-3 w-3 mr-1" />
                                                 {errors.password}
                                             </p>
                                         )}
-
-                                        {/* Forgot Password Link */}
-                                        <div className="text-right">
-                                            <a
-                                                href="/forgot-password"
-                                                className="text-sm text-maroon-600 hover:text-maroon-800 hover:underline font-medium transition-colors"
-                                            >
-                                                Forgot your password?
+                                        <div className="flex justify-end">
+                                            <a href="/forgot-password" className="text-xs text-maroon-600 hover:text-maroon-700 font-medium hover:underline">
+                                                Forgot password?
                                             </a>
                                         </div>
                                     </div>
 
-                                    {/* Google Authenticator Input - Shows when 2FA is required */}
                                     {show2FAInput && (
-                                        <div className="space-y-2 p-4 bg-maroon-50 rounded-lg border border-maroon-200">
+                                        <div className="space-y-2 p-5 bg-gray-50 rounded-lg border border-gray-200">
                                             <div className="flex items-center mb-2">
-                                                <Smartphone className="h-5 w-5 text-maroon-600 mr-2" />
-                                                <Label htmlFor="otp-code" className="text-sm font-semibold text-maroon-900 mb-0">
-                                                    Google Authenticator Code <span className="text-maroon-600">*</span>
+                                                <div className="w-8 h-8 bg-maroon-600 rounded-lg flex items-center justify-center mr-2">
+                                                    <Smartphone className="h-4 w-4 text-white" />
+                                                </div>
+                                                <Label htmlFor="otp-code" className="text-sm font-semibold text-gray-700 mb-0">
+                                                    Two-Factor Authentication <span className="text-red-500">*</span>
                                                 </Label>
                                             </div>
                                             <Input
@@ -419,28 +513,26 @@ export default function Login() {
                                                     const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
                                                     handleInputChange('otp_code', value);
                                                 }}
-                                                className="h-12 border-maroon-200 focus:border-maroon-600 focus:ring-maroon-600 bg-white text-maroon-900 placeholder:text-maroon-400 text-base text-center tracking-widest font-mono"
+                                                className="h-14 border-gray-300 focus:border-maroon-500 focus:ring-maroon-500 bg-white text-lg text-center tracking-widest font-mono"
                                                 placeholder="000000"
                                                 maxLength={6}
                                                 autoComplete="off"
                                                 autoFocus
                                             />
                                             {errors.otp_code && (
-                                                <p className="text-sm text-red-600 flex items-center mt-1">
-                                                    <AlertCircle className="h-4 w-4 mr-1" />
+                                                <p className="text-xs text-red-600 flex items-center">
+                                                    <AlertCircle className="h-3 w-3 mr-1" />
                                                     {errors.otp_code}
                                                 </p>
                                             )}
-                                            <p className="text-xs text-maroon-600">
-                                                Enter the 6-digit code from your Google Authenticator app
-                                            </p>
+                                            <p className="text-xs text-gray-600">Enter the 6-digit code from your authenticator app</p>
                                         </div>
                                     )}
 
                                     <Button
                                         type="submit"
                                         disabled={isSubmitting}
-                                        className="w-full h-12 bg-gradient-to-r from-maroon-600 to-maroon-700 hover:from-maroon-700 hover:to-maroon-800 text-white text-base font-semibold shadow-lg hover:shadow-xl hover:shadow-maroon-500/50 transition-all duration-300"
+                                        className="w-full h-12 bg-gradient-to-r from-maroon-600 to-maroon-700 hover:from-maroon-700 hover:to-maroon-800 text-white font-semibold shadow-lg hover:shadow-xl transition-all"
                                     >
                                         {isSubmitting ? (
                                             <>
@@ -449,35 +541,46 @@ export default function Login() {
                                             </>
                                         ) : (
                                             <>
-                                                <Sparkles className="h-5 w-5 mr-2" />
                                                 Sign In
+                                                <ArrowRight className="h-5 w-5 ml-2" />
                                             </>
                                         )}
                                     </Button>
                                 </form>
 
-                                <div className="mt-6 pt-6 border-t border-maroon-200">
-                                    <div className="text-center">
+                                <div className="mt-6 pt-6 border-t border-gray-200">
+                                    <div className="grid grid-cols-2 gap-3">
                                         <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={handleBackToSurvey}
-                                            className="text-sm text-maroon-600 hover:text-maroon-900 hover:bg-maroon-50"
+                                            variant="outline"
+                                            onClick={handleGoToLanding}
+                                            className="text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 border-gray-300"
                                         >
-                                            <ArrowLeft className="w-4 h-4 mr-2" />
-                                            Back to Alumni Registration
+                                            <Home className="w-4 h-4 mr-2" />
+                                            Home
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleBackToSurvey}
+                                            className="text-sm font-medium text-maroon-600 hover:text-maroon-700 hover:bg-maroon-50 border-maroon-300"
+                                        >
+                                            Register
+                                            <ArrowRight className="w-4 h-4 ml-2" />
                                         </Button>
                                     </div>
+                                    <p className="text-xs text-center text-gray-500 mt-4">
+                                        Don't have an account? <span className="font-semibold text-maroon-600">Register as an alumni first</span>
+                                    </p>
                                 </div>
                             </CardContent>
                         </Card>
 
-                        {/* Security Notice */}
                         <div className="mt-6 text-center">
-                            <p className="text-xs text-maroon-600 flex items-center justify-center gap-2">
-                                <span>🔒</span>
-                                <span>Your connection is secure and encrypted</span>
-                            </p>
+                            <div className="inline-flex items-center px-4 py-2 bg-maroon-50 backdrop-blur-sm rounded-full border border-maroon-200">
+                                <svg className="w-4 h-4 text-maroon-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                                </svg>
+                                <span className="text-xs text-maroon-900 font-medium">Secure & Encrypted Connection</span>
+                            </div>
                         </div>
                     </div>
                 </div>

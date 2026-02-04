@@ -6,10 +6,23 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\SurveyController;
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\EmailOtpController;
+use App\Http\Controllers\Api\MessagingController;
+use App\Http\Controllers\Api\AnnouncementController;
+use App\Http\Controllers\Api\JobBoardController;
+use App\Http\Controllers\Api\CampusController;
+use App\Http\Controllers\Api\PublicLandingController;
 
 
 // Public routes (no authentication required)
 Route::prefix('v1')->group(function () {
+    // Landing page public routes
+    Route::prefix('public')->group(function () {
+        Route::get('/announcements', [PublicLandingController::class, 'getAnnouncements']);
+        Route::get('/jobs', [PublicLandingController::class, 'getJobs']);
+        Route::get('/stats', [PublicLandingController::class, 'getStats']);
+        Route::post('/search-alumni', [PublicLandingController::class, 'searchAlumni']);
+    });
+
     // Authentication routes
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
@@ -39,9 +52,14 @@ Route::prefix('v1')->group(function () {
         Route::post('/departments/upload-image', [\App\Http\Controllers\Admin\DepartmentController::class, 'uploadImage']);
     });
 
+    // Campus routes (public - for registration dropdowns)
+    Route::get('/campuses', [CampusController::class, 'index']);
+    Route::get('/campuses/options', [CampusController::class, 'options']);
+
     // Validation endpoints for registration
     Route::post('/check-email', [AuthController::class, 'checkEmail']);
     Route::post('/check-student-id', [AuthController::class, 'checkStudentId']);
+    Route::post('/check-login', [AuthController::class, 'checkLogin']);
 });
 
 // Protected routes (authentication required)
@@ -61,6 +79,15 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/surveys/{surveyId}/start', [SurveyController::class, 'startSurvey']);
     Route::post('/survey-responses/{responseId}/answer', [SurveyController::class, 'saveAnswer']);
     Route::post('/survey-responses/{responseId}/submit', [SurveyController::class, 'submitSurvey']);
+
+    // Campus routes (authenticated)
+    Route::get('/campuses/{campus}', [CampusController::class, 'show']);
+    Route::get('/campuses/{campus}/statistics', [CampusController::class, 'statistics']);
+    Route::get('/campuses/comparison', [CampusController::class, 'comparison']);
+    Route::get('/campuses/distribution', [CampusController::class, 'distribution']);
+    Route::get('/campuses/employment-breakdown', [CampusController::class, 'employmentBreakdown']);
+    Route::get('/campuses/can-switch', [CampusController::class, 'canSwitch']);
+    Route::get('/campuses/effective', [CampusController::class, 'effective']);
 });
 
 // Alumni-only routes (authentication + alumni role required)
@@ -71,6 +98,86 @@ Route::prefix('v1/alumni')->middleware(['auth:sanctum', 'alumni'])->group(functi
     
     // Two-Factor Authentication for alumni
     // Route::post('/two-factor/verify-setup', [\App\Http\Controllers\Auth\TwoFactorSetupController::class, 'verifySetup']);
+});
+
+// ============================================================
+// MESSAGING SYSTEM ROUTES
+// ============================================================
+Route::prefix('v1/messaging')->middleware(['auth:sanctum'])->group(function () {
+    // Conversations
+    Route::get('/conversations', [MessagingController::class, 'getConversations']);
+    Route::get('/conversations/{conversation}', [MessagingController::class, 'getConversation']);
+    Route::post('/conversations', [MessagingController::class, 'createConversation']);
+    Route::post('/conversations/{conversation}/leave', [MessagingController::class, 'leaveConversation']);
+    
+    // Messages
+    Route::post('/conversations/{conversation}/messages', [MessagingController::class, 'sendMessage']);
+    Route::post('/conversations/{conversation}/read', [MessagingController::class, 'markAsRead']);
+    Route::post('/conversations/{conversation}/typing', [MessagingController::class, 'typing']);
+    
+    // Group invitations
+    Route::get('/invitations', [MessagingController::class, 'getPendingInvitations']);
+    Route::post('/conversations/{conversation}/accept', [MessagingController::class, 'acceptInvitation']);
+    Route::post('/conversations/{conversation}/decline', [MessagingController::class, 'declineInvitation']);
+    
+    // Blocking
+    Route::get('/blocked', [MessagingController::class, 'getBlockedUsers']);
+    Route::post('/block', [MessagingController::class, 'blockUser']);
+    Route::post('/unblock', [MessagingController::class, 'unblockUser']);
+    
+    // User search for messaging
+    Route::get('/users/search', [MessagingController::class, 'searchUsers']);
+    
+    // Unread count
+    Route::get('/unread-count', [MessagingController::class, 'getUnreadCount']);
+});
+
+// ============================================================
+// ANNOUNCEMENTS ROUTES
+// ============================================================
+Route::prefix('v1/announcements')->middleware(['auth:sanctum'])->group(function () {
+    // Alumni routes (viewing announcements)
+    Route::get('/', [AnnouncementController::class, 'index']);
+    Route::get('/unread-count', [AnnouncementController::class, 'getUnreadCount']);
+    Route::get('/{announcement}', [AnnouncementController::class, 'show']);
+    Route::post('/{announcement}/read', [AnnouncementController::class, 'markAsRead']);
+    
+    // Admin routes (managing announcements)
+    Route::middleware(['admin'])->group(function () {
+        Route::get('/admin/list', [AnnouncementController::class, 'adminIndex']);
+        Route::get('/admin/batch-years', [AnnouncementController::class, 'getBatchYears']);
+        Route::post('/admin/create', [AnnouncementController::class, 'store']);
+        Route::put('/admin/{announcement}', [AnnouncementController::class, 'update']);
+        Route::delete('/admin/{announcement}', [AnnouncementController::class, 'destroy']);
+    });
+});
+
+// ============================================================
+// JOB BOARD ROUTES (PUBLIC)
+// ============================================================
+Route::prefix('v1/jobs')->group(function () {
+    // Public routes (no auth required for viewing)
+    Route::get('/', [JobBoardController::class, 'index']);
+    Route::get('/categories', [JobBoardController::class, 'getCategories']);
+    Route::get('/featured', [JobBoardController::class, 'getFeatured']);
+    Route::get('/recent', [JobBoardController::class, 'getRecent']);
+    Route::get('/{jobPosting}', [JobBoardController::class, 'show']);
+});
+
+// JOB BOARD ADMIN ROUTES
+Route::prefix('v1/admin/jobs')->middleware(['auth:sanctum', 'admin'])->group(function () {
+    // Job postings management
+    Route::get('/', [JobBoardController::class, 'adminIndex']);
+    Route::post('/', [JobBoardController::class, 'store']);
+    Route::get('/statistics', [JobBoardController::class, 'getStatistics']);
+    Route::put('/{jobPosting}', [JobBoardController::class, 'update']);
+    Route::delete('/{jobPosting}', [JobBoardController::class, 'destroy']);
+    Route::post('/bulk-status', [JobBoardController::class, 'bulkUpdateStatus']);
+    
+    // Category management
+    Route::post('/categories', [JobBoardController::class, 'storeCategory']);
+    Route::put('/categories/{category}', [JobBoardController::class, 'updateCategory']);
+    Route::delete('/categories/{category}', [JobBoardController::class, 'destroyCategory']);
 });
 
 // Two-Factor Authentication challenge (public - no auth required)

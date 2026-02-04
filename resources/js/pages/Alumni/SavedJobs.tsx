@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { router } from '@inertiajs/react';
-import { MapPin, DollarSign, Clock, Briefcase, BookmarkCheck, Send, Eye } from 'lucide-react';
+import { MapPin, DollarSign, Clock, BookmarkCheck, Send, Eye } from 'lucide-react';
 
 interface JobPosting {
     id: number;

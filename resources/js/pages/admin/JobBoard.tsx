@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
+import { MultiPageEditor } from '@/components/ui/multi-page-editor';
+import { PageCarousel, ContentPage } from '@/components/ui/page-carousel';
 import {
     Briefcase,
     Search,
@@ -17,12 +19,25 @@ import {
     Edit,
     Trash2,
     Eye,
-    MoreVertical,
     Loader2,
     Star,
     CheckCircle,
     XCircle,
-    Clock
+    Clock,
+    Upload,
+    ImageIcon,
+    MapPin,
+    DollarSign,
+    Building2,
+    Calendar,
+    ExternalLink,
+    Mail,
+    Phone,
+    Globe,
+    Laptop,
+    Layers,
+    ChevronRight,
+    Send
 } from 'lucide-react';
 import {
     Dialog,
@@ -32,13 +47,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import {
     Select,
     SelectContent,
@@ -88,10 +96,12 @@ export default function JobBoard() {
     const [showCategoryForm, setShowCategoryForm] = useState(false);
     const [editingJob, setEditingJob] = useState<JobPosting | null>(null);
     const [editingCategory, setEditingCategory] = useState<JobCategory | null>(null);
+    const [viewingJob, setViewingJob] = useState<JobPosting | null>(null);
     const [saving, setSaving] = useState(false);
 
     // Filters
     const [search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('');
 
@@ -103,6 +113,8 @@ export default function JobBoard() {
         company_website: '',
         category_id: 0,
         description: '',
+        pages: [],
+        use_pages: false,
         requirements: '',
         benefits: '',
         employment_type: 'full_time',
@@ -118,6 +130,10 @@ export default function JobBoard() {
         external_url: '',
         is_featured: false,
         status: 'draft',
+        campus_id: null,
+        is_multi_campus: true,
+        poster_image: undefined,
+        background_image: undefined,
     });
 
     const [categoryFormData, setCategoryFormData] = useState({
@@ -131,7 +147,7 @@ export default function JobBoard() {
     const fetchJobs = useCallback(async () => {
         try {
             const params = new URLSearchParams();
-            if (search) params.append('search', search);
+            if (debouncedSearch) params.append('search', debouncedSearch);
             if (statusFilter) params.append('status', statusFilter);
             if (categoryFilter) params.append('category_id', categoryFilter);
             if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
@@ -150,7 +166,7 @@ export default function JobBoard() {
         } catch (error) {
             console.error('Failed to fetch jobs:', error);
         }
-    }, [search, statusFilter, categoryFilter, selectedCampus?.id]);
+    }, [debouncedSearch, statusFilter, categoryFilter, selectedCampus?.id]);
 
     const fetchCategories = async () => {
         try {
@@ -184,6 +200,14 @@ export default function JobBoard() {
         }
     };
 
+    // Debounce search term
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(search);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [search]);
+
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
@@ -212,6 +236,8 @@ export default function JobBoard() {
                 company_website: job.company_website || '',
                 category_id: job.category_id,
                 description: job.description,
+                pages: job.pages || [],
+                use_pages: job.use_pages || false,
                 requirements: job.requirements || '',
                 benefits: job.benefits || '',
                 employment_type: job.employment_type,
@@ -228,6 +254,8 @@ export default function JobBoard() {
                 is_featured: job.is_featured || false,
                 status: job.status,
                 expires_at: job.expires_at,
+                poster_image: job.poster_image || undefined,
+                background_image: job.background_image || undefined,
             });
         } else {
             setEditingJob(null);
@@ -238,6 +266,8 @@ export default function JobBoard() {
                 company_website: '',
                 category_id: categories[0]?.id || 0,
                 description: '',
+                pages: [],
+                use_pages: false,
                 requirements: '',
                 benefits: '',
                 employment_type: 'full_time',
@@ -258,6 +288,27 @@ export default function JobBoard() {
         setShowJobForm(true);
     };
 
+    const uploadImage = async (file: File, type: string = 'job'): Promise<string | null> => {
+        const uploadData = new FormData();
+        uploadData.append('image', file);
+        uploadData.append('type', type);
+        const res = await fetch('/api/v1/upload/image', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': getCsrfToken(),
+            },
+            credentials: 'include',
+            body: uploadData,
+        });
+        if (res.ok) {
+            const data = await res.json();
+            return data.url || null;
+        }
+        return null;
+    };
+
     const saveJob = async () => {
         setSaving(true);
         try {
@@ -265,6 +316,27 @@ export default function JobBoard() {
                 ? `/api/v1/admin/jobs/${editingJob.id}`
                 : '/api/v1/admin/jobs';
             const method = editingJob ? 'PUT' : 'POST';
+
+            // Upload image files first, then include URLs
+            const payload: Record<string, unknown> = { ...formData };
+
+            if (formData.poster_image instanceof File) {
+                const posterUrl = await uploadImage(formData.poster_image);
+                payload.poster_image = posterUrl;
+            } else if (typeof formData.poster_image === 'string') {
+                payload.poster_image = formData.poster_image;
+            } else {
+                delete payload.poster_image;
+            }
+
+            if (formData.background_image instanceof File) {
+                const bgUrl = await uploadImage(formData.background_image);
+                payload.background_image = bgUrl;
+            } else if (typeof formData.background_image === 'string') {
+                payload.background_image = formData.background_image;
+            } else {
+                delete payload.background_image;
+            }
 
             const response = await fetch(url, {
                 method,
@@ -275,7 +347,7 @@ export default function JobBoard() {
                     'X-CSRF-TOKEN': getCsrfToken(),
                 },
                 credentials: 'include',
-                body: JSON.stringify(formData),
+                body: JSON.stringify(payload),
             });
 
             if (response.ok) {
@@ -425,10 +497,29 @@ export default function JobBoard() {
         }
     };
 
+    const viewJob = async (job: JobPosting) => {
+        try {
+            const response = await fetch(`/api/v1/admin/jobs/${job.id}`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'include',
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setViewingJob(data.data);
+            }
+        } catch (error) {
+            console.error('Failed to fetch job details:', error);
+            setViewingJob(job);
+        }
+    };
+
     const getStatusBadge = (status: string) => {
         const variants: { [key: string]: string } = {
             published: 'bg-green-100 text-green-800',
-            draft: 'bg-gray-100 text-gray-800',
+            draft: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200',
             closed: 'bg-red-100 text-red-800',
             expired: 'bg-orange-100 text-orange-800',
         };
@@ -437,6 +528,57 @@ export default function JobBoard() {
                 {status}
             </Badge>
         );
+    };
+
+    const getEmploymentTypeBadge = (type?: string) => {
+        const colors: { [key: string]: string } = {
+            full_time: 'bg-green-100 text-green-800',
+            part_time: 'bg-blue-100 text-blue-800',
+            contract: 'bg-purple-100 text-purple-800',
+            internship: 'bg-orange-100 text-orange-800',
+            freelance: 'bg-pink-100 text-pink-800',
+        };
+        const labels: { [key: string]: string } = {
+            full_time: 'Full Time',
+            part_time: 'Part Time',
+            contract: 'Contract',
+            internship: 'Internship',
+            freelance: 'Freelance',
+        };
+        const typeKey = type || 'full_time';
+        return (
+            <Badge className={cn('capitalize', colors[typeKey] || 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200')}>
+                {labels[typeKey] || typeKey}
+            </Badge>
+        );
+    };
+
+    const getWorkArrangementIcon = (arrangement?: string) => {
+        switch (arrangement) {
+            case 'remote':
+                return <Laptop className="h-4 w-4" />;
+            case 'hybrid':
+                return <Globe className="h-4 w-4" />;
+            default:
+                return <Building2 className="h-4 w-4" />;
+        }
+    };
+
+    const formatSalary = (job: JobPosting): string => {
+        if (job.is_salary_visible === false) return 'Competitive';
+        if (job.salary_range) return job.salary_range;
+        if (job.salary_min || job.salary_max) {
+            const currency = job.salary_currency || 'PHP';
+            const period = job.salary_period || 'monthly';
+            if (job.salary_min && job.salary_max) {
+                return `${currency} ${job.salary_min.toLocaleString()} - ${job.salary_max.toLocaleString()} / ${period}`;
+            } else if (job.salary_min) {
+                return `From ${currency} ${job.salary_min.toLocaleString()} / ${period}`;
+            } else if (job.salary_max) {
+                return `Up to ${currency} ${job.salary_max.toLocaleString()} / ${period}`;
+            }
+        }
+        return 'Competitive';
     };
 
     const formatDate = (dateString: string): string => {
@@ -499,9 +641,9 @@ export default function JobBoard() {
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <p className="text-sm text-muted-foreground">Draft</p>
-                                        <p className="text-2xl font-bold text-gray-600">{statistics.draft_jobs}</p>
+                                        <p className="text-2xl font-bold text-gray-600 dark:text-gray-400">{statistics.draft_jobs}</p>
                                     </div>
-                                    <Clock className="h-8 w-8 text-gray-600" />
+                                    <Clock className="h-8 w-8 text-gray-600 dark:text-gray-400" />
                                 </div>
                             </CardContent>
                         </Card>
@@ -570,96 +712,169 @@ export default function JobBoard() {
                             </CardContent>
                         </Card>
 
-                        {/* Jobs Table */}
-                        <Card>
-                            <CardContent className="p-0">
-                                {loading ? (
-                                    <div className="flex items-center justify-center h-64">
-                                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                                    </div>
-                                ) : jobs.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-                                        <Briefcase className="h-12 w-12 mb-4" />
-                                        <p>No job postings found</p>
-                                        <Button variant="link" onClick={() => openJobForm()}>
-                                            Create your first job posting
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Job Title</TableHead>
-                                                <TableHead>Company</TableHead>
-                                                <TableHead>Category</TableHead>
-                                                <TableHead>Status</TableHead>
-                                                <TableHead>Views</TableHead>
-                                                <TableHead>Created</TableHead>
-                                                <TableHead className="text-right">Actions</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {jobs.map((job) => (
-                                                <TableRow key={job.id}>
-                                                    <TableCell>
-                                                        <div className="flex items-center gap-2">
-                                                            {job.is_featured && (
-                                                                <Star className="h-4 w-4 text-yellow-500" />
-                                                            )}
-                                                            <span className="font-medium">{job.title}</span>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell>{job.company_name}</TableCell>
-                                                    <TableCell>
-                                                        <Badge variant="outline">
-                                                            {job.category?.name || 'Uncategorized'}
+                        {/* Jobs Count */}
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-maroon-800 dark:text-gray-200">
+                                {loading ? 'Loading...' : `${jobs.length} Job Postings`}
+                            </h2>
+                        </div>
+
+                        {/* Jobs Grid */}
+                        {loading ? (
+                            <div className="flex items-center justify-center h-64">
+                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : jobs.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700">
+                                <Briefcase className="h-16 w-16 mb-4 text-gray-300" />
+                                <h3 className="text-lg font-medium">No job postings found</h3>
+                                <p className="text-sm">Create your first job posting to get started</p>
+                                <Button variant="link" onClick={() => openJobForm()} className="mt-2 text-maroon-600 dark:text-maroon-400">
+                                    Create job posting
+                                </Button>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {jobs.map((job) => (
+                                    <div
+                                        key={job.id}
+                                        onClick={() => viewJob(job)}
+                                        className="group bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1 hover:border-maroon-300"
+                                    >
+                                        {/* Image Section */}
+                                        {job.poster_image ? (
+                                            <div className="h-48 overflow-hidden relative">
+                                                <img
+                                                    src={job.poster_image}
+                                                    alt={job.title}
+                                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                                />
+                                                <div className="absolute top-3 left-3 flex gap-2">
+                                                    {getEmploymentTypeBadge(job.employment_type)}
+                                                    {job.is_featured && (
+                                                        <Badge className="bg-yellow-100 text-yellow-800 text-xs">
+                                                            <Star className="h-3 w-3 mr-1 fill-yellow-500" /> Featured
                                                         </Badge>
-                                                    </TableCell>
-                                                    <TableCell>{getStatusBadge(job.status)}</TableCell>
-                                                    <TableCell>{job.views_count || 0}</TableCell>
-                                                    <TableCell>{formatDate(job.created_at)}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <Button variant="ghost" size="icon">
-                                                                    <MoreVertical className="h-4 w-4" />
-                                                                </Button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end">
-                                                                <DropdownMenuItem onClick={() => openJobForm(job)}>
-                                                                    <Edit className="h-4 w-4 mr-2" />
-                                                                    Edit
-                                                                </DropdownMenuItem>
-                                                                {job.status === 'draft' && (
-                                                                    <DropdownMenuItem onClick={() => updateJobStatus(job, 'published')}>
-                                                                        <CheckCircle className="h-4 w-4 mr-2" />
-                                                                        Publish
-                                                                    </DropdownMenuItem>
-                                                                )}
-                                                                {job.status === 'published' && (
-                                                                    <DropdownMenuItem onClick={() => updateJobStatus(job, 'closed')}>
-                                                                        <XCircle className="h-4 w-4 mr-2" />
-                                                                        Close
-                                                                    </DropdownMenuItem>
-                                                                )}
-                                                                <DropdownMenuSeparator />
-                                                                <DropdownMenuItem
-                                                                    className="text-destructive"
-                                                                    onClick={() => deleteJob(job)}
-                                                                >
-                                                                    <Trash2 className="h-4 w-4 mr-2" />
-                                                                    Delete
-                                                                </DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                )}
-                            </CardContent>
-                        </Card>
+                                                    )}
+                                                </div>
+                                                <div className="absolute top-3 right-3">
+                                                    {getStatusBadge(job.status)}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="h-48 bg-gradient-to-br from-maroon-50 to-maroon-100 dark:from-maroon-900/30 dark:to-maroon-800/30 flex items-center justify-center relative">
+                                                <Briefcase className="w-16 h-16 text-maroon-300" />
+                                                <div className="absolute top-3 left-3 flex gap-2">
+                                                    {getEmploymentTypeBadge(job.employment_type)}
+                                                    {job.is_featured && (
+                                                        <Badge className="bg-yellow-100 text-yellow-800 text-xs">
+                                                            <Star className="h-3 w-3 mr-1 fill-yellow-500" /> Featured
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                                <div className="absolute top-3 right-3">
+                                                    {getStatusBadge(job.status)}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Content Section */}
+                                        <div className="p-5">
+                                            <h3 className="text-lg font-bold text-maroon-900 dark:text-gray-100 mb-1 group-hover:text-maroon-700 dark:group-hover:text-gray-300 transition-colors line-clamp-1">
+                                                {job.title}
+                                            </h3>
+                                            <p className="text-maroon-600 dark:text-gray-400 text-sm font-medium mb-2 flex items-center">
+                                                <Building2 className="w-4 h-4 mr-1" />
+                                                {job.company_name}
+                                            </p>
+
+                                            {/* Location & Arrangement */}
+                                            <div className="flex items-center text-gray-500 dark:text-gray-400 text-sm mb-2">
+                                                <MapPin className="w-4 h-4 mr-1" />
+                                                <span className="line-clamp-1">{job.location || 'Not specified'}</span>
+                                                {job.work_arrangement && (
+                                                    <span className="ml-2 flex items-center">
+                                                        {getWorkArrangementIcon(job.work_arrangement)}
+                                                        <span className="ml-1 capitalize">{job.work_arrangement}</span>
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Salary */}
+                                            <div className="flex items-center text-gray-500 dark:text-gray-400 text-sm mb-3">
+                                                <DollarSign className="w-4 h-4 mr-1" />
+                                                <span>{formatSalary(job)}</span>
+                                            </div>
+
+                                            {/* Category */}
+                                            {job.category && (
+                                                <Badge variant="outline" className="text-xs mb-3">
+                                                    {job.category.name}
+                                                </Badge>
+                                            )}
+
+                                            {/* Footer */}
+                                            <div className="flex items-center justify-between mt-2">
+                                                <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                                                    <span className="flex items-center">
+                                                        <Calendar className="w-3 h-3 mr-1" />
+                                                        {formatDate(job.created_at)}
+                                                    </span>
+                                                    <span className="flex items-center">
+                                                        <Eye className="w-3 h-3 mr-1" />
+                                                        {job.views_count || 0}
+                                                    </span>
+                                                </div>
+                                                <span className="flex items-center text-maroon-600 dark:text-gray-400 text-sm font-medium group-hover:text-maroon-800 dark:group-hover:text-gray-200">
+                                                    View
+                                                    <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Quick Actions Bar */}
+                                        <div className="border-t border-beige-200 dark:border-gray-700 px-5 py-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={(e) => { e.stopPropagation(); openJobForm(job); }}
+                                                className="h-7 text-xs"
+                                            >
+                                                <Edit className="h-3 w-3 mr-1" /> Edit
+                                            </Button>
+                                            {job.status === 'draft' && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={(e) => { e.stopPropagation(); updateJobStatus(job, 'published'); }}
+                                                    className="h-7 text-xs"
+                                                >
+                                                    <Send className="h-3 w-3 mr-1" /> Publish
+                                                </Button>
+                                            )}
+                                            {job.status === 'published' && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={(e) => { e.stopPropagation(); updateJobStatus(job, 'closed'); }}
+                                                    className="h-7 text-xs"
+                                                >
+                                                    <XCircle className="h-3 w-3 mr-1" /> Close
+                                                </Button>
+                                            )}
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={(e) => { e.stopPropagation(); deleteJob(job); }}
+                                                className="h-7 text-xs text-destructive hover:text-destructive"
+                                            >
+                                                <Trash2 className="h-3 w-3 mr-1" /> Delete
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </TabsContent>
 
                     <TabsContent value="categories" className="space-y-4">
@@ -768,15 +983,60 @@ export default function JobBoard() {
 
                         {/* Description */}
                         <div className="space-y-4">
-                            <div>
-                                <Label>Description *</Label>
-                                <Textarea
-                                    value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    placeholder="Describe the role and responsibilities..."
-                                    rows={4}
-                                />
+                            {/* Content Type Toggle */}
+                            <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                    <Switch
+                                        checked={formData.use_pages || false}
+                                        onCheckedChange={(v) => setFormData({ ...formData, use_pages: v })}
+                                    />
+                                    <Label className="flex items-center gap-2 cursor-pointer">
+                                        <Layers className="h-4 w-4" />
+                                        Multi-Page Description
+                                    </Label>
+                                </div>
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                    {formData.use_pages
+                                        ? 'Create multiple pages with images and layouts'
+                                        : 'Simple text description'
+                                    }
+                                </span>
                             </div>
+
+                            {formData.use_pages ? (
+                                <MultiPageEditor
+                                    pages={formData.pages || []}
+                                    onChange={(pages) => setFormData({ ...formData, pages: pages as ContentPage[] })}
+                                    onImageUpload={async (file) => {
+                                        const formDataUpload = new FormData();
+                                        formDataUpload.append('image', file);
+                                        formDataUpload.append('type', 'job');
+
+                                        const response = await fetch('/api/v1/admin/upload/image', {
+                                            method: 'POST',
+                                            headers: {
+                                                'X-CSRF-TOKEN': getCsrfToken(),
+                                            },
+                                            credentials: 'include',
+                                            body: formDataUpload,
+                                        });
+
+                                        if (!response.ok) throw new Error('Upload failed');
+                                        const data = await response.json();
+                                        return data.path;
+                                    }}
+                                />
+                            ) : (
+                                <div>
+                                    <Label>Description *</Label>
+                                    <Textarea
+                                        value={formData.description}
+                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                        placeholder="Describe the role and responsibilities..."
+                                        rows={4}
+                                    />
+                                </div>
+                            )}
                             <div>
                                 <Label>Requirements</Label>
                                 <Textarea
@@ -794,6 +1054,165 @@ export default function JobBoard() {
                                     placeholder="List benefits and perks..."
                                     rows={3}
                                 />
+                            </div>
+                        </div>
+
+                        <Separator />
+
+                        {/* Campus Selection */}
+                        <div className="space-y-4">
+                            <h4 className="font-medium text-maroon-800 dark:text-gray-200">Target Campus</h4>
+                            <div className="space-y-3">
+                                <label
+                                    htmlFor="job-all-campuses"
+                                    className={`flex items-center space-x-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${formData.is_multi_campus
+                                        ? 'border-maroon-600 bg-maroon-50 dark:bg-maroon-900/30'
+                                        : 'border-gray-200 dark:border-gray-700 hover:border-maroon-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                        }`}
+                                >
+                                    <input
+                                        type="radio"
+                                        id="job-all-campuses"
+                                        name="job-campus-selection"
+                                        checked={formData.is_multi_campus}
+                                        onChange={() => setFormData({ ...formData, is_multi_campus: true, campus_id: null })}
+                                        className="w-4 h-4 text-maroon-600 focus:ring-maroon-500 focus:ring-2 cursor-pointer"
+                                    />
+                                    <span className={`text-sm font-medium ${formData.is_multi_campus ? 'text-maroon-800 dark:text-gray-200' : 'text-gray-700 dark:text-gray-300'
+                                        }`}>
+                                        All Campuses (Job visible to all alumni)
+                                    </span>
+                                </label>
+                                <label
+                                    htmlFor="job-specific-campus"
+                                    className={`flex items-start space-x-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${!formData.is_multi_campus
+                                        ? 'border-maroon-600 bg-maroon-50 dark:bg-maroon-900/30'
+                                        : 'border-gray-200 dark:border-gray-700 hover:border-maroon-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                        }`}
+                                >
+                                    <input
+                                        type="radio"
+                                        id="job-specific-campus"
+                                        name="job-campus-selection"
+                                        checked={!formData.is_multi_campus}
+                                        onChange={() => setFormData({ ...formData, is_multi_campus: false })}
+                                        className="w-4 h-4 mt-0.5 text-maroon-600 focus:ring-maroon-500 focus:ring-2 cursor-pointer flex-shrink-0"
+                                    />
+                                    <div className="flex-1">
+                                        <span className={`text-sm font-medium block mb-2 ${!formData.is_multi_campus ? 'text-maroon-800 dark:text-gray-200' : 'text-gray-700 dark:text-gray-300'
+                                            }`}>
+                                            Specific Campus Only
+                                        </span>
+                                        {!formData.is_multi_campus && (
+                                            <Select
+                                                value={formData.campus_id?.toString() || ''}
+                                                onValueChange={(value) => setFormData({ ...formData, campus_id: parseInt(value) })}
+                                            >
+                                                <SelectTrigger className="w-full border-beige-300 dark:border-gray-600">
+                                                    <SelectValue placeholder="Select campus" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="1">Main Campus - Manila</SelectItem>
+                                                    <SelectItem value="2">Cavite Campus</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        )}
+                                    </div>
+                                </label>
+                            </div>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400">
+                                Choose whether this job posting should be available to all campuses or restricted to a specific campus.
+                            </p>
+                        </div>
+
+                        <Separator />
+
+                        {/* Images */}
+                        <div className="space-y-4">
+                            <h4 className="font-medium text-maroon-800 dark:text-gray-200">Job Posting Images</h4>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <Label>Poster Image</Label>
+                                    <div className="mt-2">
+                                        {typeof formData.poster_image === 'string' && formData.poster_image ? (
+                                            <div className="relative w-full h-32 border-2 border-beige-300 dark:border-gray-600 rounded-lg overflow-hidden">
+                                                <img src={formData.poster_image} alt="Poster" className="w-full h-full object-cover" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, poster_image: undefined })}
+                                                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                                                >
+                                                    <XCircle className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-beige-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-maroon-400 hover:bg-maroon-50 dark:hover:bg-maroon-800/30 transition-colors">
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) setFormData({ ...formData, poster_image: file });
+                                                    }}
+                                                />
+                                                {formData.poster_image instanceof File ? (
+                                                    <div className="flex items-center space-x-2">
+                                                        <ImageIcon className="h-5 w-5 text-maroon-600 dark:text-gray-400" />
+                                                        <span className="text-sm text-maroon-700 dark:text-gray-300">{formData.poster_image.name}</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col items-center">
+                                                        <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                                                        <span className="text-sm text-gray-500 dark:text-gray-400">Upload poster image</span>
+                                                    </div>
+                                                )}
+                                            </label>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Recommended: 800x600px</p>
+                                </div>
+                                <div>
+                                    <Label>Background Image</Label>
+                                    <div className="mt-2">
+                                        {typeof formData.background_image === 'string' && formData.background_image ? (
+                                            <div className="relative w-full h-32 border-2 border-beige-300 dark:border-gray-600 rounded-lg overflow-hidden">
+                                                <img src={formData.background_image} alt="Background" className="w-full h-full object-cover" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, background_image: undefined })}
+                                                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                                                >
+                                                    <XCircle className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-beige-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-maroon-400 hover:bg-maroon-50 dark:hover:bg-maroon-800/30 transition-colors">
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files?.[0];
+                                                        if (file) setFormData({ ...formData, background_image: file });
+                                                    }}
+                                                />
+                                                {formData.background_image instanceof File ? (
+                                                    <div className="flex items-center space-x-2">
+                                                        <ImageIcon className="h-5 w-5 text-maroon-600 dark:text-gray-400" />
+                                                        <span className="text-sm text-maroon-700 dark:text-gray-300">{formData.background_image.name}</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col items-center">
+                                                        <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                                                        <span className="text-sm text-gray-500 dark:text-gray-400">Upload background</span>
+                                                    </div>
+                                                )}
+                                            </label>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Recommended: 1920x1080px</p>
+                                </div>
                             </div>
                         </div>
 
@@ -859,7 +1278,7 @@ export default function JobBoard() {
                                     <span className="text-sm">Show salary</span>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-4 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                 <div>
                                     <Label>Min Salary</Label>
                                     <Input
@@ -988,6 +1407,196 @@ export default function JobBoard() {
                             {editingJob ? 'Update Job' : 'Create Job'}
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Job View Dialog */}
+            <Dialog open={!!viewingJob} onOpenChange={() => setViewingJob(null)}>
+                <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+                    {viewingJob && (
+                        <>
+                            {/* Poster Image Banner */}
+                            {viewingJob.poster_image && (
+                                <div className="w-full h-48 -mt-6 -mx-6 mb-4 overflow-hidden rounded-t-lg" style={{ width: 'calc(100% + 3rem)' }}>
+                                    <img
+                                        src={viewingJob.poster_image}
+                                        alt={viewingJob.title}
+                                        className="w-full h-full object-cover"
+                                    />
+                                </div>
+                            )}
+                            <DialogHeader>
+                                <div className="flex items-start gap-4">
+                                    {viewingJob.company_logo ? (
+                                        <img
+                                            src={viewingJob.company_logo}
+                                            alt={viewingJob.company_name}
+                                            className="w-16 h-16 rounded-lg object-cover"
+                                        />
+                                    ) : (
+                                        <div className="w-16 h-16 bg-primary/10 rounded-lg flex items-center justify-center">
+                                            <Building2 className="h-8 w-8 text-primary" />
+                                        </div>
+                                    )}
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <DialogTitle className="text-xl">{viewingJob.title}</DialogTitle>
+                                            {viewingJob.is_featured && (
+                                                <Star className="h-5 w-5 text-yellow-500 fill-yellow-500" />
+                                            )}
+                                        </div>
+                                        <DialogDescription className="flex items-center gap-2 mt-1">
+                                            <span className="font-medium text-foreground">{viewingJob.company_name}</span>
+                                            {viewingJob.company_website && (
+                                                <a
+                                                    href={viewingJob.company_website}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-primary hover:underline"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <ExternalLink className="h-4 w-4" />
+                                                </a>
+                                            )}
+                                        </DialogDescription>
+                                    </div>
+                                    <div className="flex-shrink-0">
+                                        {getStatusBadge(viewingJob.status)}
+                                    </div>
+                                </div>
+                            </DialogHeader>
+
+                            <div className="space-y-6 mt-4">
+                                {/* Quick Info */}
+                                <div className="flex flex-wrap gap-2">
+                                    {getEmploymentTypeBadge(viewingJob.employment_type)}
+                                    <Badge variant="outline" className="capitalize">
+                                        {getWorkArrangementIcon(viewingJob.work_arrangement)}
+                                        <span className="ml-1">{viewingJob.work_arrangement}</span>
+                                    </Badge>
+                                    {viewingJob.category && (
+                                        <Badge variant="secondary">{viewingJob.category.name}</Badge>
+                                    )}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    {viewingJob.location && (
+                                        <div className="flex items-center gap-2">
+                                            <MapPin className="h-4 w-4 text-muted-foreground" />
+                                            <span>{viewingJob.location}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center gap-2">
+                                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                                        <span>{formatSalary(viewingJob)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                                        <span>Posted {formatDate(viewingJob.created_at)}</span>
+                                    </div>
+                                    {viewingJob.expires_at && (
+                                        <div className="flex items-center gap-2">
+                                            <Clock className="h-4 w-4 text-muted-foreground" />
+                                            <span>Expires {formatDate(viewingJob.expires_at)}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center gap-2">
+                                        <Eye className="h-4 w-4 text-muted-foreground" />
+                                        <span>{viewingJob.views_count || 0} views</span>
+                                    </div>
+                                </div>
+
+                                <Separator />
+
+                                {/* Description */}
+                                <div>
+                                    <h4 className="font-semibold mb-2">Job Description</h4>
+                                    {viewingJob.use_pages && viewingJob.pages && viewingJob.pages.length > 0 ? (
+                                        <PageCarousel
+                                            pages={viewingJob.pages}
+                                            className="min-h-[200px]"
+                                        />
+                                    ) : (
+                                        <div
+                                            className="text-sm text-muted-foreground prose prose-sm max-w-none dark:prose-invert"
+                                            dangerouslySetInnerHTML={{ __html: viewingJob.description }}
+                                        />
+                                    )}
+                                </div>
+
+                                {/* Requirements */}
+                                {viewingJob.requirements && (
+                                    <div>
+                                        <h4 className="font-semibold mb-2">Requirements</h4>
+                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                                            {viewingJob.requirements}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Benefits */}
+                                {viewingJob.benefits && (
+                                    <div>
+                                        <h4 className="font-semibold mb-2">Benefits</h4>
+                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                                            {viewingJob.benefits}
+                                        </p>
+                                    </div>
+                                )}
+
+                                <Separator />
+
+                                {/* Contact Information */}
+                                <div>
+                                    <h4 className="font-semibold mb-3">Contact Information</h4>
+                                    <div className="space-y-2">
+                                        {viewingJob.external_url && (
+                                            <Button variant="outline" asChild className="w-full justify-start">
+                                                <a
+                                                    href={viewingJob.external_url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                >
+                                                    <ExternalLink className="h-4 w-4 mr-2" />
+                                                    External Application URL
+                                                </a>
+                                            </Button>
+                                        )}
+                                        {viewingJob.contact_email && (
+                                            <div className="flex items-center gap-2 text-sm">
+                                                <Mail className="h-4 w-4 text-muted-foreground" />
+                                                <span>{viewingJob.contact_email}</span>
+                                            </div>
+                                        )}
+                                        {viewingJob.contact_phone && (
+                                            <div className="flex items-center gap-2 text-sm">
+                                                <Phone className="h-4 w-4 text-muted-foreground" />
+                                                <span>{viewingJob.contact_phone}</span>
+                                            </div>
+                                        )}
+                                        {!viewingJob.external_url && !viewingJob.contact_email && !viewingJob.contact_phone && (
+                                            <p className="text-sm text-muted-foreground">
+                                                No contact information provided.
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <DialogFooter className="mt-6">
+                                <Button variant="outline" onClick={() => setViewingJob(null)}>
+                                    Close
+                                </Button>
+                                <Button onClick={() => {
+                                    setViewingJob(null);
+                                    openJobForm(viewingJob);
+                                }}>
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit Job
+                                </Button>
+                            </DialogFooter>
+                        </>
+                    )}
                 </DialogContent>
             </Dialog>
 

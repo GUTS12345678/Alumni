@@ -22,6 +22,14 @@ export default function ForgotPassword({ status }: ForgotPasswordProps) {
         message: string;
     }>({ checking: false, exists: false, message: '' });
 
+    // Add public-page class to html for proper scrolling
+    useEffect(() => {
+        document.documentElement.classList.add('public-page');
+        return () => {
+            document.documentElement.classList.remove('public-page');
+        };
+    }, []);
+
     // Setup axios to include CSRF token from meta tag
     useEffect(() => {
         const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
@@ -120,7 +128,7 @@ export default function ForgotPassword({ status }: ForgotPasswordProps) {
         <>
             <Head title="Forgot Password - Alumni Tracer System" />
 
-            <div className="min-h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 flex relative overflow-hidden">
+            <div className="min-h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 flex relative overflow-x-hidden">
                 {/* Decorative Background Elements */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                     <div className="absolute -top-40 -right-40 w-80 h-80 bg-maroon-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
@@ -235,10 +243,10 @@ export default function ForgotPassword({ status }: ForgotPasswordProps) {
                                                 value={email}
                                                 onChange={(e) => setEmail(e.target.value)}
                                                 className={`pl-12 pr-10 h-12 border-maroon-200 focus:border-maroon-600 focus:ring-maroon-600 bg-white text-maroon-900 placeholder:text-maroon-400 text-base ${email && !emailValidation.checking && !emailValidation.exists && /\S+@\S+\.\S+/.test(email)
-                                                        ? 'border-amber-400'
-                                                        : emailValidation.exists
-                                                            ? 'border-green-400'
-                                                            : ''
+                                                    ? 'border-amber-400'
+                                                    : emailValidation.exists
+                                                        ? 'border-green-400'
+                                                        : ''
                                                     }`}
                                                 placeholder="you@example.com"
                                             />

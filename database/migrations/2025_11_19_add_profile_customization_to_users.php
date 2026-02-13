@@ -9,15 +9,33 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->string('profile_picture_path')->nullable()->after('email');
-            $table->string('cover_photo_path')->nullable()->after('profile_picture_path');
-            $table->string('phone_number', 20)->nullable()->after('cover_photo_path');
-            $table->text('bio')->nullable()->after('phone_number');
-            $table->string('location', 100)->nullable()->after('bio');
-            $table->string('website', 255)->nullable()->after('location');
-            $table->json('social_links')->nullable()->after('website'); // linkedin, facebook, twitter, etc.
-            $table->string('preferred_theme', 20)->default('system')->after('social_links'); // light, dark, system
-            $table->string('preferred_language', 10)->default('en')->after('preferred_theme');
+            if (!Schema::hasColumn('users', 'profile_picture_path')) {
+                $table->string('profile_picture_path')->nullable()->after('email');
+            }
+            if (!Schema::hasColumn('users', 'cover_photo_path')) {
+                $table->string('cover_photo_path')->nullable();
+            }
+            if (!Schema::hasColumn('users', 'phone_number')) {
+                $table->string('phone_number', 20)->nullable();
+            }
+            if (!Schema::hasColumn('users', 'bio')) {
+                $table->text('bio')->nullable();
+            }
+            if (!Schema::hasColumn('users', 'location')) {
+                $table->string('location', 100)->nullable();
+            }
+            if (!Schema::hasColumn('users', 'website')) {
+                $table->string('website', 255)->nullable();
+            }
+            if (!Schema::hasColumn('users', 'social_links')) {
+                $table->json('social_links')->nullable();
+            }
+            if (!Schema::hasColumn('users', 'preferred_theme')) {
+                $table->string('preferred_theme', 20)->default('system');
+            }
+            if (!Schema::hasColumn('users', 'preferred_language')) {
+                $table->string('preferred_language', 10)->default('en');
+            }
         });
     }
 

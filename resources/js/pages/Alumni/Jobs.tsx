@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Head, router, usePage } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Briefcase, Search, MapPin, DollarSign, Clock, Building2, Eye, Bookmark, BookmarkCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,7 +45,6 @@ interface Props {
 }
 
 export default function Jobs({ jobs, filters }: Props) {
-    const { flash } = usePage().props as any;
     const [search, setSearch] = useState(filters.search || '');
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [selectedJob, setSelectedJob] = useState<JobPosting | null>(null);
@@ -96,21 +95,21 @@ export default function Jobs({ jobs, filters }: Props) {
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                        <Briefcase className="h-8 w-8 text-maroon-600" />
+                        <Briefcase className="h-8 w-8 text-maroon-600 dark:text-gray-400" />
                         <div>
-                            <h1 className="text-3xl font-bold text-maroon-800">Job Board</h1>
-                            <p className="text-gray-600">Find job opportunities from EARIST</p>
+                            <h1 className="text-3xl font-bold text-maroon-800 dark:text-gray-200">Job Board</h1>
+                            <p className="text-gray-600 dark:text-gray-400">Find job opportunities from EARIST</p>
                         </div>
                     </div>
 
                     {/* Search Bar */}
-                    <Card className="border-beige-200">
+                    <Card className="border-beige-200 dark:border-gray-700">
                         <CardContent className="pt-6">
                             <div className="flex gap-4">
                                 <div className="flex-1">
                                     <Input
                                         placeholder="Search job titles, companies..."
-                                        className="border-beige-300"
+                                        className="border-beige-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
                                         onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -129,21 +128,21 @@ export default function Jobs({ jobs, filters }: Props) {
 
                     {/* Job Listings */}
                     {jobs.data.length === 0 ? (
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardContent className="pt-6">
                                 <div className="text-center py-12">
                                     <Briefcase className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                                    <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                                    <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
                                         No Job Postings Available
                                     </h3>
-                                    <p className="text-gray-500 mb-6">
+                                    <p className="text-gray-500 dark:text-gray-400 mb-6">
                                         {filters.search ? 'Try adjusting your search terms' : 'Check back later for new opportunities'}
                                     </p>
                                     {filters.search && (
                                         <Button
                                             variant="outline"
                                             onClick={() => router.get('/alumni/jobs')}
-                                            className="border-maroon-300 text-maroon-700"
+                                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300"
                                         >
                                             Clear Search
                                         </Button>
@@ -156,24 +155,24 @@ export default function Jobs({ jobs, filters }: Props) {
                             {jobs.data.map((job) => (
                                 <Card
                                     key={job.id}
-                                    className="border-beige-200 hover:shadow-lg transition-shadow cursor-pointer"
+                                    className="border-beige-200 dark:border-gray-700 hover:shadow-lg transition-shadow cursor-pointer"
                                     onClick={() => viewJob(job)}
                                 >
                                     <CardContent className="pt-6">
                                         <div className="flex items-start justify-between">
                                             <div className="flex-1">
                                                 <div className="flex items-start gap-4">
-                                                    <div className="w-12 h-12 bg-maroon-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                        <Building2 className="h-6 w-6 text-maroon-600" />
+                                                    <div className="w-12 h-12 bg-maroon-100 dark:bg-maroon-800/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                        <Building2 className="h-6 w-6 text-maroon-600 dark:text-gray-400" />
                                                     </div>
                                                     <div className="flex-1">
-                                                        <h3 className="text-xl font-semibold text-maroon-800 mb-1">
+                                                        <h3 className="text-xl font-semibold text-maroon-800 dark:text-gray-200 mb-1">
                                                             {job.title}
                                                         </h3>
-                                                        <p className="text-lg text-gray-700 font-medium mb-2">
+                                                        <p className="text-lg text-gray-700 dark:text-gray-300 font-medium mb-2">
                                                             {job.company_name}
                                                         </p>
-                                                        <div className="flex flex-wrap gap-3 text-sm text-gray-600 mb-3">
+                                                        <div className="flex flex-wrap gap-3 text-sm text-gray-600 dark:text-gray-400 mb-3">
                                                             <span className="flex items-center gap-1">
                                                                 <MapPin className="h-4 w-4" />
                                                                 {job.location}
@@ -194,16 +193,17 @@ export default function Jobs({ jobs, filters }: Props) {
                                                             )}
                                                         </div>
                                                         <div className="flex gap-2 mb-3">
-                                                            <Badge variant="outline" className="border-maroon-300 text-maroon-700">
+                                                            <Badge variant="outline" className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300">
                                                                 {jobTypes[job.job_type as keyof typeof jobTypes]}
                                                             </Badge>
                                                             <Badge variant="outline" className="border-blue-300 text-blue-700">
                                                                 {experienceLevels[job.experience_level as keyof typeof experienceLevels]}
                                                             </Badge>
                                                         </div>
-                                                        <p className="text-gray-600 line-clamp-2">
-                                                            {job.description}
-                                                        </p>
+                                                        <div
+                                                            className="text-gray-600 dark:text-gray-400 line-clamp-2 prose prose-sm max-w-none dark:prose-invert"
+                                                            dangerouslySetInnerHTML={{ __html: job.description }}
+                                                        />
                                                     </div>
                                                 </div>
                                             </div>
@@ -213,7 +213,7 @@ export default function Jobs({ jobs, filters }: Props) {
                                                         variant="outline"
                                                         size="sm"
                                                         onClick={(e) => handleUnsaveJob(job.id, e)}
-                                                        className="border-maroon-300 text-maroon-700"
+                                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300"
                                                     >
                                                         <BookmarkCheck className="h-4 w-4" />
                                                     </Button>
@@ -222,7 +222,7 @@ export default function Jobs({ jobs, filters }: Props) {
                                                         variant="outline"
                                                         size="sm"
                                                         onClick={(e) => handleSaveJob(job.id, e)}
-                                                        className="border-gray-300"
+                                                        className="border-gray-300 dark:border-gray-600"
                                                     >
                                                         <Bookmark className="h-4 w-4" />
                                                     </Button>
@@ -255,15 +255,15 @@ export default function Jobs({ jobs, filters }: Props) {
                 {/* Job Details Modal */}
                 {selectedJob && (
                     <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-                        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-gray-800">
                             <DialogHeader>
-                                <DialogTitle className="text-2xl text-maroon-800">{selectedJob.title}</DialogTitle>
+                                <DialogTitle className="text-2xl text-maroon-800 dark:text-gray-200">{selectedJob.title}</DialogTitle>
                                 <DialogDescription className="text-lg">{selectedJob.company_name}</DialogDescription>
                             </DialogHeader>
 
                             <div className="space-y-6">
                                 <div className="flex flex-wrap gap-2">
-                                    <Badge className="bg-maroon-100 text-maroon-800">
+                                    <Badge className="bg-maroon-100 dark:bg-maroon-800/30 text-maroon-800 dark:text-gray-200">
                                         {jobTypes[selectedJob.job_type as keyof typeof jobTypes]}
                                     </Badge>
                                     <Badge className="bg-blue-100 text-blue-800">
@@ -276,36 +276,39 @@ export default function Jobs({ jobs, filters }: Props) {
 
                                 <div className="grid grid-cols-2 gap-4 text-sm">
                                     <div className="flex items-center gap-2">
-                                        <MapPin className="h-4 w-4 text-gray-500" />
+                                        <MapPin className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                                         <span>{selectedJob.location}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <DollarSign className="h-4 w-4 text-gray-500" />
+                                        <DollarSign className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                                         <span>{selectedJob.formatted_salary}</span>
                                     </div>
                                     {(selectedJob.application_deadline || selectedJob.deadline) && (
                                         <div className="flex items-center gap-2">
-                                            <Clock className="h-4 w-4 text-gray-500" />
+                                            <Clock className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                                             <span>Apply by {new Date(selectedJob.application_deadline || selectedJob.deadline || '').toLocaleDateString()}</span>
                                         </div>
                                     )}
                                 </div>
 
                                 <div>
-                                    <h3 className="font-semibold text-lg mb-2 text-maroon-800">Job Description</h3>
-                                    <p className="text-gray-700 whitespace-pre-wrap">{selectedJob.description}</p>
+                                    <h3 className="font-semibold text-lg mb-2 text-maroon-800 dark:text-gray-200">Job Description</h3>
+                                    <div
+                                        className="text-gray-700 dark:text-gray-300 prose prose-sm max-w-none dark:prose-invert"
+                                        dangerouslySetInnerHTML={{ __html: selectedJob.description }}
+                                    />
                                 </div>
 
                                 {selectedJob.requirements && (
                                     <div>
-                                        <h3 className="font-semibold text-lg mb-2 text-maroon-800">Requirements</h3>
-                                        <p className="text-gray-700 whitespace-pre-wrap">{selectedJob.requirements}</p>
+                                        <h3 className="font-semibold text-lg mb-2 text-maroon-800 dark:text-gray-200">Requirements</h3>
+                                        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{selectedJob.requirements}</p>
                                     </div>
                                 )}
 
                                 {selectedJob.skills_required && selectedJob.skills_required.length > 0 && (
                                     <div>
-                                        <h3 className="font-semibold text-lg mb-2 text-maroon-800">Required Skills</h3>
+                                        <h3 className="font-semibold text-lg mb-2 text-maroon-800 dark:text-gray-200">Required Skills</h3>
                                         <div className="flex flex-wrap gap-2">
                                             {selectedJob.skills_required.map((skill, index) => (
                                                 <Badge key={index} variant="outline">{skill}</Badge>
@@ -314,12 +317,12 @@ export default function Jobs({ jobs, filters }: Props) {
                                     </div>
                                 )}
 
-                                <div className="flex gap-3 pt-4 border-t justify-end">
+                                <div className="flex gap-3 pt-4 border-t dark:border-gray-700 justify-end">
                                     {selectedJob.has_user_saved ? (
                                         <Button
                                             variant="outline"
                                             onClick={(e) => handleUnsaveJob(selectedJob.id, e)}
-                                            className="border-maroon-300 text-maroon-700"
+                                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300"
                                         >
                                             <BookmarkCheck className="h-4 w-4 mr-2" />
                                             Saved

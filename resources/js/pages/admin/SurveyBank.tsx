@@ -155,6 +155,12 @@ export default function SurveyBank({ user }: Props) {
         fetchSurveys();
     }, [fetchSurveys]);
 
+    // Refresh when campus changes
+    useEffect(() => {
+        setCurrentPage(1);
+        fetchSurveys();
+    }, [selectedCampus?.id]);
+
     // Debounced search effect
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -208,7 +214,7 @@ export default function SurveyBank({ user }: Props) {
 
     const getStatusBadge = (status: string) => {
         const statusColors = {
-            'draft': 'bg-gray-100 text-gray-800',
+            'draft': 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200',
             'active': 'bg-green-100 text-green-800',
             'closed': 'bg-red-100 text-red-800',
             'archived': 'bg-blue-100 text-blue-800',
@@ -335,8 +341,8 @@ export default function SurveyBank({ user }: Props) {
             <AdminBaseLayout title="Survey Bank" user={user}>
                 <div className="flex items-center justify-center min-h-96">
                     <div className="flex items-center space-x-2">
-                        <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
-                        <span className="text-maroon-800 font-medium">Loading surveys...</span>
+                        <RefreshCw className="h-8 w-8 text-maroon-600 dark:text-maroon-400 animate-spin" />
+                        <span className="text-maroon-800 dark:text-gray-200 font-medium">Loading surveys...</span>
                     </div>
                 </div>
             </AdminBaseLayout>
@@ -367,8 +373,8 @@ export default function SurveyBank({ user }: Props) {
                 {/* Header with Actions */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h2 className="text-2xl font-bold text-maroon-800">Survey Management</h2>
-                        <p className="text-maroon-600">Create, manage and analyze alumni surveys</p>
+                        <h2 className="text-2xl font-bold text-maroon-800 dark:text-gray-200">Survey Management</h2>
+                        <p className="text-maroon-600 dark:text-gray-400">Create, manage and analyze alumni surveys</p>
                     </div>
 
                     <div className="flex items-center space-x-2">
@@ -377,7 +383,7 @@ export default function SurveyBank({ user }: Props) {
                             variant="outline"
                             size="sm"
                             disabled={refreshing}
-                            className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                         >
                             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
                             Refresh
@@ -387,7 +393,7 @@ export default function SurveyBank({ user }: Props) {
                             onClick={handleExport}
                             variant="outline"
                             size="sm"
-                            className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                         >
                             <Download className="h-4 w-4 mr-2" />
                             Export Data
@@ -405,9 +411,9 @@ export default function SurveyBank({ user }: Props) {
                 </div>
 
                 {/* Search and Filters */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-lg text-maroon-800 flex items-center">
+                        <CardTitle className="text-lg text-maroon-800 dark:text-gray-200 flex items-center">
                             <Search className="h-5 w-5 mr-2" />
                             Search & Filter
                         </CardTitle>
@@ -421,7 +427,7 @@ export default function SurveyBank({ user }: Props) {
                                         placeholder="Search surveys by title or description..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="pl-10 border-beige-300 focus:border-maroon-500 focus:ring-maroon-500"
+                                        className="pl-10 border-beige-300 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
                                     />
                                 </div>
                             </div>
@@ -431,92 +437,136 @@ export default function SurveyBank({ user }: Props) {
 
                 {/* Survey Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Total Surveys</CardTitle>
-                            <FileText className="h-4 w-4 text-maroon-600" />
+                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Surveys</CardTitle>
+                            <FileText className="h-4 w-4 text-maroon-600 dark:text-maroon-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-maroon-800">{total}</div>
-                            <p className="text-xs text-maroon-600 mt-1">All surveys created</p>
+                            <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">{total}</div>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">All surveys created</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Active Surveys</CardTitle>
-                            <Clock className="h-4 w-4 text-maroon-600" />
+                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Active Surveys</CardTitle>
+                            <Clock className="h-4 w-4 text-maroon-600 dark:text-maroon-400" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-green-600">
                                 {surveys.filter(s => s.status === 'active').length}
                             </div>
-                            <p className="text-xs text-maroon-600 mt-1">Currently accepting responses</p>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Currently accepting responses</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Total Responses</CardTitle>
-                            <Users className="h-4 w-4 text-maroon-600" />
+                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Responses</CardTitle>
+                            <Users className="h-4 w-4 text-maroon-600 dark:text-maroon-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-maroon-800">
+                            <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">
                                 {surveys.reduce((sum, survey) => sum + survey.responses_count, 0)}
                             </div>
-                            <p className="text-xs text-maroon-600 mt-1">Across all surveys</p>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Across all surveys</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Avg Response Rate</CardTitle>
-                            <BarChart3 className="h-4 w-4 text-maroon-600" />
+                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Avg Response Rate</CardTitle>
+                            <BarChart3 className="h-4 w-4 text-maroon-600 dark:text-maroon-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-maroon-800">
+                            <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">
                                 {surveys.length > 0
                                     ? Math.round(surveys.reduce((sum, survey) => sum + survey.responses_count, 0) / surveys.length)
                                     : 0}
                             </div>
-                            <p className="text-xs text-maroon-600 mt-1">Responses per survey</p>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Responses per survey</p>
                         </CardContent>
                     </Card>
                 </div>
 
                 {/* Surveys Table */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800">Survey Directory</CardTitle>
-                        <CardDescription className="text-maroon-600">
+                        <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Survey Directory</CardTitle>
+                        <CardDescription className="text-maroon-600 dark:text-gray-400">
                             Showing {surveys.length} of {total} surveys
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-0">
-                        <div className="overflow-x-auto">
+                        {/* Mobile Card View */}
+                        <div className="md:hidden divide-y divide-beige-200 dark:divide-gray-700">
+                            {surveys.map((survey) => (
+                                <div key={survey.id} className="p-4 space-y-2">
+                                    <div className="flex items-start justify-between">
+                                        <div className="min-w-0 flex-1">
+                                            <div className="font-medium text-maroon-800 dark:text-gray-200 truncate">{survey.title}</div>
+                                            <div className="text-sm text-gray-600 dark:text-gray-400 line-clamp-1">{survey.description}</div>
+                                        </div>
+                                        {getStatusBadge(survey.status)}
+                                    </div>
+                                    <div className="flex items-center gap-4 text-sm">
+                                        <div>
+                                            <span className="text-gray-500 dark:text-gray-400 text-xs">Responses</span>
+                                            <p className="font-bold text-maroon-800 dark:text-gray-200">{survey.responses_count}</p>
+                                        </div>
+                                        <div>
+                                            <span className="text-gray-500 dark:text-gray-400 text-xs">Questions</span>
+                                            <p className="font-bold text-maroon-800 dark:text-gray-200">{survey.questions_count}</p>
+                                        </div>
+                                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                                            Target: {survey.target_audience}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                                        <span>Created: {formatDate(survey.created_at)}</span>
+                                        {survey.end_date && <span className="text-red-600">Ends: {formatDate(survey.end_date)}</span>}
+                                    </div>
+                                    <div className="flex gap-1 pt-1">
+                                        <Button variant="ghost" size="sm" onClick={() => handleViewSurvey(survey)} className="h-7 text-xs text-maroon-700 dark:text-gray-300" title="View">
+                                            <Eye className="h-3.5 w-3.5 mr-1" /> View
+                                        </Button>
+                                        <Button variant="ghost" size="sm" onClick={() => handleEditSurvey(survey)} className="h-7 text-xs text-blue-700" title="Edit">
+                                            <Edit className="h-3.5 w-3.5 mr-1" /> Edit
+                                        </Button>
+                                        <Button variant="ghost" size="sm" onClick={() => handleDeleteSurvey(survey)} className="h-7 text-xs text-red-700" title="Delete">
+                                            <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto">
                             <Table>
                                 <TableHeader>
-                                    <TableRow className="bg-beige-50">
-                                        <TableHead className="text-maroon-800 font-semibold">Survey Details</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Status</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Timeline</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Responses</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Questions</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Actions</TableHead>
+                                    <TableRow className="bg-beige-50 dark:bg-gray-800/50">
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Survey Details</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Status</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Timeline</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Responses</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Questions</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {surveys.map((survey) => (
-                                        <TableRow key={survey.id} className="hover:bg-beige-50">
+                                        <TableRow key={survey.id} className="hover:bg-beige-50 dark:hover:bg-gray-800">
                                             <TableCell>
                                                 <div className="space-y-1">
-                                                    <div className="font-medium text-maroon-800">
+                                                    <div className="font-medium text-maroon-800 dark:text-gray-200">
                                                         {survey.title}
                                                     </div>
-                                                    <div className="text-sm text-gray-600 max-w-md truncate">
+                                                    <div className="text-sm text-gray-600 dark:text-gray-400 max-w-md truncate">
                                                         {survey.description}
                                                     </div>
-                                                    <div className="text-xs text-gray-500">
+                                                    <div className="text-xs text-gray-500 dark:text-gray-400">
                                                         Target: {survey.target_audience}
                                                     </div>
                                                 </div>
@@ -544,18 +594,18 @@ export default function SurveyBank({ user }: Props) {
                                             </TableCell>
                                             <TableCell>
                                                 <div className="text-center">
-                                                    <div className="text-lg font-bold text-maroon-800">
+                                                    <div className="text-lg font-bold text-maroon-800 dark:text-gray-200">
                                                         {survey.responses_count}
                                                     </div>
-                                                    <div className="text-xs text-gray-600">responses</div>
+                                                    <div className="text-xs text-gray-600 dark:text-gray-400">responses</div>
                                                 </div>
                                             </TableCell>
                                             <TableCell>
                                                 <div className="text-center">
-                                                    <div className="text-lg font-bold text-maroon-800">
+                                                    <div className="text-lg font-bold text-maroon-800 dark:text-gray-200">
                                                         {survey.questions_count}
                                                     </div>
-                                                    <div className="text-xs text-gray-600">questions</div>
+                                                    <div className="text-xs text-gray-600 dark:text-gray-400">questions</div>
                                                 </div>
                                             </TableCell>
                                             <TableCell>
@@ -564,7 +614,7 @@ export default function SurveyBank({ user }: Props) {
                                                         variant="ghost"
                                                         size="sm"
                                                         onClick={() => handleViewSurvey(survey)}
-                                                        className="text-maroon-700 hover:text-maroon-800 hover:bg-maroon-50"
+                                                        className="text-maroon-700 dark:text-gray-300 hover:text-maroon-800 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                                         title="View Details"
                                                     >
                                                         <Eye className="h-4 w-4" />
@@ -597,8 +647,8 @@ export default function SurveyBank({ user }: Props) {
 
                         {/* Pagination */}
                         {totalPages > 1 && (
-                            <div className="flex items-center justify-between px-6 py-4 border-t border-beige-200">
-                                <div className="text-sm text-gray-700">
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 sm:px-6 py-4 border-t border-beige-200 dark:border-gray-700">
+                                <div className="text-sm text-gray-700 dark:text-gray-300">
                                     Showing page {currentPage} of {totalPages}
                                 </div>
                                 <div className="space-x-2">
@@ -607,7 +657,7 @@ export default function SurveyBank({ user }: Props) {
                                         size="sm"
                                         onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                                         disabled={currentPage === 1}
-                                        className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                     >
                                         Previous
                                     </Button>
@@ -616,7 +666,7 @@ export default function SurveyBank({ user }: Props) {
                                         size="sm"
                                         onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                                         disabled={currentPage === totalPages}
-                                        className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                     >
                                         Next
                                     </Button>
@@ -630,17 +680,17 @@ export default function SurveyBank({ user }: Props) {
 
                 {/* View Survey Modal */}
                 <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-gray-800">
                         <DialogHeader className="relative">
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setViewModalOpen(false)}
-                                className="absolute right-0 top-0 h-8 w-8 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
+                                className="absolute right-0 top-0 h-8 w-8 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
                             >
                                 <X className="h-4 w-4" />
                             </Button>
-                            <DialogTitle className="text-xl text-maroon-800 pr-8 flex items-center">
+                            <DialogTitle className="text-xl text-maroon-800 dark:text-gray-200 pr-8 flex items-center">
                                 <FileText className="h-5 w-5 mr-2" />
                                 Survey Details
                             </DialogTitle>
@@ -652,18 +702,18 @@ export default function SurveyBank({ user }: Props) {
                         {selectedSurvey && (
                             <div className="space-y-6">
                                 {/* Survey Information */}
-                                <Card className="border-beige-200">
+                                <Card className="border-beige-200 dark:border-gray-700">
                                     <CardHeader>
-                                        <CardTitle className="text-lg text-maroon-800">Survey Information</CardTitle>
+                                        <CardTitle className="text-lg text-maroon-800 dark:text-gray-200">Survey Information</CardTitle>
                                     </CardHeader>
                                     <CardContent className="space-y-4">
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="text-sm font-medium text-gray-600">Title</label>
-                                                <p className="text-sm text-gray-900 mt-1">{selectedSurvey.title}</p>
+                                                <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Title</label>
+                                                <p className="text-sm text-gray-900 dark:text-gray-100 mt-1">{selectedSurvey.title}</p>
                                             </div>
                                             <div>
-                                                <label className="text-sm font-medium text-gray-600">Status</label>
+                                                <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Status</label>
                                                 <div className="mt-1">
                                                     {getStatusBadge(selectedSurvey.status)}
                                                 </div>
@@ -671,23 +721,23 @@ export default function SurveyBank({ user }: Props) {
                                         </div>
 
                                         <div>
-                                            <label className="text-sm font-medium text-gray-600">Description</label>
-                                            <p className="text-sm text-gray-900 mt-1">{selectedSurvey.description}</p>
+                                            <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Description</label>
+                                            <p className="text-sm text-gray-900 dark:text-gray-100 mt-1">{selectedSurvey.description}</p>
                                         </div>
 
                                         <div>
-                                            <label className="text-sm font-medium text-gray-600">Target Audience</label>
-                                            <p className="text-sm text-gray-900 mt-1">{selectedSurvey.target_audience}</p>
+                                            <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Target Audience</label>
+                                            <p className="text-sm text-gray-900 dark:text-gray-100 mt-1">{selectedSurvey.target_audience}</p>
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="text-sm font-medium text-gray-600">Created</label>
-                                                <p className="text-sm text-gray-900 mt-1">{formatDate(selectedSurvey.created_at)}</p>
+                                                <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Created</label>
+                                                <p className="text-sm text-gray-900 dark:text-gray-100 mt-1">{formatDate(selectedSurvey.created_at)}</p>
                                             </div>
                                             <div>
-                                                <label className="text-sm font-medium text-gray-600">Last Updated</label>
-                                                <p className="text-sm text-gray-900 mt-1">{formatDate(selectedSurvey.updated_at)}</p>
+                                                <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Last Updated</label>
+                                                <p className="text-sm text-gray-900 dark:text-gray-100 mt-1">{formatDate(selectedSurvey.updated_at)}</p>
                                             </div>
                                         </div>
 
@@ -695,14 +745,14 @@ export default function SurveyBank({ user }: Props) {
                                             <div className="grid grid-cols-2 gap-4">
                                                 {selectedSurvey.start_date && (
                                                     <div>
-                                                        <label className="text-sm font-medium text-gray-600">Start Date</label>
-                                                        <p className="text-sm text-gray-900 mt-1">{formatDate(selectedSurvey.start_date)}</p>
+                                                        <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Start Date</label>
+                                                        <p className="text-sm text-gray-900 dark:text-gray-100 mt-1">{formatDate(selectedSurvey.start_date)}</p>
                                                     </div>
                                                 )}
                                                 {selectedSurvey.end_date && (
                                                     <div>
-                                                        <label className="text-sm font-medium text-gray-600">End Date</label>
-                                                        <p className="text-sm text-gray-900 mt-1">{formatDate(selectedSurvey.end_date)}</p>
+                                                        <label className="text-sm font-medium text-gray-600 dark:text-gray-400">End Date</label>
+                                                        <p className="text-sm text-gray-900 dark:text-gray-100 mt-1">{formatDate(selectedSurvey.end_date)}</p>
                                                     </div>
                                                 )}
                                             </div>
@@ -712,33 +762,33 @@ export default function SurveyBank({ user }: Props) {
 
                                 {/* Statistics */}
                                 <div className="grid grid-cols-2 gap-4">
-                                    <Card className="border-beige-200">
+                                    <Card className="border-beige-200 dark:border-gray-700">
                                         <CardHeader className="pb-3">
-                                            <CardTitle className="text-lg text-maroon-800 flex items-center">
+                                            <CardTitle className="text-lg text-maroon-800 dark:text-gray-200 flex items-center">
                                                 <Users className="h-5 w-5 mr-2" />
                                                 Responses
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            <div className="text-3xl font-bold text-maroon-800">
+                                            <div className="text-3xl font-bold text-maroon-800 dark:text-gray-200">
                                                 {selectedSurvey.responses_count}
                                             </div>
-                                            <p className="text-sm text-gray-600">Total responses received</p>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">Total responses received</p>
                                         </CardContent>
                                     </Card>
 
-                                    <Card className="border-beige-200">
+                                    <Card className="border-beige-200 dark:border-gray-700">
                                         <CardHeader className="pb-3">
-                                            <CardTitle className="text-lg text-maroon-800 flex items-center">
+                                            <CardTitle className="text-lg text-maroon-800 dark:text-gray-200 flex items-center">
                                                 <BarChart3 className="h-5 w-5 mr-2" />
                                                 Questions
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            <div className="text-3xl font-bold text-maroon-800">
+                                            <div className="text-3xl font-bold text-maroon-800 dark:text-gray-200">
                                                 {selectedSurvey.questions_count}
                                             </div>
-                                            <p className="text-sm text-gray-600">Questions in this survey</p>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">Questions in this survey</p>
                                         </CardContent>
                                     </Card>
                                 </div>
@@ -781,17 +831,17 @@ export default function SurveyBank({ user }: Props) {
 
                 {/* Edit Survey Modal */}
                 <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-gray-800">
                         <DialogHeader className="relative">
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => setEditModalOpen(false)}
-                                className="absolute right-0 top-0 h-8 w-8 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
+                                className="absolute right-0 top-0 h-8 w-8 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
                             >
                                 <X className="h-4 w-4" />
                             </Button>
-                            <DialogTitle className="text-xl text-maroon-800 pr-8">
+                            <DialogTitle className="text-xl text-maroon-800 dark:text-gray-200 pr-8">
                                 Edit Survey
                             </DialogTitle>
                             <DialogDescription>
@@ -802,7 +852,7 @@ export default function SurveyBank({ user }: Props) {
                         <form onSubmit={handleUpdateSurvey} className="space-y-6">
                             <div className="space-y-4">
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700">Survey Title *</label>
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Survey Title *</label>
                                     <Input
                                         value={editSurveyForm.title}
                                         onChange={(e) => setEditSurveyForm(prev => ({
@@ -816,7 +866,7 @@ export default function SurveyBank({ user }: Props) {
                                 </div>
 
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700">Description *</label>
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Description *</label>
                                     <Textarea
                                         value={editSurveyForm.description}
                                         onChange={(e) => setEditSurveyForm(prev => ({
@@ -831,7 +881,7 @@ export default function SurveyBank({ user }: Props) {
                                 </div>
 
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700">Target Audience *</label>
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Target Audience *</label>
                                     <Input
                                         value={editSurveyForm.target_audience}
                                         onChange={(e) => setEditSurveyForm(prev => ({
@@ -845,7 +895,7 @@ export default function SurveyBank({ user }: Props) {
                                 </div>
 
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700">Status</label>
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
                                     <Select
                                         value={editSurveyForm.status}
                                         onValueChange={(value: 'draft' | 'active' | 'closed' | 'archived') =>
@@ -866,7 +916,7 @@ export default function SurveyBank({ user }: Props) {
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-sm font-medium text-gray-700">Start Date</label>
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Start Date</label>
                                         <Input
                                             type="date"
                                             value={editSurveyForm.start_date}
@@ -878,7 +928,7 @@ export default function SurveyBank({ user }: Props) {
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-sm font-medium text-gray-700">End Date</label>
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">End Date</label>
                                         <Input
                                             type="date"
                                             value={editSurveyForm.end_date}
@@ -925,7 +975,7 @@ export default function SurveyBank({ user }: Props) {
 
                 {/* Delete Confirmation Modal */}
                 <Dialog open={deleteModalOpen} onOpenChange={setDeleteModalOpen}>
-                    <DialogContent className="max-w-md">
+                    <DialogContent className="max-w-md dark:bg-gray-800">
                         <DialogHeader>
                             <DialogTitle className="text-xl text-red-800">
                                 Delete Survey
@@ -977,9 +1027,9 @@ export default function SurveyBank({ user }: Props) {
 
                 {/* Questions Management Modal */}
                 <Dialog open={questionsModalOpen} onOpenChange={setQuestionsModalOpen}>
-                    <DialogContent className="max-w-[98vw] w-[98vw] max-h-[85vh] p-6">
+                    <DialogContent className="max-w-[98vw] w-[98vw] max-h-[85vh] p-6 dark:bg-gray-800">
                         <DialogHeader className="pb-4">
-                            <DialogTitle className="text-xl text-maroon-800 flex items-center">
+                            <DialogTitle className="text-xl text-maroon-800 dark:text-gray-200 flex items-center">
                                 <List className="h-5 w-5 mr-2" />
                                 Manage Questions: {selectedSurvey?.title}
                             </DialogTitle>
@@ -1003,6 +1053,6 @@ export default function SurveyBank({ user }: Props) {
                     </DialogContent>
                 </Dialog>
             </div>
-        </AdminBaseLayout>
+        </AdminBaseLayout >
     );
 }

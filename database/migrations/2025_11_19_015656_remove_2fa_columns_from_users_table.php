@@ -12,8 +12,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            // Remove 2FA columns
-            $table->dropColumn(['google_auth_enabled', 'google_auth_secret']);
+            $columnsToDrop = array_filter(
+                ['google_auth_enabled', 'google_auth_secret'],
+                fn($col) => Schema::hasColumn('users', $col)
+            );
+            if (!empty($columnsToDrop)) {
+                $table->dropColumn($columnsToDrop);
+            }
         });
     }
 

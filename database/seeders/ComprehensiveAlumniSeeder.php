@@ -201,10 +201,25 @@ class ComprehensiveAlumniSeeder extends Seeder
         $lastName = $this->lastNames[array_rand($this->lastNames)];
         $middleName = $this->lastNames[array_rand($this->lastNames)];
         
+        // Find next available student ID number for this year and campus
+        $existingMax = DB::table('alumni_profiles')
+            ->where('student_id', 'like', $gradYear . '-%' . $campusName)
+            ->orderBy('student_id', 'desc')
+            ->value('student_id');
+        
+        $nextNumber = 1;
+        if ($existingMax) {
+            // Extract number from format: "2018-00001-MAIN"
+            preg_match('/-(\d+)-/', $existingMax, $matches);
+            if (isset($matches[1])) {
+                $nextNumber = intval($matches[1]) + 1;
+            }
+        }
+        
         // Generate email and student ID
-        $emailPrefix = strtolower($firstName . '.' . $lastName . $index);
+        $emailPrefix = strtolower($firstName . '.' . $lastName . $nextNumber);
         $email = $emailPrefix . '@alumni.earist.edu.ph';
-        $studentId = $gradYear . '-' . str_pad($index + 1, 5, '0', STR_PAD_LEFT) . '-' . $campusName;
+        $studentId = $gradYear . '-' . str_pad($nextNumber, 5, '0', STR_PAD_LEFT) . '-' . $campusName;
 
         // Select random department and course
         $deptId = $departments->random();
@@ -224,7 +239,7 @@ class ComprehensiveAlumniSeeder extends Seeder
         } elseif ($statusRand <= 97) {
             $employmentStatus = 'unemployed_not_seeking';
         } else {
-            $employmentStatus = 'pursuing_higher_education';
+            $employmentStatus = 'continuing_education';
         }
 
         $isEmployed = in_array($employmentStatus, ['employed_full_time', 'employed_part_time', 'self_employed']);
@@ -337,8 +352,8 @@ class ComprehensiveAlumniSeeder extends Seeder
             'job_related_to_degree' => $jobRelatedToDegree,
             'job_mismatch_reason' => $jobMismatchReason,
             'job_satisfaction' => $jobSatisfaction,
-            'skills' => $this->skills[array_rand($this->skills)],
-            'certifications' => $isEmployed ? $this->certifications[array_rand($this->certifications)] : null,
+            'skills' => json_encode(explode(', ', $this->skills[array_rand($this->skills)])),
+            'certifications' => $isEmployed ? json_encode(explode(', ', $this->certifications[array_rand($this->certifications)])) : null,
             'willing_to_mentor' => mt_rand(0, 1) == 1,
             'willing_to_hire_alumni' => mt_rand(0, 1) == 1,
             'profile_completed' => true,
@@ -359,7 +374,7 @@ class ComprehensiveAlumniSeeder extends Seeder
                 'salary' => $currentSalary,
                 'industry' => $this->getIndustry($currentJobTitle),
                 'location' => $city . ', Philippines',
-                'employment_type' => $employmentStatus == 'employed_full_time' ? 'full_time' : ($employmentStatus == 'employed_part_time' ? 'part_time' : 'self_employed'),
+                'employment_type' => $employmentStatus == 'employed_full_time' ? 'full-time' : ($employmentStatus == 'employed_part_time' ? 'part-time' : 'freelance'),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

@@ -4,11 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Traits\BelongsToCampus;
 
 class AlumniProfile extends Model
 {
-    use HasFactory, BelongsToCampus;
+    use HasFactory, BelongsToCampus, SoftDeletes;
 
     protected $fillable = [
         'user_id',
@@ -59,6 +60,7 @@ class AlumniProfile extends Model
         'profile_completed_at',
         'salary_range',
         'career_field',
+        'employment_location_type',
         'survey_participation_count',
         'last_profile_update',
     ];

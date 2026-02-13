@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -12,7 +13,7 @@ use App\Traits\BelongsToCampus;
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasApiTokens, BelongsToCampus;
+    use HasFactory, Notifiable, HasApiTokens, BelongsToCampus, SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -61,6 +62,37 @@ class User extends Authenticatable
             'password' => 'hashed',
             'last_login_at' => 'datetime',
         ];
+    }
+
+    /**
+     * The accessors to append to the model's array form.
+     *
+     * @var array<int, string>
+     */
+    protected $appends = ['display_name'];
+
+    /**
+     * Get the user's display name (from name field or alumni profile).
+     */
+    public function getDisplayNameAttribute(): string
+    {
+        // First check if user has a name set
+        if (!empty($this->name)) {
+            return $this->name;
+        }
+
+        // For alumni, try to get name from alumni profile
+        if ($this->role === 'alumni' && $this->relationLoaded('alumniProfile') && $this->alumniProfile) {
+            $firstName = $this->alumniProfile->first_name ?? '';
+            $lastName = $this->alumniProfile->last_name ?? '';
+            $fullName = trim("{$firstName} {$lastName}");
+            if (!empty($fullName)) {
+                return $fullName;
+            }
+        }
+
+        // Fall back to email username
+        return explode('@', $this->email ?? 'user')[0];
     }
 
     /**
@@ -223,6 +255,14 @@ class User extends Authenticatable
     public function alumniProfile()
     {
         return $this->hasOne(AlumniProfile::class);
+    }
+
+    /**
+     * Get email preferences for this user
+     */
+    public function emailPreference()
+    {
+        return $this->hasOne(EmailPreference::class);
     }
 
     /**

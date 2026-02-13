@@ -9,11 +9,21 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('departments', function (Blueprint $table) {
-            $table->string('logo_path')->nullable()->after('description');
-            $table->string('background_image_path')->nullable()->after('logo_path');
-            $table->string('primary_color', 7)->default('#7C2529')->after('background_image_path');
-            $table->string('secondary_color', 7)->default('#B89968')->after('primary_color');
-            $table->text('custom_css')->nullable()->after('secondary_color');
+            if (!Schema::hasColumn('departments', 'logo_path')) {
+                $table->string('logo_path')->nullable();
+            }
+            if (!Schema::hasColumn('departments', 'background_image_path')) {
+                $table->string('background_image_path')->nullable();
+            }
+            if (!Schema::hasColumn('departments', 'primary_color')) {
+                $table->string('primary_color', 7)->default('#7C2529');
+            }
+            if (!Schema::hasColumn('departments', 'secondary_color')) {
+                $table->string('secondary_color', 7)->default('#B89968');
+            }
+            if (!Schema::hasColumn('departments', 'custom_css')) {
+                $table->text('custom_css')->nullable();
+            }
         });
     }
 

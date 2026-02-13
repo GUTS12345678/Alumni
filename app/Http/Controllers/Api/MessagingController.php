@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AlumniConnection;
 use App\Models\Conversation;
 use App\Models\ConversationParticipant;
 use App\Models\Message;
@@ -34,7 +35,12 @@ class MessagingController extends Controller
                   ->where('invitation_status', 'accepted')
                   ->whereNull('left_at');
         })
-        ->with(['participants.user:id,name,email,profile_picture_path', 'lastMessage.sender:id,name'])
+        ->with([
+            'participants.user:id,name,email,profile_picture_path,role',
+            'participants.user.alumniProfile:id,user_id,first_name,last_name',
+            'lastMessage.sender:id,name,role',
+            'lastMessage.sender.alumniProfile:id,user_id,first_name,last_name'
+        ])
         ->withCount(['messages as unread_count' => function ($query) use ($user) {
             $query->whereDoesntHave('reads', function ($q) use ($user) {
                 $q->where('user_id', $user->id);
@@ -70,10 +76,17 @@ class MessagingController extends Controller
             ], 403);
         }
 
-        $conversation->load(['participants.user:id,name,email,profile_picture_path,role']);
+        $conversation->load([
+            'participants.user:id,name,email,profile_picture_path,role',
+            'participants.user.alumniProfile:id,user_id,first_name,last_name'
+        ]);
 
         $messages = $conversation->messages()
-            ->with(['sender:id,name,profile_picture_path', 'reads.user:id,name'])
+            ->with([
+                'sender:id,name,profile_picture_path,role',
+                'sender.alumniProfile:id,user_id,first_name,last_name',
+                'reads.user:id,name'
+            ])
             ->orderBy('created_at', 'desc')
             ->paginate($request->get('per_page', 50));
 
@@ -559,10 +572,12 @@ class MessagingController extends Controller
     {
         $request->validate([
             'query' => 'required|string|min:2|max:100',
+            'connections_only' => 'nullable|boolean',
         ]);
 
         $user = Auth::user();
         $searchQuery = $request->query('query');
+        $connectionsOnly = $request->boolean('connections_only', false);
 
         // Get blocked user IDs (both directions)
         $blockedIds = BlockedUser::where('user_id', $user->id)
@@ -573,6 +588,20 @@ class MessagingController extends Controller
             )
             ->unique()
             ->toArray();
+
+        // Get connected alumni IDs if alumni user
+        $connectedAlumniIds = [];
+        if ($user->role === 'alumni') {
+            $connectedAlumniIds = AlumniConnection::where(function($q) use ($user) {
+                $q->where('sender_id', $user->id)->orWhere('receiver_id', $user->id);
+            })
+            ->where('status', 'accepted')
+            ->get()
+            ->map(function($conn) use ($user) {
+                return $conn->sender_id === $user->id ? $conn->receiver_id : $conn->sender_id;
+            })
+            ->toArray();
+        }
 
         $usersQuery = User::where('id', '!=', $user->id)
             ->whereNotIn('id', $blockedIds)
@@ -601,16 +630,27 @@ class MessagingController extends Controller
                   });
             });
 
-        // Alumni can only message other alumni and admins
+        // Alumni can only message other alumni (if connected) and admins
         if ($user->role === 'alumni') {
-            $usersQuery->whereIn('role', ['alumni', 'admin', 'super_admin']);
+            if ($connectionsOnly) {
+                // Only show connected alumni and admins
+                $usersQuery->where(function($q) use ($connectedAlumniIds) {
+                    $q->whereIn('id', $connectedAlumniIds)
+                      ->orWhereIn('role', ['admin', 'super_admin']);
+                });
+            } else {
+                $usersQuery->whereIn('role', ['alumni', 'admin', 'super_admin']);
+            }
         }
 
         $users = $usersQuery->with(['alumniProfile:id,user_id,first_name,last_name,student_id,graduation_year,department_id', 'alumniProfile.department:id,name,code'])
             ->select('id', 'name', 'email', 'profile_picture_path', 'role')
             ->limit(20)
             ->get()
-            ->map(function ($u) {
+            ->map(function ($u) use ($user, $connectedAlumniIds) {
+                $isConnected = in_array($u->id, $connectedAlumniIds);
+                $canMessage = $u->role !== 'alumni' || $isConnected;
+                
                 return [
                     'id' => $u->id,
                     'name' => $u->name,
@@ -620,6 +660,8 @@ class MessagingController extends Controller
                     'student_id' => $u->alumniProfile?->student_id,
                     'graduation_year' => $u->alumniProfile?->graduation_year,
                     'department' => $u->alumniProfile?->department?->name,
+                    'is_connected' => $isConnected,
+                    'can_message' => $canMessage,
                 ];
             });
 
@@ -674,6 +716,13 @@ class MessagingController extends Controller
                 foreach ($participants as $participant) {
                     if (!in_array($participant->role, $validRoles)) {
                         return false;
+                    }
+                    
+                    // For direct chats, alumni must be connected with other alumni
+                    if ($type === 'direct' && $participant->role === 'alumni') {
+                        if (!AlumniConnection::areConnected($user->id, $participant->id)) {
+                            return false;
+                        }
                     }
                 }
                 return true;

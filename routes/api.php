@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\JobBoardController;
 use App\Http\Controllers\Api\CampusController;
 use App\Http\Controllers\Api\PublicLandingController;
+use App\Http\Controllers\Api\CertificateController;
 
 
 // Public routes (no authentication required)
@@ -21,6 +22,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/jobs', [PublicLandingController::class, 'getJobs']);
         Route::get('/stats', [PublicLandingController::class, 'getStats']);
         Route::post('/search-alumni', [PublicLandingController::class, 'searchAlumni']);
+        Route::get('/appearance', [\App\Http\Controllers\Api\V1\Admin\AppearanceController::class, 'index']);
     });
 
     // Authentication routes
@@ -101,9 +103,20 @@ Route::prefix('v1/alumni')->middleware(['auth:sanctum', 'alumni'])->group(functi
 });
 
 // ============================================================
+// CERTIFICATES ROUTES
+// ============================================================
+Route::prefix('v1/certificates')->middleware(['auth:sanctum'])->group(function () {
+    Route::get('/', [CertificateController::class, 'index']);
+    Route::get('/stats', [CertificateController::class, 'stats']);
+    Route::get('/{id}', [CertificateController::class, 'show']);
+    Route::get('/{id}/download', [CertificateController::class, 'download']);
+    Route::post('/request-membership', [CertificateController::class, 'requestMembershipCertificate']);
+});
+
+// ============================================================
 // MESSAGING SYSTEM ROUTES
 // ============================================================
-Route::prefix('v1/messaging')->middleware(['auth:sanctum'])->group(function () {
+Route::prefix('v1/messaging')->middleware(['auth:sanctum,web'])->group(function () {
     // Conversations
     Route::get('/conversations', [MessagingController::class, 'getConversations']);
     Route::get('/conversations/{conversation}', [MessagingController::class, 'getConversation']);
@@ -170,6 +183,7 @@ Route::prefix('v1/admin/jobs')->middleware(['auth:sanctum', 'admin'])->group(fun
     Route::get('/', [JobBoardController::class, 'adminIndex']);
     Route::post('/', [JobBoardController::class, 'store']);
     Route::get('/statistics', [JobBoardController::class, 'getStatistics']);
+    Route::get('/{jobPosting}', [JobBoardController::class, 'show']);
     Route::put('/{jobPosting}', [JobBoardController::class, 'update']);
     Route::delete('/{jobPosting}', [JobBoardController::class, 'destroy']);
     Route::post('/bulk-status', [JobBoardController::class, 'bulkUpdateStatus']);
@@ -203,6 +217,10 @@ Route::prefix('v1/public')->group(function () {
 Route::prefix('v1/admin')->middleware(['auth', 'admin'])->group(function () {
     // Dashboard
     Route::get('/dashboard', [AdminController::class, 'dashboard']);
+
+    // General file uploads (for announcements, job postings, etc.)
+    Route::post('/upload/image', [\App\Http\Controllers\Api\UploadController::class, 'uploadImage']);
+    Route::delete('/upload/image', [\App\Http\Controllers\Api\UploadController::class, 'deleteImage']);
 
     // System Appearance Settings
     Route::get('/appearance', [\App\Http\Controllers\Api\V1\Admin\AppearanceController::class, 'index']);
@@ -248,6 +266,8 @@ Route::prefix('v1/admin')->middleware(['auth', 'admin'])->group(function () {
     // Analytics routes
     Route::get('/analytics/time-to-job', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'getTimeToJobAnalytics']);
     Route::get('/analytics/time-to-job/export', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'exportTimeToJobAnalytics']);
+    Route::get('/analytics/comprehensive', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'getComprehensiveAnalytics']);
+    Route::get('/analytics/comprehensive/export', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'exportComprehensiveAnalytics']);
     
     // Survey Analytics routes
     Route::get('/analytics/overview', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'getAnalyticsOverview']);
@@ -255,6 +275,15 @@ Route::prefix('v1/admin')->middleware(['auth', 'admin'])->group(function () {
     Route::get('/analytics/surveys/{survey}/responses', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'getSurveyResponses']);
     Route::post('/analytics/surveys/{survey}/export', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'exportSurveyAnalytics']);
     Route::post('/analytics/surveys/export-all', [\App\Http\Controllers\Api\V1\Admin\AnalyticsController::class, 'exportAllSurveys']);
+
+    // Job Classification routes
+    Route::prefix('job-classifier')->group(function () {
+        Route::get('/stats', [\App\Http\Controllers\Api\JobClassifierController::class, 'getStats']);
+        Route::post('/preview', [\App\Http\Controllers\Api\JobClassifierController::class, 'preview']);
+        Route::get('/alumni/{alumniId}', [\App\Http\Controllers\Api\JobClassifierController::class, 'classify']);
+        Route::post('/alumni/{alumniId}', [\App\Http\Controllers\Api\JobClassifierController::class, 'classifyAndSave']);
+        Route::post('/classify-all', [\App\Http\Controllers\Api\JobClassifierController::class, 'classifyAll']);
+    });
 
     // Batch management
     Route::get('/batches', [AdminController::class, 'getBatches']);
@@ -276,6 +305,7 @@ Route::prefix('v1/admin')->middleware(['auth', 'admin'])->group(function () {
     Route::delete('/users/{id}', [AdminController::class, 'deleteUser']);
     Route::patch('/users/{id}/status', [AdminController::class, 'updateUserStatus']);
     Route::post('/users/{id}/reset-password', [AdminController::class, 'resetUserPassword']);
+    Route::post('/users/{id}/set-password', [AdminController::class, 'setUserPassword']);
 
     // Role Management (Super Admin only)
     Route::prefix('role-management')->middleware(['super_admin'])->group(function () {
@@ -335,6 +365,13 @@ Route::prefix('v1/admin')->middleware(['auth', 'admin'])->group(function () {
     Route::post('/bulk/restore', [\App\Http\Controllers\Api\V1\Admin\BulkOperationsController::class, 'bulkRestore']);
     Route::post('/bulk/export', [\App\Http\Controllers\Api\V1\Admin\BulkOperationsController::class, 'bulkExport']);
     Route::post('/bulk/update-status', [\App\Http\Controllers\Api\V1\Admin\BulkOperationsController::class, 'bulkUpdateStatus']);
+
+    // Archive (soft-deleted items)
+    Route::get('/archive', [\App\Http\Controllers\Api\V1\Admin\ArchiveController::class, 'index']);
+    Route::post('/archive/{type}/{id}/restore', [\App\Http\Controllers\Api\V1\Admin\ArchiveController::class, 'restore']);
+    Route::delete('/archive/{type}/{id}', [\App\Http\Controllers\Api\V1\Admin\ArchiveController::class, 'forceDelete']);
+    Route::post('/archive/bulk-restore', [\App\Http\Controllers\Api\V1\Admin\ArchiveController::class, 'bulkRestore']);
+    Route::post('/archive/bulk-delete', [\App\Http\Controllers\Api\V1\Admin\ArchiveController::class, 'bulkForceDelete']);
 });
 
 // NOTE: Super Admin department/course routes moved to routes/web.php for proper CSRF protection

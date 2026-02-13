@@ -22,5 +22,6 @@ class VerifyCsrfToken extends Middleware
         '/api/v1/surveys/*/start',
         '/api/register',
         '/api/v1/register',
+        '/api/v1/public/*',
     ];
 }

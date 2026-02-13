@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('blocked_users')) {
         Schema::create('blocked_users', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
@@ -25,6 +26,7 @@ return new class extends Migration
             $table->index('user_id');
             $table->index('blocked_user_id');
         });
+        }
     }
 
     /**

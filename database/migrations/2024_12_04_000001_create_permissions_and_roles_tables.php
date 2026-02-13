@@ -12,6 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         // Permissions table
+        if (!Schema::hasTable('permissions')) {
         Schema::create('permissions', function (Blueprint $table) {
             $table->id();
             $table->string('name')->unique(); // e.g., 'users.view', 'surveys.create'
@@ -22,8 +23,10 @@ return new class extends Migration
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
+        }
 
         // Roles table (predefined + custom roles)
+        if (!Schema::hasTable('roles')) {
         Schema::create('roles', function (Blueprint $table) {
             $table->id();
             $table->string('name')->unique(); // e.g., 'super_admin', 'admin', 'custom_role_1'
@@ -33,8 +36,10 @@ return new class extends Migration
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
+        }
 
         // Permission-Role pivot table
+        if (!Schema::hasTable('permission_role')) {
         Schema::create('permission_role', function (Blueprint $table) {
             $table->id();
             $table->foreignId('permission_id')->constrained()->onDelete('cascade');
@@ -43,14 +48,18 @@ return new class extends Migration
 
             $table->unique(['permission_id', 'role_id']);
         });
+        }
 
         // Add role_id to users table
-        Schema::table('users', function (Blueprint $table) {
-            $table->foreignId('role_id')->nullable()->after('role')->constrained()->onDelete('set null');
-            // Keep the old 'role' column for backward compatibility
-        });
+        if (!Schema::hasColumn('users', 'role_id')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->foreignId('role_id')->nullable()->constrained()->onDelete('set null');
+                // Keep the old 'role' column for backward compatibility
+            });
+        }
 
         // User custom permissions (direct permissions assigned to specific users)
+        if (!Schema::hasTable('user_permissions')) {
         Schema::create('user_permissions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
@@ -60,6 +69,7 @@ return new class extends Migration
 
             $table->unique(['user_id', 'permission_id']);
         });
+        }
     }
 
     /**

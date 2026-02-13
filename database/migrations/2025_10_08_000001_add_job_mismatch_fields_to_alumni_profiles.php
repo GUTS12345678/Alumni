@@ -13,35 +13,47 @@ return new class extends Migration
     {
         Schema::table('alumni_profiles', function (Blueprint $table) {
             // Add job mismatch reason field
-            $table->enum('job_mismatch_reason', [
-                'overqualified',        // Job requires less education than alumni has
-                'underqualified',       // Job requires more education than alumni has
-                'unfit',               // Job is not related to degree/field of study
-                'career_change',       // Intentional career change
-                'location',            // Geographic constraints
-                'salary',              // Salary not matching expectations
-                'other',               // Other reasons
-                'none'                 // Job is a good match
-            ])->nullable()->after('job_related_to_degree');
-            
+            if (!Schema::hasColumn('alumni_profiles', 'job_mismatch_reason')) {
+                $table->enum('job_mismatch_reason', [
+                    'overqualified',
+                    'underqualified',
+                    'unfit',
+                    'career_change',
+                    'location',
+                    'salary',
+                    'other',
+                    'none'
+                ])->nullable();
+            }
+
             // Add job satisfaction rating (1-5 scale)
-            $table->tinyInteger('job_satisfaction')->nullable()->after('job_mismatch_reason');
-            
+            if (!Schema::hasColumn('alumni_profiles', 'job_satisfaction')) {
+                $table->tinyInteger('job_satisfaction')->nullable();
+            }
+
             // Add reason for unemployment (for unemployed alumni)
-            $table->enum('unemployment_reason', [
-                'lack_of_opportunities',
-                'overqualified',
-                'underqualified',
-                'location_constraints',
-                'health_reasons',
-                'family_obligations',
-                'continuing_education',
-                'other'
-            ])->nullable()->after('job_satisfaction');
-            
-            // Index for analytics queries
-            $table->index('job_mismatch_reason');
+            if (!Schema::hasColumn('alumni_profiles', 'unemployment_reason')) {
+                $table->enum('unemployment_reason', [
+                    'lack_of_opportunities',
+                    'overqualified',
+                    'underqualified',
+                    'location_constraints',
+                    'health_reasons',
+                    'family_obligations',
+                    'continuing_education',
+                    'other'
+                ])->nullable();
+            }
         });
+
+        // Index for analytics queries (silently skip if already exists)
+        try {
+            Schema::table('alumni_profiles', function (Blueprint $table) {
+                $table->index('job_mismatch_reason');
+            });
+        } catch (\Exception $e) {
+            // Index may already exist
+        }
     }
 
     /**

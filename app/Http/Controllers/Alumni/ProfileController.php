@@ -48,7 +48,7 @@ class ProfileController extends Controller
             'gpa' => 'sometimes|nullable|numeric|min:0|max:5',
             'graduation_year' => 'sometimes|nullable|integer|min:1900|max:2100',
             'graduation_date' => 'sometimes|nullable|date',
-            'employment_status' => 'sometimes|nullable|in:employed_full_time,employed_part_time,self_employed,unemployed_looking,unemployed_not_looking,further_education,other',
+            'employment_status' => 'sometimes|nullable|in:employed_full_time,employed_part_time,self_employed,unemployed_seeking,unemployed_not_seeking,continuing_education,military_service,other',
             'current_job_title' => 'sometimes|nullable|string|max:255',
             'current_employer' => 'sometimes|nullable|string|max:255',
             'company_industry' => 'sometimes|nullable|string|max:255',

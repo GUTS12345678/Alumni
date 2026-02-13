@@ -13,9 +13,15 @@ return new class extends Migration
     {
         Schema::table('alumni_profiles', function (Blueprint $table) {
             // Add new foreign key columns
-            $table->foreignId('department_id')->nullable()->after('user_id')->constrained('departments')->onDelete('set null');
-            $table->foreignId('course_id')->nullable()->after('department_id')->constrained('courses')->onDelete('set null');
-            $table->boolean('profile_complete')->default(false)->after('course_id');
+            if (!Schema::hasColumn('alumni_profiles', 'department_id')) {
+                $table->foreignId('department_id')->nullable()->after('user_id')->constrained('departments')->onDelete('set null');
+            }
+            if (!Schema::hasColumn('alumni_profiles', 'course_id')) {
+                $table->foreignId('course_id')->nullable()->after('department_id')->constrained('courses')->onDelete('set null');
+            }
+            if (!Schema::hasColumn('alumni_profiles', 'profile_complete')) {
+                $table->boolean('profile_complete')->default(false);
+            }
         });
     }
 

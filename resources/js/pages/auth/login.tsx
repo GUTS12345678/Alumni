@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -17,7 +17,14 @@ interface LoginErrors {
     [key: string]: string | undefined;
 }
 
+interface LoginStats {
+    totalAlumni: number;
+    employmentRate: number;
+    industries: number;
+}
+
 export default function Login() {
+    const { stats } = usePage<{ stats?: LoginStats }>().props;
     const [formData, setFormData] = useState({
         login: '',
         password: '',
@@ -26,6 +33,7 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errors, setErrors] = useState<LoginErrors>({});
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [csrfError, setCsrfError] = useState(false);
     const [show2FAInput, setShow2FAInput] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
@@ -36,6 +44,14 @@ export default function Login() {
         message: string;
         isEmail: boolean;
     }>({ checking: false, exists: false, message: '', isEmail: false });
+
+    // Add public-page class to html for proper scrolling
+    useEffect(() => {
+        document.documentElement.classList.add('public-page');
+        return () => {
+            document.documentElement.classList.remove('public-page');
+        };
+    }, []);
 
     useEffect(() => {
         const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
@@ -236,6 +252,15 @@ export default function Login() {
                     transform: translateY(-2px);
                     box-shadow: 0 10px 30px rgba(139, 0, 0, 0.1);
                 }
+                :is(.dark *) .stat-card {
+                    background: rgba(31, 41, 55, 0.6);
+                    border-color: rgba(75, 85, 99, 0.4);
+                }
+                :is(.dark *) .stat-card:hover {
+                    background: rgba(31, 41, 55, 0.8);
+                    border-color: rgba(107, 114, 128, 0.5);
+                    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+                }
                 .feature-item {
                     position: relative;
                     overflow: hidden;
@@ -255,12 +280,12 @@ export default function Login() {
                 }
             `}</style>
 
-            <div className="min-h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 flex relative overflow-hidden">
+            <div className="min-h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex relative overflow-x-hidden">
                 {/* Animated Background Blobs */}
                 <div className="absolute inset-0">
-                    <div className="absolute top-0 -left-4 w-72 h-72 bg-maroon-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
-                    <div className="absolute top-0 -right-4 w-72 h-72 bg-beige-200 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
-                    <div className="absolute -bottom-8 left-20 w-72 h-72 bg-maroon-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
+                    <div className="absolute top-0 -left-4 w-72 h-72 bg-maroon-200 dark:bg-maroon-800 rounded-full mix-blend-multiply dark:mix-blend-normal filter blur-xl opacity-20 dark:opacity-30 animate-blob"></div>
+                    <div className="absolute top-0 -right-4 w-72 h-72 bg-beige-200 dark:bg-gray-700 rounded-full mix-blend-multiply dark:mix-blend-normal filter blur-xl opacity-20 dark:opacity-30 animate-blob animation-delay-2000"></div>
+                    <div className="absolute -bottom-8 left-20 w-72 h-72 bg-maroon-300 dark:bg-maroon-900 rounded-full mix-blend-multiply dark:mix-blend-normal filter blur-xl opacity-20 dark:opacity-30 animate-blob animation-delay-4000"></div>
                 </div>
 
                 {/* Left Side - Professional Branding */}
@@ -276,11 +301,11 @@ export default function Login() {
                                     <div className="absolute -inset-1 bg-gradient-to-br from-maroon-600 to-maroon-800 rounded-2xl blur-lg opacity-50"></div>
                                 </div>
                                 <div>
-                                    <h1 className="text-4xl font-bold text-maroon-900 tracking-tight">Alumni Tracer</h1>
-                                    <p className="text-lg text-maroon-700 font-light tracking-wide">System</p>
+                                    <h1 className="text-4xl font-bold text-maroon-900 dark:text-white tracking-tight">Alumni Tracer</h1>
+                                    <p className="text-lg text-maroon-700 dark:text-gray-300 font-light tracking-wide">System</p>
                                 </div>
                             </div>
-                            <p className="text-lg text-maroon-700 leading-relaxed">
+                            <p className="text-lg text-maroon-700 dark:text-gray-300 leading-relaxed">
                                 Stay connected, track your career journey, and contribute to the growth of our alumni community.
                             </p>
                         </div>
@@ -292,9 +317,9 @@ export default function Login() {
                                     <div className="w-10 h-10 bg-maroon-600/20 rounded-lg flex items-center justify-center group-hover:bg-maroon-600/30 transition-colors">
                                         <Users className="h-5 w-5 text-maroon-400" />
                                     </div>
-                                    <h3 className="font-semibold text-maroon-900 text-sm">Connect</h3>
+                                    <h3 className="font-semibold text-maroon-900 dark:text-white text-sm">Connect</h3>
                                 </div>
-                                <p className="text-xs text-maroon-600">Build your professional network</p>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400">Build your professional network</p>
                             </div>
 
                             <div className="feature-item stat-card rounded-xl p-5 group cursor-pointer">
@@ -302,9 +327,9 @@ export default function Login() {
                                     <div className="w-10 h-10 bg-yellow-600/20 rounded-lg flex items-center justify-center group-hover:bg-yellow-600/30 transition-colors">
                                         <TrendingUp className="h-5 w-5 text-yellow-400" />
                                     </div>
-                                    <h3 className="font-semibold text-maroon-900 text-sm">Track Progress</h3>
+                                    <h3 className="font-semibold text-maroon-900 dark:text-white text-sm">Track Progress</h3>
                                 </div>
-                                <p className="text-xs text-maroon-600">Monitor your career growth</p>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400">Monitor your career growth</p>
                             </div>
 
                             <div className="feature-item stat-card rounded-xl p-5 group cursor-pointer">
@@ -312,9 +337,9 @@ export default function Login() {
                                     <div className="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center group-hover:bg-blue-600/30 transition-colors">
                                         <Building2 className="h-5 w-5 text-blue-400" />
                                     </div>
-                                    <h3 className="font-semibold text-maroon-900 text-sm">Global Reach</h3>
+                                    <h3 className="font-semibold text-maroon-900 dark:text-white text-sm">Global Reach</h3>
                                 </div>
-                                <p className="text-xs text-maroon-600">Connect worldwide</p>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400">Connect worldwide</p>
                             </div>
 
                             <div className="feature-item stat-card rounded-xl p-5 group cursor-pointer">
@@ -322,9 +347,9 @@ export default function Login() {
                                     <div className="w-10 h-10 bg-green-600/20 rounded-lg flex items-center justify-center group-hover:bg-green-600/30 transition-colors">
                                         <TrendingUp className="h-5 w-5 text-green-400" />
                                     </div>
-                                    <h3 className="font-semibold text-maroon-900 text-sm">Opportunities</h3>
+                                    <h3 className="font-semibold text-maroon-900 dark:text-white text-sm">Opportunities</h3>
                                 </div>
-                                <p className="text-xs text-maroon-600">Discover career paths</p>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400">Discover career paths</p>
                             </div>
                         </div>
 
@@ -332,24 +357,24 @@ export default function Login() {
                         <div className="stat-card rounded-xl p-6">
                             <div className="grid grid-cols-3 gap-6">
                                 <div className="text-center">
-                                    <div className="text-3xl font-bold text-maroon-900 mb-1">10,000+</div>
-                                    <div className="text-xs text-maroon-600 uppercase tracking-wide">Alumni Members</div>
+                                    <div className="text-3xl font-bold text-maroon-900 dark:text-white mb-1">{stats?.totalAlumni?.toLocaleString() || '0'}+</div>
+                                    <div className="text-xs text-maroon-600 dark:text-gray-400 uppercase tracking-wide">Alumni Members</div>
                                 </div>
-                                <div className="text-center border-x border-maroon-200">
-                                    <div className="text-3xl font-bold text-maroon-900 mb-1">95%</div>
-                                    <div className="text-xs text-maroon-600 uppercase tracking-wide">Employment Rate</div>
+                                <div className="text-center border-x border-maroon-200 dark:border-gray-600">
+                                    <div className="text-3xl font-bold text-maroon-900 dark:text-white mb-1">{stats?.employmentRate ?? 0}%</div>
+                                    <div className="text-xs text-maroon-600 dark:text-gray-400 uppercase tracking-wide">Employment Rate</div>
                                 </div>
                                 <div className="text-center">
-                                    <div className="text-3xl font-bold text-maroon-900 mb-1">50+</div>
-                                    <div className="text-xs text-maroon-600 uppercase tracking-wide">Countries</div>
+                                    <div className="text-3xl font-bold text-maroon-900 dark:text-white mb-1">{stats?.industries ?? 0}+</div>
+                                    <div className="text-xs text-maroon-600 dark:text-gray-400 uppercase tracking-wide">Industries</div>
                                 </div>
                             </div>
                         </div>
 
                         {/* Security Badge */}
-                        <div className="flex items-center space-x-3 text-maroon-600 text-sm">
-                            <div className="w-8 h-8 bg-maroon-100 rounded-lg flex items-center justify-center">
-                                <svg className="w-4 h-4 text-maroon-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="flex items-center space-x-3 text-maroon-600 dark:text-gray-400 text-sm">
+                            <div className="w-8 h-8 bg-maroon-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                                <svg className="w-4 h-4 text-maroon-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                 </svg>
                             </div>
@@ -371,14 +396,14 @@ export default function Login() {
                                     <div className="absolute -inset-1 bg-gradient-to-br from-maroon-600 to-maroon-800 rounded-xl blur-lg opacity-50"></div>
                                 </div>
                             </div>
-                            <h1 className="text-3xl font-bold text-maroon-900 mb-2">Alumni Tracer System</h1>
-                            <p className="text-maroon-700">Welcome back! Please sign in</p>
+                            <h1 className="text-3xl font-bold text-maroon-900 dark:text-white mb-2">Alumni Tracer System</h1>
+                            <p className="text-maroon-700 dark:text-gray-300">Welcome back! Please sign in</p>
                         </div>
 
-                        <Card className="bg-white/95 backdrop-blur-xl border-maroon-100 shadow-2xl">
-                            <CardHeader className="pb-6 pt-8 px-8 border-b border-gray-100">
-                                <CardTitle className="text-2xl text-gray-900 font-bold text-center">Welcome Back</CardTitle>
-                                <CardDescription className="text-gray-600 text-center">Sign in to access your portal</CardDescription>
+                        <Card className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl border-maroon-100 dark:border-gray-700 shadow-2xl">
+                            <CardHeader className="pb-6 pt-8 px-8 border-b border-gray-100 dark:border-gray-700">
+                                <CardTitle className="text-2xl text-gray-900 dark:text-white font-bold text-center">Welcome Back</CardTitle>
+                                <CardDescription className="text-gray-600 dark:text-gray-400 text-center">Sign in to access your portal</CardDescription>
                             </CardHeader>
 
                             <CardContent className="p-8">
@@ -408,15 +433,15 @@ export default function Login() {
 
                                 <form onSubmit={handleSubmit} className="space-y-5">
                                     <div className="space-y-2">
-                                        <Label htmlFor="login" className="text-sm font-semibold text-gray-700">
+                                        <Label htmlFor="login" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                                             Email or Student ID <span className="text-red-500">*</span>
                                         </Label>
                                         <div className="relative">
                                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                                 {loginValidation.isEmail ? (
-                                                    <Mail className="h-5 w-5 text-gray-400" />
+                                                    <Mail className="h-5 w-5 text-gray-400 dark:text-gray-500" />
                                                 ) : (
-                                                    <IdCard className="h-5 w-5 text-gray-400" />
+                                                    <IdCard className="h-5 w-5 text-gray-400 dark:text-gray-500" />
                                                 )}
                                             </div>
                                             <Input
@@ -424,10 +449,10 @@ export default function Login() {
                                                 type="text"
                                                 value={formData.login}
                                                 onChange={(e) => handleInputChange('login', e.target.value)}
-                                                className={`pl-11 pr-11 h-12 border-gray-300 focus:border-maroon-500 focus:ring-maroon-500 input-glow bg-white ${formData.login && !loginValidation.checking && !loginValidation.exists && formData.login.length >= 3
-                                                    ? 'border-red-300 bg-red-50/30'
+                                                className={`pl-11 pr-11 h-12 border-gray-300 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500 input-glow bg-white dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 ${formData.login && !loginValidation.checking && !loginValidation.exists && formData.login.length >= 3
+                                                    ? 'border-red-300 bg-red-50/30 dark:bg-red-900/20'
                                                     : loginValidation.exists
-                                                        ? 'border-green-300 bg-green-50/30'
+                                                        ? 'border-green-300 bg-green-50/30 dark:bg-green-900/20'
                                                         : ''
                                                     }`}
                                                 placeholder="student@earist.edu or 2020-12345"
@@ -455,29 +480,29 @@ export default function Login() {
                                                 {errors.login}
                                             </p>
                                         )}
-                                        <p className="text-xs text-gray-500 mt-1">You can login using your email address or student ID number</p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">You can login using your email address or student ID number</p>
                                     </div>
 
                                     <div className="space-y-2">
-                                        <Label htmlFor="password" className="text-sm font-semibold text-gray-700">
+                                        <Label htmlFor="password" className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                                             Password <span className="text-red-500">*</span>
                                         </Label>
                                         <div className="relative">
                                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                                <LockIcon className="h-5 w-5 text-gray-400" />
+                                                <LockIcon className="h-5 w-5 text-gray-400 dark:text-gray-500" />
                                             </div>
                                             <Input
                                                 id="password"
                                                 type={showPassword ? 'text' : 'password'}
                                                 value={formData.password}
                                                 onChange={(e) => handleInputChange('password', e.target.value)}
-                                                className="pl-11 pr-11 h-12 border-gray-300 focus:border-maroon-500 focus:ring-maroon-500 input-glow bg-white"
+                                                className="pl-11 pr-11 h-12 border-gray-300 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500 input-glow bg-white dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
                                                 placeholder="Enter your password"
                                             />
                                             <button
                                                 type="button"
                                                 onClick={() => setShowPassword(!showPassword)}
-                                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
                                             >
                                                 {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                                             </button>
@@ -489,19 +514,19 @@ export default function Login() {
                                             </p>
                                         )}
                                         <div className="flex justify-end">
-                                            <a href="/forgot-password" className="text-xs text-maroon-600 hover:text-maroon-700 font-medium hover:underline">
+                                            <a href="/forgot-password" className="text-xs text-maroon-600 dark:text-maroon-400 hover:text-maroon-700 dark:hover:text-maroon-300 font-medium hover:underline">
                                                 Forgot password?
                                             </a>
                                         </div>
                                     </div>
 
                                     {show2FAInput && (
-                                        <div className="space-y-2 p-5 bg-gray-50 rounded-lg border border-gray-200">
+                                        <div className="space-y-2 p-5 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
                                             <div className="flex items-center mb-2">
                                                 <div className="w-8 h-8 bg-maroon-600 rounded-lg flex items-center justify-center mr-2">
                                                     <Smartphone className="h-4 w-4 text-white" />
                                                 </div>
-                                                <Label htmlFor="otp-code" className="text-sm font-semibold text-gray-700 mb-0">
+                                                <Label htmlFor="otp-code" className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-0">
                                                     Two-Factor Authentication <span className="text-red-500">*</span>
                                                 </Label>
                                             </div>
@@ -513,7 +538,7 @@ export default function Login() {
                                                     const value = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
                                                     handleInputChange('otp_code', value);
                                                 }}
-                                                className="h-14 border-gray-300 focus:border-maroon-500 focus:ring-maroon-500 bg-white text-lg text-center tracking-widest font-mono"
+                                                className="h-14 border-gray-300 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500 bg-white dark:bg-gray-700 dark:text-white text-lg text-center tracking-widest font-mono"
                                                 placeholder="000000"
                                                 maxLength={6}
                                                 autoComplete="off"
@@ -525,7 +550,7 @@ export default function Login() {
                                                     {errors.otp_code}
                                                 </p>
                                             )}
-                                            <p className="text-xs text-gray-600">Enter the 6-digit code from your authenticator app</p>
+                                            <p className="text-xs text-gray-600 dark:text-gray-400">Enter the 6-digit code from your authenticator app</p>
                                         </div>
                                     )}
 
@@ -548,12 +573,12 @@ export default function Login() {
                                     </Button>
                                 </form>
 
-                                <div className="mt-6 pt-6 border-t border-gray-200">
+                                <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
                                     <div className="grid grid-cols-2 gap-3">
                                         <Button
                                             variant="outline"
                                             onClick={handleGoToLanding}
-                                            className="text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 border-gray-300"
+                                            className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600"
                                         >
                                             <Home className="w-4 h-4 mr-2" />
                                             Home
@@ -561,25 +586,25 @@ export default function Login() {
                                         <Button
                                             variant="outline"
                                             onClick={handleBackToSurvey}
-                                            className="text-sm font-medium text-maroon-600 hover:text-maroon-700 hover:bg-maroon-50 border-maroon-300"
+                                            className="text-sm font-medium text-maroon-600 dark:text-maroon-400 hover:text-maroon-700 dark:hover:text-maroon-300 hover:bg-maroon-50 dark:hover:bg-maroon-900/30 border-maroon-300 dark:border-maroon-700"
                                         >
                                             Register
                                             <ArrowRight className="w-4 h-4 ml-2" />
                                         </Button>
                                     </div>
-                                    <p className="text-xs text-center text-gray-500 mt-4">
-                                        Don't have an account? <span className="font-semibold text-maroon-600">Register as an alumni first</span>
+                                    <p className="text-xs text-center text-gray-500 dark:text-gray-400 mt-4">
+                                        Don't have an account? <span className="font-semibold text-maroon-600 dark:text-maroon-400">Register as an alumni first</span>
                                     </p>
                                 </div>
                             </CardContent>
                         </Card>
 
                         <div className="mt-6 text-center">
-                            <div className="inline-flex items-center px-4 py-2 bg-maroon-50 backdrop-blur-sm rounded-full border border-maroon-200">
-                                <svg className="w-4 h-4 text-maroon-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <div className="inline-flex items-center px-4 py-2 bg-maroon-50 dark:bg-gray-800 backdrop-blur-sm rounded-full border border-maroon-200 dark:border-gray-700">
+                                <svg className="w-4 h-4 text-maroon-600 dark:text-gray-300 mr-2" fill="currentColor" viewBox="0 0 20 20">
                                     <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                                 </svg>
-                                <span className="text-xs text-maroon-900 font-medium">Secure & Encrypted Connection</span>
+                                <span className="text-xs text-maroon-900 dark:text-gray-300 font-medium">Secure & Encrypted Connection</span>
                             </div>
                         </div>
                     </div>

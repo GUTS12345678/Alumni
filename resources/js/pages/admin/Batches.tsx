@@ -58,6 +58,7 @@ interface BatchesResponse {
     last_page: number;
     per_page: number;
     total: number;
+    total_alumni: number;
 }
 
 interface User {
@@ -79,9 +80,11 @@ export default function Batches({ user }: Props) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [total, setTotal] = useState(0);
+    const [totalAlumni, setTotalAlumni] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
 
     // Modal states
@@ -109,7 +112,7 @@ export default function Batches({ user }: Props) {
             }
 
             const params = new URLSearchParams();
-            if (searchTerm) params.append('search', searchTerm);
+            if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
             params.append('page', currentPage.toString());
             params.append('per_page', '15');
             if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
@@ -138,6 +141,7 @@ export default function Batches({ user }: Props) {
                 setCurrentPage(data.data.current_page);
                 setTotalPages(data.data.last_page);
                 setTotal(data.data.total);
+                setTotalAlumni(data.data.total_alumni || 0);
             } else {
                 setError('Invalid response format from server');
             }
@@ -148,7 +152,15 @@ export default function Batches({ user }: Props) {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [currentPage, searchTerm, selectedCampus?.id]);
+    }, [currentPage, debouncedSearchTerm, selectedCampus?.id]);
+
+    // Debounce search term
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearchTerm(searchTerm);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
 
     useEffect(() => {
         fetchBatches();
@@ -157,7 +169,7 @@ export default function Batches({ user }: Props) {
     const getStatusBadge = (status: string) => {
         const statusColors = {
             'active': 'bg-green-100 text-green-800',
-            'inactive': 'bg-gray-100 text-gray-800',
+            'inactive': 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200',
             'archived': 'bg-blue-100 text-blue-800',
         };
 
@@ -303,8 +315,8 @@ export default function Batches({ user }: Props) {
             <AdminBaseLayout title="Batch Management" user={user}>
                 <div className="flex items-center justify-center min-h-96">
                     <div className="flex items-center space-x-2">
-                        <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
-                        <span className="text-maroon-800 font-medium">Loading batches...</span>
+                        <RefreshCw className="h-8 w-8 text-maroon-600 dark:text-gray-400 animate-spin" />
+                        <span className="text-maroon-800 dark:text-gray-200 font-medium">Loading batches...</span>
                     </div>
                 </div>
             </AdminBaseLayout>
@@ -335,8 +347,8 @@ export default function Batches({ user }: Props) {
                 {/* Header with Actions */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h2 className="text-2xl font-bold text-maroon-800">Batch Management</h2>
-                        <p className="text-maroon-600">Manage graduation year cohorts and alumni batches</p>
+                        <h2 className="text-2xl font-bold text-maroon-800 dark:text-gray-200">Batch Management</h2>
+                        <p className="text-maroon-600 dark:text-gray-400">Manage graduation year cohorts and alumni batches</p>
                     </div>
 
                     <div className="flex items-center space-x-2">
@@ -345,7 +357,7 @@ export default function Batches({ user }: Props) {
                             variant="outline"
                             size="sm"
                             disabled={refreshing}
-                            className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                         >
                             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
                             Refresh
@@ -363,9 +375,9 @@ export default function Batches({ user }: Props) {
                 </div>
 
                 {/* Search Bar */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-lg text-maroon-800 flex items-center">
+                        <CardTitle className="text-lg text-maroon-800 dark:text-gray-200 flex items-center">
                             <Search className="h-5 w-5 mr-2" />
                             Search Batches
                         </CardTitle>
@@ -377,7 +389,7 @@ export default function Batches({ user }: Props) {
                                 placeholder="Search by batch name or graduation year..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10 border-beige-300 focus:border-maroon-500 focus:ring-maroon-500"
+                                className="pl-10 border-beige-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500"
                             />
                         </div>
                     </CardContent>
@@ -385,98 +397,139 @@ export default function Batches({ user }: Props) {
 
                 {/* Batch Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Total Batches</CardTitle>
-                            <GraduationCap className="h-4 w-4 text-maroon-600" />
+                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Batches</CardTitle>
+                            <GraduationCap className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-maroon-800">{total}</div>
-                            <p className="text-xs text-maroon-600 mt-1">All graduation cohorts</p>
+                            <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">{total}</div>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">All graduation cohorts</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Active Batches</CardTitle>
-                            <Users className="h-4 w-4 text-maroon-600" />
+                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Active Batches</CardTitle>
+                            <Users className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-green-600">
                                 {batches.filter(b => b.status === 'active').length}
                             </div>
-                            <p className="text-xs text-maroon-600 mt-1">Currently active</p>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Currently active</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Latest Year</CardTitle>
-                            <Calendar className="h-4 w-4 text-maroon-600" />
+                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Latest Year</CardTitle>
+                            <Calendar className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-blue-600">
                                 {Math.max(...batches.map(b => b.graduation_year), 0)}
                             </div>
-                            <p className="text-xs text-maroon-600 mt-1">Most recent graduation</p>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Most recent graduation</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Total Alumni</CardTitle>
-                            <BarChart3 className="h-4 w-4 text-maroon-600" />
+                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Alumni</CardTitle>
+                            <BarChart3 className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-purple-600">
-                                {batches.reduce((sum, batch) => sum + (batch.alumni_count || 0), 0)}
+                                {totalAlumni}
                             </div>
-                            <p className="text-xs text-maroon-600 mt-1">Across all batches</p>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Across all batches</p>
                         </CardContent>
                     </Card>
                 </div>
 
                 {/* Batches Table */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800">Graduation Batches</CardTitle>
-                        <CardDescription className="text-maroon-600">
+                        <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Graduation Batches</CardTitle>
+                        <CardDescription className="text-maroon-600 dark:text-gray-400">
                             Showing {batches.length} of {total} batches
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-0">
-                        <div className="overflow-x-auto">
+                        {/* Mobile Card View */}
+                        <div className="md:hidden divide-y divide-beige-200 dark:divide-gray-700">
+                            {batches.map((batch) => (
+                                <div key={batch.id} className="p-4 space-y-2">
+                                    <div className="flex items-start justify-between">
+                                        <div className="min-w-0 flex-1">
+                                            <div className="font-medium text-maroon-800 dark:text-gray-200">{batch.name}</div>
+                                            <div className="text-sm text-gray-600 dark:text-gray-400 line-clamp-1">{batch.description}</div>
+                                        </div>
+                                        {getStatusBadge(batch.status)}
+                                    </div>
+                                    <div className="flex items-center gap-4 text-sm">
+                                        <div className="flex items-center gap-1">
+                                            <Calendar className="h-3.5 w-3.5 text-maroon-600 dark:text-gray-400" />
+                                            <span className="font-medium">{batch.graduation_year}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <Users className="h-3.5 w-3.5 text-blue-600" />
+                                            <span className="font-medium text-blue-800">{batch.alumni_count || 0} alumni</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-xs text-gray-500 dark:text-gray-400">Created: {formatDate(batch.created_at)}</div>
+                                    <div className="flex flex-wrap gap-1 pt-1 border-t border-beige-100 dark:border-gray-700">
+                                        <Button variant="ghost" size="sm" onClick={() => handleViewBatch(batch)} className="h-7 text-xs text-maroon-700 dark:text-gray-300" title="View">
+                                            <Eye className="h-3.5 w-3.5 mr-1" /> View
+                                        </Button>
+                                        <Button variant="ghost" size="sm" onClick={() => handleEditBatch(batch)} className="h-7 text-xs text-blue-700" title="Edit">
+                                            <Edit className="h-3.5 w-3.5 mr-1" /> Edit
+                                        </Button>
+                                        <Button variant="ghost" size="sm" className="h-7 text-xs text-green-700" title="Alumni" onClick={() => window.location.href = `/admin/alumni?graduation_year=${batch.graduation_year}&batch_name=${encodeURIComponent(batch.name)}`}>
+                                            <Users className="h-3.5 w-3.5 mr-1" /> Alumni
+                                        </Button>
+                                        <Button variant="ghost" size="sm" onClick={() => handleDeleteBatch(batch)} className="h-7 text-xs text-red-700" title="Delete">
+                                            <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                                        </Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto">
                             <Table>
                                 <TableHeader>
-                                    <TableRow className="bg-beige-50">
-                                        <TableHead className="text-maroon-800 font-semibold">Batch Details</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Graduation Year</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Alumni Count</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Status</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Created</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Actions</TableHead>
+                                    <TableRow className="bg-beige-50 dark:bg-gray-800/50">
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Batch Details</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Graduation Year</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Alumni Count</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Status</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Created</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {batches.map((batch) => (
-                                        <TableRow key={batch.id} className="hover:bg-beige-50">
+                                        <TableRow key={batch.id} className="hover:bg-beige-50 dark:hover:bg-gray-800">
                                             <TableCell>
                                                 <div className="space-y-1">
-                                                    <div className="font-medium text-maroon-800">
+                                                    <div className="font-medium text-maroon-800 dark:text-gray-200">
                                                         {batch.name}
                                                     </div>
-                                                    <div className="text-sm text-gray-600">
+                                                    <div className="text-sm text-gray-600 dark:text-gray-400">
                                                         {batch.description}
                                                     </div>
-                                                    <div className="text-xs text-gray-500">
+                                                    <div className="text-xs text-gray-500 dark:text-gray-400">
                                                         ID: {batch.id}
                                                     </div>
                                                 </div>
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center space-x-2">
-                                                    <Calendar className="h-4 w-4 text-maroon-600" />
-                                                    <span className="font-medium text-maroon-800">
+                                                    <Calendar className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                                                    <span className="font-medium text-maroon-800 dark:text-gray-200">
                                                         {batch.graduation_year}
                                                     </span>
                                                 </div>
@@ -503,7 +556,7 @@ export default function Batches({ user }: Props) {
                                                         variant="ghost"
                                                         size="sm"
                                                         onClick={() => handleViewBatch(batch)}
-                                                        className="text-maroon-700 hover:text-maroon-800 hover:bg-maroon-50"
+                                                        className="text-maroon-700 dark:text-gray-300 hover:text-maroon-800 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                                         title="View Details"
                                                     >
                                                         <Eye className="h-4 w-4" />
@@ -522,7 +575,7 @@ export default function Batches({ user }: Props) {
                                                         size="sm"
                                                         className="text-green-700 hover:text-green-800 hover:bg-green-50"
                                                         title="View Alumni"
-                                                        onClick={() => window.location.href = `/admin/alumni?batch_id=${batch.id}`}
+                                                        onClick={() => window.location.href = `/admin/alumni?graduation_year=${batch.graduation_year}&batch_name=${encodeURIComponent(batch.name)}`}
                                                     >
                                                         <Users className="h-4 w-4" />
                                                     </Button>
@@ -545,8 +598,8 @@ export default function Batches({ user }: Props) {
 
                         {/* Pagination */}
                         {totalPages > 1 && (
-                            <div className="flex items-center justify-between px-6 py-4 border-t border-beige-200">
-                                <div className="text-sm text-gray-700">
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 sm:px-6 py-4 border-t border-beige-200 dark:border-gray-700">
+                                <div className="text-sm text-gray-700 dark:text-gray-300">
                                     Showing page {currentPage} of {totalPages}
                                 </div>
                                 <div className="space-x-2">
@@ -555,7 +608,7 @@ export default function Batches({ user }: Props) {
                                         size="sm"
                                         onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                                         disabled={currentPage === 1}
-                                        className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                     >
                                         Previous
                                     </Button>
@@ -564,7 +617,7 @@ export default function Batches({ user }: Props) {
                                         size="sm"
                                         onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                                         disabled={currentPage === totalPages}
-                                        className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                     >
                                         Next
                                     </Button>
@@ -576,9 +629,9 @@ export default function Batches({ user }: Props) {
 
                 {/* Add Batch Modal */}
                 <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
-                    <DialogContent className="max-w-lg">
+                    <DialogContent className="max-w-lg dark:bg-gray-800">
                         <DialogHeader>
-                            <DialogTitle className="text-xl text-maroon-800">
+                            <DialogTitle className="text-xl text-maroon-800 dark:text-gray-200">
                                 Add New Batch
                             </DialogTitle>
                             <DialogDescription>
@@ -588,44 +641,44 @@ export default function Batches({ user }: Props) {
 
                         <div className="space-y-4">
                             <div>
-                                <label className="text-sm font-medium text-gray-700">Batch Name</label>
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Batch Name</label>
                                 <Input
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                     placeholder="e.g., Class of 2025"
-                                    className="mt-1"
+                                    className="mt-1 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
                                 />
                             </div>
 
                             <div>
-                                <label className="text-sm font-medium text-gray-700">Graduation Year</label>
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Graduation Year</label>
                                 <Input
                                     type="number"
                                     value={formData.graduation_year}
                                     onChange={(e) => setFormData({ ...formData, graduation_year: parseInt(e.target.value) })}
                                     min="1900"
                                     max="2050"
-                                    className="mt-1"
+                                    className="mt-1 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
                                 />
                             </div>
 
                             <div>
-                                <label className="text-sm font-medium text-gray-700">Description</label>
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
                                 <Input
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                     placeholder="Brief description (optional)"
-                                    className="mt-1"
+                                    className="mt-1 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
                                 />
                             </div>
 
                             <div>
-                                <label className="text-sm font-medium text-gray-700">Status</label>
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
                                 <Select
                                     value={formData.status}
                                     onValueChange={(value: 'active' | 'inactive' | 'archived') => setFormData({ ...formData, status: value })}
                                 >
-                                    <SelectTrigger className="mt-1">
+                                    <SelectTrigger className="mt-1 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600">
                                         <SelectValue placeholder="Select status" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -636,7 +689,7 @@ export default function Batches({ user }: Props) {
                                 </Select>
                             </div>
 
-                            <div className="flex justify-end space-x-2 pt-4 border-t">
+                            <div className="flex justify-end space-x-2 pt-4 border-t dark:border-gray-700">
                                 <Button
                                     variant="outline"
                                     onClick={() => setAddModalOpen(false)}
@@ -658,9 +711,9 @@ export default function Batches({ user }: Props) {
 
                 {/* Edit Batch Modal */}
                 <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-                    <DialogContent className="max-w-lg">
+                    <DialogContent className="max-w-lg dark:bg-gray-800">
                         <DialogHeader>
-                            <DialogTitle className="text-xl text-maroon-800">
+                            <DialogTitle className="text-xl text-maroon-800 dark:text-gray-200">
                                 Edit Batch
                             </DialogTitle>
                             <DialogDescription>
@@ -670,44 +723,44 @@ export default function Batches({ user }: Props) {
 
                         <div className="space-y-4">
                             <div>
-                                <label className="text-sm font-medium text-gray-700">Batch Name</label>
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Batch Name</label>
                                 <Input
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                     placeholder="e.g., Class of 2025"
-                                    className="mt-1"
+                                    className="mt-1 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
                                 />
                             </div>
 
                             <div>
-                                <label className="text-sm font-medium text-gray-700">Graduation Year</label>
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Graduation Year</label>
                                 <Input
                                     type="number"
                                     value={formData.graduation_year}
                                     onChange={(e) => setFormData({ ...formData, graduation_year: parseInt(e.target.value) })}
                                     min="1900"
                                     max="2050"
-                                    className="mt-1"
+                                    className="mt-1 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
                                 />
                             </div>
 
                             <div>
-                                <label className="text-sm font-medium text-gray-700">Description</label>
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
                                 <Input
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                     placeholder="Brief description (optional)"
-                                    className="mt-1"
+                                    className="mt-1 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600"
                                 />
                             </div>
 
                             <div>
-                                <label className="text-sm font-medium text-gray-700">Status</label>
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
                                 <Select
                                     value={formData.status}
                                     onValueChange={(value: 'active' | 'inactive' | 'archived') => setFormData({ ...formData, status: value })}
                                 >
-                                    <SelectTrigger className="mt-1">
+                                    <SelectTrigger className="mt-1 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600">
                                         <SelectValue placeholder="Select status" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -718,7 +771,7 @@ export default function Batches({ user }: Props) {
                                 </Select>
                             </div>
 
-                            <div className="flex justify-end space-x-2 pt-4 border-t">
+                            <div className="flex justify-end space-x-2 pt-4 border-t dark:border-gray-700">
                                 <Button
                                     variant="outline"
                                     onClick={() => setEditModalOpen(false)}
@@ -740,9 +793,9 @@ export default function Batches({ user }: Props) {
 
                 {/* View Batch Modal */}
                 <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-                    <DialogContent className="max-w-2xl">
+                    <DialogContent className="max-w-2xl dark:bg-gray-800">
                         <DialogHeader>
-                            <DialogTitle className="text-xl text-maroon-800 flex items-center">
+                            <DialogTitle className="text-xl text-maroon-800 dark:text-gray-200 flex items-center">
                                 <Eye className="h-5 w-5 mr-2" />
                                 Batch Details
                             </DialogTitle>
@@ -755,24 +808,24 @@ export default function Batches({ user }: Props) {
                             <div className="space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-sm font-medium text-gray-500">Batch Name</label>
-                                        <p className="text-base font-semibold text-maroon-800 mt-1">
+                                        <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Batch Name</label>
+                                        <p className="text-base font-semibold text-maroon-800 dark:text-gray-200 mt-1">
                                             {selectedBatch.name}
                                         </p>
                                     </div>
                                     <div>
-                                        <label className="text-sm font-medium text-gray-500">Graduation Year</label>
-                                        <p className="text-base font-semibold text-maroon-800 mt-1 flex items-center">
-                                            <Calendar className="h-4 w-4 mr-2 text-maroon-600" />
+                                        <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Graduation Year</label>
+                                        <p className="text-base font-semibold text-maroon-800 dark:text-gray-200 mt-1 flex items-center">
+                                            <Calendar className="h-4 w-4 mr-2 text-maroon-600 dark:text-gray-400" />
                                             {selectedBatch.graduation_year}
                                         </p>
                                     </div>
                                     <div>
-                                        <label className="text-sm font-medium text-gray-500">Status</label>
+                                        <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Status</label>
                                         <div className="mt-1">{getStatusBadge(selectedBatch.status)}</div>
                                     </div>
                                     <div>
-                                        <label className="text-sm font-medium text-gray-500">Alumni Count</label>
+                                        <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Alumni Count</label>
                                         <p className="text-base font-semibold text-blue-800 mt-1 flex items-center">
                                             <Users className="h-4 w-4 mr-2 text-blue-600" />
                                             {selectedBatch.alumni_count || 0}
@@ -781,28 +834,28 @@ export default function Batches({ user }: Props) {
                                 </div>
 
                                 <div>
-                                    <label className="text-sm font-medium text-gray-500">Description</label>
-                                    <p className="text-base text-gray-700 mt-1">
+                                    <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Description</label>
+                                    <p className="text-base text-gray-700 dark:text-gray-300 mt-1">
                                         {selectedBatch.description || 'No description provided'}
                                     </p>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                                <div className="grid grid-cols-2 gap-4 pt-4 border-t dark:border-gray-700">
                                     <div>
-                                        <label className="text-sm font-medium text-gray-500">Created At</label>
-                                        <p className="text-sm text-gray-700 mt-1">
+                                        <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Created At</label>
+                                        <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
                                             {formatDate(selectedBatch.created_at)}
                                         </p>
                                     </div>
                                     <div>
-                                        <label className="text-sm font-medium text-gray-500">Last Updated</label>
-                                        <p className="text-sm text-gray-700 mt-1">
+                                        <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Last Updated</label>
+                                        <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
                                             {formatDate(selectedBatch.updated_at)}
                                         </p>
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end space-x-2 pt-4 border-t">
+                                <div className="flex justify-end space-x-2 pt-4 border-t dark:border-gray-700">
                                     <Button
                                         variant="outline"
                                         onClick={() => setViewModalOpen(false)}
@@ -825,6 +878,6 @@ export default function Batches({ user }: Props) {
                     </DialogContent>
                 </Dialog>
             </div>
-        </AdminBaseLayout>
+        </AdminBaseLayout >
     );
 }

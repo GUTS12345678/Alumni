@@ -14,6 +14,30 @@ use Illuminate\Support\Facades\DB;
 class PublicLandingController extends Controller
 {
     /**
+     * Helper to get the correct image URL.
+     * Returns external URLs as-is, prepends /storage/ to local paths.
+     */
+    private function getImageUrl(?string $path): ?string
+    {
+        if (!$path) {
+            return null;
+        }
+        
+        // If it's already a full URL (http/https), return as-is
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return $path;
+        }
+        
+        // If it already has /storage prefix, return as-is
+        if (str_starts_with($path, '/storage')) {
+            return $path;
+        }
+        
+        // Otherwise, prepend /storage/
+        return '/storage/' . $path;
+    }
+
+    /**
      * Get public announcements for landing page.
      */
     public function getAnnouncements(Request $request): JsonResponse
@@ -30,7 +54,10 @@ class PublicLandingController extends Controller
                 'id',
                 'title',
                 'content',
+                'pages',
+                'use_pages',
                 'featured_image',
+                'gallery_images',
                 'priority',
                 'published_at',
                 'created_at'
@@ -42,14 +69,32 @@ class PublicLandingController extends Controller
 
         // Transform the data for the landing page
         $announcements = $announcements->map(function ($announcement) {
+            // Process gallery images
+            $galleryImages = $announcement->gallery_images;
+            if (is_array($galleryImages)) {
+                $galleryImages = array_map(fn($img) => $this->getImageUrl($img), $galleryImages);
+            }
+
+            // Process pages images
+            $pages = $announcement->pages;
+            if (is_array($pages)) {
+                $pages = array_map(function ($page) {
+                    if (!empty($page['image'])) {
+                        $page['image'] = $this->getImageUrl($page['image']);
+                    }
+                    return $page;
+                }, $pages);
+            }
+
             return [
                 'id' => $announcement->id,
                 'title' => $announcement->title,
                 'content' => \Illuminate\Support\Str::limit(strip_tags($announcement->content), 150),
                 'full_content' => $announcement->content,
-                'featured_image' => $announcement->featured_image 
-                    ? '/storage/' . $announcement->featured_image 
-                    : null,
+                'pages' => $pages,
+                'use_pages' => (bool) $announcement->use_pages,
+                'featured_image' => $this->getImageUrl($announcement->featured_image),
+                'gallery_images' => $galleryImages,
                 'priority' => $announcement->priority,
                 'published_at' => $announcement->published_at?->format('M d, Y'),
                 'created_at' => $announcement->created_at->format('M d, Y'),
@@ -72,8 +117,8 @@ class PublicLandingController extends Controller
         $jobs = JobPosting::where('status', 'published')
             ->where('show_on_landing', true)
             ->where(function ($q) {
-                $q->whereNull('expires_at')
-                  ->orWhere('expires_at', '>', now());
+                $q->whereNull('application_deadline')
+                  ->orWhere('application_deadline', '>', now());
             })
             ->select([
                 'id',
@@ -83,6 +128,8 @@ class PublicLandingController extends Controller
                 'company_logo',
                 'poster_image',
                 'description',
+                'pages',
+                'use_pages',
                 'location',
                 'job_type',
                 'salary_range',
@@ -90,7 +137,8 @@ class PublicLandingController extends Controller
                 'is_featured',
                 'application_deadline',
                 'published_at',
-                'created_at'
+                'created_at',
+                'external_url'
             ])
             ->orderBy('is_featured', 'desc')
             ->orderBy('published_at', 'desc')
@@ -99,18 +147,28 @@ class PublicLandingController extends Controller
 
         // Transform the data for the landing page
         $jobs = $jobs->map(function ($job) {
+            // Process pages images
+            $pages = $job->pages;
+            if (is_array($pages)) {
+                $pages = array_map(function ($page) {
+                    if (!empty($page['image'])) {
+                        $page['image'] = $this->getImageUrl($page['image']);
+                    }
+                    return $page;
+                }, $pages);
+            }
+
             return [
                 'id' => $job->id,
                 'title' => $job->title,
                 'slug' => $job->slug,
                 'company_name' => $job->company_name,
-                'company_logo' => $job->company_logo 
-                    ? '/storage/' . $job->company_logo 
-                    : null,
-                'poster_image' => $job->poster_image 
-                    ? '/storage/' . $job->poster_image 
-                    : null,
+                'company_logo' => $this->getImageUrl($job->company_logo),
+                'poster_image' => $this->getImageUrl($job->poster_image),
                 'description' => \Illuminate\Support\Str::limit(strip_tags($job->description), 120),
+                'full_description' => $job->description,
+                'pages' => $pages,
+                'use_pages' => (bool) $job->use_pages,
                 'location' => $job->location,
                 'job_type' => $job->job_type,
                 'job_type_label' => $this->getJobTypeLabel($job->job_type),
@@ -119,6 +177,7 @@ class PublicLandingController extends Controller
                 'is_featured' => $job->is_featured,
                 'application_deadline' => $job->application_deadline?->format('M d, Y'),
                 'published_at' => $job->published_at?->format('M d, Y'),
+                'external_url' => $job->external_url,
             ];
         });
 
@@ -225,25 +284,23 @@ class PublicLandingController extends Controller
      */
     public function getStats(): JsonResponse
     {
+        $totalProfiles = AlumniProfile::count();
         $totalAlumni = User::where('role_id', 3)->count();
         
         $employedAlumni = AlumniProfile::whereIn('employment_status', [
-            'Employed Full-time',
-            'Employed Part-time',
-            'Self-employed',
             'employed_full_time',
             'employed_part_time',
             'self_employed',
         ])->count();
         
-        $employmentRate = $totalAlumni > 0 
-            ? round(($employedAlumni / max(AlumniProfile::count(), 1)) * 100) 
+        $employmentRate = $totalProfiles > 0 
+            ? round(($employedAlumni / $totalProfiles) * 100) 
             : 0;
         
         $activeJobs = JobPosting::where('status', 'published')
             ->where(function ($q) {
-                $q->whereNull('expires_at')
-                  ->orWhere('expires_at', '>', now());
+                $q->whereNull('application_deadline')
+                  ->orWhere('application_deadline', '>', now());
             })
             ->count();
             
@@ -251,13 +308,30 @@ class PublicLandingController extends Controller
             ->where('status', 'completed')
             ->count();
 
+        $batchYears = AlumniProfile::distinct('graduation_year')
+            ->whereNotNull('graduation_year')
+            ->count('graduation_year');
+
+        $departments = DB::table('departments')->count();
+
+        $courses = DB::table('courses')->count();
+
+        $industries = AlumniProfile::distinct('company_industry')
+            ->whereNotNull('company_industry')
+            ->where('company_industry', '!=', '')
+            ->count('company_industry');
+
         return response()->json([
             'success' => true,
             'data' => [
-                'totalAlumni' => $totalAlumni,
+                'totalAlumni' => max($totalAlumni, $totalProfiles),
                 'employmentRate' => $employmentRate,
                 'activeJobs' => $activeJobs,
                 'surveysCompleted' => $surveysCompleted,
+                'batchYears' => $batchYears,
+                'departments' => $departments,
+                'courses' => $courses,
+                'industries' => $industries,
             ],
         ]);
     }

@@ -1,5 +1,6 @@
 import '../css/app.css';
-import './echo'; // Initialize Laravel Echo for real-time features
+// Echo/Reverb disabled - using database polling for messaging instead
+// import './echo'; // Initialize Laravel Echo for real-time features
 
 import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
@@ -8,6 +9,9 @@ import { initializeTheme } from './hooks/use-appearance';
 import { CampusProvider } from './contexts/CampusContext';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+
+// Initialize theme BEFORE app renders to prevent flash
+initializeTheme();
 
 createInertiaApp({
     title: (title) => title ? `${title} - ${appName}` : appName,
@@ -48,6 +52,3 @@ createInertiaApp({
         }
     });
 });
-
-// This will set light / dark mode on load...
-initializeTheme();

@@ -8,6 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (!Schema::hasTable('system_appearance_settings')) {
         Schema::create('system_appearance_settings', function (Blueprint $table) {
             $table->id();
             $table->string('logo_light_path')->nullable();
@@ -24,6 +25,7 @@ return new class extends Migration
             $table->text('custom_js')->nullable();
             $table->timestamps();
         });
+        }
 
         // Insert default settings
         DB::table('system_appearance_settings')->insert([

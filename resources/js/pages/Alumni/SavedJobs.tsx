@@ -176,7 +176,10 @@ const SavedJobs: React.FC<SavedJobsProps> = ({ savedJobs }) => {
                                         )}
                                     </div>
 
-                                    <p className="mt-4 text-gray-700 line-clamp-2">{job.description}</p>
+                                    <div
+                                        className="mt-4 text-gray-700 line-clamp-2 prose prose-sm max-w-none"
+                                        dangerouslySetInnerHTML={{ __html: job.description }}
+                                    />
 
                                     {job.saved_at && (
                                         <p className="mt-3 text-xs text-gray-500">
@@ -266,7 +269,10 @@ const SavedJobs: React.FC<SavedJobsProps> = ({ savedJobs }) => {
 
                             <div>
                                 <h3 className="font-semibold text-lg mb-2 text-maroon-800">Job Description</h3>
-                                <p className="text-gray-700 whitespace-pre-wrap">{selectedJob.description}</p>
+                                <div
+                                    className="text-gray-700 prose prose-sm max-w-none"
+                                    dangerouslySetInnerHTML={{ __html: selectedJob.description }}
+                                />
                             </div>
 
                             {selectedJob.requirements && (

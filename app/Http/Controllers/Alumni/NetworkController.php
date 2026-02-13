@@ -222,4 +222,72 @@ class NetworkController extends Controller
 
         return redirect()->back()->with('success', 'Connection removed!');
     }
+
+    /**
+     * Get connected alumni for messaging
+     * Returns alumni who have accepted connection requests
+     */
+    public function getConnectedAlumni(Request $request)
+    {
+        $user = $request->user();
+
+        $connections = AlumniConnection::with(['sender.alumniProfile', 'receiver.alumniProfile'])
+            ->where(function($query) use ($user) {
+                $query->where('sender_id', $user->id)
+                      ->orWhere('receiver_id', $user->id);
+            })
+            ->accepted()
+            ->get();
+
+        // Transform to get connected users with their profiles
+        $connectedAlumni = $connections->map(function($connection) use ($user) {
+            $connectedUser = $connection->sender_id === $user->id 
+                ? $connection->receiver 
+                : $connection->sender;
+            
+            $profile = $connectedUser->alumniProfile;
+            
+            return [
+                'id' => $connectedUser->id,
+                'name' => $profile ? "{$profile->first_name} {$profile->last_name}" : $connectedUser->name,
+                'email' => $connectedUser->email,
+                'profile_picture' => $connectedUser->profile_picture_path,
+                'current_job_title' => $profile?->current_job_title,
+                'current_employer' => $profile?->current_employer,
+                'graduation_year' => $profile?->graduation_year,
+                'connection_id' => $connection->id,
+                'connected_since' => $connection->updated_at,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $connectedAlumni,
+        ]);
+    }
+
+    /**
+     * Get pending connection requests count
+     */
+    public function getPendingRequestsCount(Request $request)
+    {
+        $user = $request->user();
+
+        $receivedCount = AlumniConnection::where('receiver_id', $user->id)
+            ->pending()
+            ->count();
+
+        $sentCount = AlumniConnection::where('sender_id', $user->id)
+            ->pending()
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'received' => $receivedCount,
+                'sent' => $sentCount,
+                'total' => $receivedCount + $sentCount,
+            ],
+        ]);
+    }
 }

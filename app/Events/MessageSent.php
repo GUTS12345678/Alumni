@@ -22,7 +22,8 @@ class MessageSent implements ShouldBroadcast
      */
     public function __construct(Message $message)
     {
-        $this->message = $message->load(['sender', 'conversation', 'attachments']);
+        // Note: 'attachments' is a JSON column on the Message model, not a relationship
+        $this->message = $message->load(['sender', 'conversation']);
     }
 
     /**

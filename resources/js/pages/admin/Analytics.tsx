@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     LineChart,
     Line,
@@ -16,11 +15,10 @@ import {
     Tooltip,
     Legend,
     ResponsiveContainer,
-    Cell
-} from 'recharts';
+    Cell,
+} from '@/lib/recharts';
 import {
     TrendingUp,
-    TrendingDown,
     Calendar,
     Users,
     Briefcase,
@@ -34,7 +32,13 @@ import {
     Building,
     ArrowUp,
     ArrowDown,
-    Minus
+    Target,
+    AlertTriangle,
+    CheckCircle,
+    XCircle,
+    Award,
+    Globe,
+    MapPin,
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import { useCampus } from '@/contexts/CampusContext';
@@ -58,39 +62,35 @@ interface DashboardStats {
         total_batches: number;
         total_responses: number;
         response_rate: number;
+        total_users?: number;
+        total_departments?: number;
+        total_courses?: number;
+        active_surveys?: number;
     };
+    employment_stats: Record<string, number>;
+    batch_distribution: { batch_name: string; alumni_count: number }[];
+    monthly_trend: { month: string; registrations: number }[];
     recent_activity: {
         recent_registrations: number;
         recent_responses: number;
     };
-    batch_distribution: Array<{
-        batch_name: string;
-        batch_year: number;
-        alumni_count: number;
-    }>;
-    employment_stats: Record<string, number>;
-    monthly_trend: Array<{
-        month: string;
-        registrations: number;
-    }>;
 }
 
 // Time-to-Job Interfaces
-interface TimeToJobData {
-    graduation_year: number;
-    avg_days_to_job: number;
-    total_alumni: number;
-    employed_alumni: number;
-    employment_rate: number;
-    median_days: number;
-    program_breakdown: ProgramData[];
-}
-
 interface ProgramData {
     program: string;
     avg_days: number;
     alumni_count: number;
-    color: string;
+    color?: string;
+}
+
+interface TimeToJobData {
+    graduation_year: number;
+    avg_days_to_job: number;
+    median_days: number;
+    alumni_count: number;
+    employment_rate: number;
+    program_breakdown: ProgramData[];
 }
 
 interface KPIMetrics {
@@ -112,63 +112,147 @@ interface JobMismatchStats {
     good_match_count: number;
     good_match_percentage: number;
     avg_job_satisfaction: number;
-    job_related_to_degree: {
-        related_count: number;
-        unrelated_count: number;
-        related_percentage: number;
-        unrelated_percentage: number;
+}
+
+// Comprehensive Analytics Interfaces
+interface EnrollmentMetrics {
+    yearly_breakdown: {
+        year: number;
+        batch_name: string;
+        enrolled: number;
+        graduated: number;
+        dropout: number;
+        transferred: number;
+        graduation_rate: number;
+    }[];
+    summary: {
+        total_enrolled: number;
+        total_graduated: number;
+        total_dropout: number;
+        total_transferred: number;
+        overall_graduation_rate: number;
     };
-    unemployment_reasons: Record<string, number>;
 }
 
-// System Stats Interface (Super Admin)
-interface SystemStats {
-    totalUsers: number;
-    totalDepartments: number;
-    totalCourses: number;
-    totalAlumni: number;
-    totalSurveys: number;
-    activeSurveys: number;
-    recentRegistrations: number;
-    userGrowth: number;
-    totalActivity: number;
-    engagementRate: number;
-    completionRate: number;
+interface PerformanceIndicator {
+    employed_within_2_years: number;
+    total_employed_with_data: number;
+    total_graduates: number;
+    performance_rate: number;
+    yearly_breakdown: {
+        year: number;
+        total_graduates: number;
+        employed_within_2_years: number;
+        performance_rate: number;
+    }[];
 }
 
-interface ActivityData {
-    date: string;
-    users: number;
-    surveys: number;
-    registrations: number;
+interface JobAlignment {
+    total_employed: number;
+    aligned: { count: number; percentage: number };
+    overqualified: { count: number; percentage: number };
+    underqualified: { count: number; percentage: number };
+    unfit: { count: number; percentage: number };
+    alignment_rate: number;
 }
 
-interface DepartmentStat {
-    name: string;
-    code: string;
-    students: number;
-    courses: number;
-    growth: number;
+interface AttritionRate {
+    yearly_breakdown: {
+        year: number;
+        batch_name: string;
+        enrolled: number;
+        dropout: number;
+        transferred: number;
+        attrition_rate: number;
+    }[];
+    summary: {
+        total_enrolled: number;
+        total_dropout: number;
+        total_transferred: number;
+        overall_attrition_rate: number;
+    };
+}
+
+interface ProgramPerformance {
+    program: string;
+    total_alumni: number;
+    employed: number;
+    employment_rate: number;
+    aligned: number;
+    alignment_rate: number;
+    avg_days_to_job: number;
+}
+
+interface CollegeBreakdown {
+    college: string;
+    college_code: string;
+    total_alumni: number;
+    employed: number;
+    aligned: number;
+    employment_rate: number;
+    alignment_rate: number;
+}
+
+interface CourseBreakdown {
+    course: string;
+    course_code: string;
+    college: string;
+    college_code: string;
+    total_alumni: number;
+    employed: number;
+    aligned: number;
+    employment_rate: number;
+    alignment_rate: number;
+}
+
+interface ComprehensiveAnalytics {
+    enrollment_metrics: EnrollmentMetrics;
+    performance_indicator: PerformanceIndicator;
+    job_alignment: JobAlignment;
+    attrition_rate: AttritionRate;
+    program_performance: ProgramPerformance[];
+    college_breakdown: CollegeBreakdown[];
+    course_breakdown: CourseBreakdown[];
+    employment_location?: {
+        summary: {
+            total_employed: number;
+            local: number;
+            foreign: number;
+            remote: number;
+            local_rate: number;
+            foreign_rate: number;
+            remote_rate: number;
+        };
+        yearly_trend: {
+            year: number;
+            local: number;
+            foreign: number;
+            remote: number;
+            total: number;
+            foreign_rate: number;
+        }[];
+        department_breakdown: {
+            department: string;
+            local: number;
+            foreign: number;
+            remote: number;
+            total: number;
+        }[];
+    };
 }
 
 const COLORS = {
-    primary: '#800000',    // Maroon
-    secondary: '#D4AF37',  // Gold/Beige
-    success: '#22C55E',    // Green
-    warning: '#F59E0B',    // Amber
-    danger: '#EF4444',     // Red
-    info: '#3B82F6',       // Blue
+    primary: '#800000',
+    secondary: '#D4AF37',
+    success: '#22C55E',
+    warning: '#F59E0B',
+    danger: '#EF4444',
+    info: '#3B82F6',
+    purple: '#8B5CF6',
     gradient: ['#800000', '#B22222', '#D4AF37', '#DAA520'],
-    employment: {
-        employed: '#22C55E',
-        unemployed: '#EF4444',
-        self_employed: '#3B82F6',
-        further_study: '#F59E0B',
-    }
 };
 
 export default function Analytics({ user }: Props) {
-    // Campus context for filtering
     const { selectedCampus } = useCampus();
 
     // Dashboard Stats State
@@ -181,15 +265,12 @@ export default function Analytics({ user }: Props) {
     const [jobMismatchStats, setJobMismatchStats] = useState<JobMismatchStats | null>(null);
     const [timeToJobLoading, setTimeToJobLoading] = useState(true);
 
-    // System Stats State (Super Admin features) - these won't be loaded for regular admin
-    const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
-    const [activityData] = useState<ActivityData[]>([]);
-    const [departmentStats] = useState<DepartmentStat[]>([]);
-    const [timeRange, setTimeRange] = useState<'week' | 'month' | 'year'>('month');
+    // Comprehensive Analytics State
+    const [comprehensiveData, setComprehensiveData] = useState<ComprehensiveAnalytics | null>(null);
+    const [comprehensiveLoading, setComprehensiveLoading] = useState(true);
 
     const [error, setError] = useState<string | null>(null);
     const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-    const [selectedYears] = useState<number[]>([]);
 
     // Fetch Dashboard Stats
     const fetchDashboardStats = useCallback(async () => {
@@ -227,11 +308,8 @@ export default function Analytics({ user }: Props) {
     const fetchTimeToJobAnalytics = useCallback(async () => {
         try {
             setTimeToJobLoading(true);
-
+            const token = localStorage.getItem('auth_token');
             const queryParams = new URLSearchParams();
-            if (selectedYears.length > 0) {
-                queryParams.append('years', selectedYears.join(','));
-            }
             if (selectedCampus?.id) {
                 queryParams.append('campus_id', selectedCampus.id.toString());
             }
@@ -239,6 +317,7 @@ export default function Analytics({ user }: Props) {
             const response = await fetch(`/api/v1/admin/analytics/time-to-job?${queryParams}`, {
                 credentials: 'include',
                 headers: {
+                    'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
                 },
@@ -251,7 +330,6 @@ export default function Analytics({ user }: Props) {
                 setTimeToJobData(result.data.yearly_data);
                 setKpiMetrics(result.data.kpi_metrics);
                 setJobMismatchStats(result.data.job_mismatch_stats);
-                setLastRefresh(new Date());
             }
         } catch (err) {
             console.error('Analytics fetch error:', err);
@@ -259,79 +337,74 @@ export default function Analytics({ user }: Props) {
         } finally {
             setTimeToJobLoading(false);
         }
-    }, [selectedYears, selectedCampus]);
+    }, [selectedCampus]);
 
-    // Fetch system stats for Super Admin features
-    const fetchSystemStats = useCallback(async () => {
-        if (user.role !== 'super_admin') return; // Only fetch for super admin
-
+    // Fetch Comprehensive Analytics
+    const fetchComprehensiveAnalytics = useCallback(async () => {
         try {
-            const params = new URLSearchParams();
+            setComprehensiveLoading(true);
+            const token = localStorage.getItem('auth_token');
+            const queryParams = new URLSearchParams();
             if (selectedCampus?.id) {
-                params.append('campus_id', selectedCampus.id.toString());
+                queryParams.append('campus_id', selectedCampus.id.toString());
             }
-            const response = await fetch(`/api/v1/admin/dashboard?${params}`, {
+
+            const response = await fetch(`/api/v1/admin/analytics/comprehensive?${queryParams}`, {
                 credentials: 'include',
                 headers: {
-                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
             });
 
-            if (!response.ok) return;
+            if (!response.ok) throw new Error('Failed to fetch comprehensive analytics');
 
-            const data = await response.json();
-            if (data.success) {
-                setSystemStats({
-                    totalUsers: data.data.overview.total_users || 0,
-                    totalDepartments: data.data.overview.total_departments || 0,
-                    totalCourses: data.data.overview.total_courses || 0,
-                    totalAlumni: data.data.overview.total_alumni || 0,
-                    totalSurveys: data.data.overview.total_surveys || 0,
-                    activeSurveys: data.data.overview.active_surveys || 0,
-                    recentRegistrations: data.data.recent_activity.recent_registrations || 0,
-                    userGrowth: 12.5,
-                    totalActivity: 2847,
-                    engagementRate: data.data.overview.response_rate || 68.3,
-                    completionRate: data.data.overview.response_rate || 84.7
-                });
-                // You could also populate activityData and departmentStats from the API
+            const result = await response.json();
+            if (result.success) {
+                setComprehensiveData(result.data);
             }
         } catch (err) {
-            console.error('Error fetching system stats:', err);
+            console.error('Comprehensive analytics fetch error:', err);
+        } finally {
+            setComprehensiveLoading(false);
         }
-    }, [user.role, selectedCampus]);
+    }, [selectedCampus]);
 
-    // Fetch all data on mount and when campus changes
+    // Fetch all data on mount
     useEffect(() => {
         fetchDashboardStats();
         fetchTimeToJobAnalytics();
-        fetchSystemStats(); // Fetch system stats if super admin
+        fetchComprehensiveAnalytics();
+        setLastRefresh(new Date());
 
         const interval = setInterval(() => {
             fetchDashboardStats();
             fetchTimeToJobAnalytics();
-            fetchSystemStats();
-        }, 60000); // Refresh every minute
+            fetchComprehensiveAnalytics();
+            setLastRefresh(new Date());
+        }, 60000);
 
         return () => clearInterval(interval);
-    }, [fetchDashboardStats, fetchTimeToJobAnalytics, fetchSystemStats]);
+    }, [fetchDashboardStats, fetchTimeToJobAnalytics, fetchComprehensiveAnalytics]);
 
     const handleRefresh = () => {
         fetchDashboardStats();
         fetchTimeToJobAnalytics();
-        fetchSystemStats();
+        fetchComprehensiveAnalytics();
+        setLastRefresh(new Date());
     };
 
     const handleExport = async (format: 'csv' | 'excel' | 'pdf') => {
         try {
-            const response = await fetch(`/api/v1/admin/analytics/time-to-job/export?format=${format}`, {
+            const token = localStorage.getItem('auth_token');
+            const campusParam = selectedCampus?.id ? `&campus_id=${selectedCampus.id}` : '';
+            const response = await fetch(`/api/v1/admin/analytics/comprehensive/export?format=${format}${campusParam}`, {
                 credentials: 'include',
                 headers: {
+                    'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
-                    'Content-Type': 'application/json',
                 },
             });
 
@@ -341,7 +414,7 @@ export default function Analytics({ user }: Props) {
                 const a = document.createElement('a');
                 a.style.display = 'none';
                 a.href = url;
-                a.download = `analytics-report.${format}`;
+                a.download = `comprehensive-analytics-report.${format}`;
                 document.body.appendChild(a);
                 a.click();
                 window.URL.revokeObjectURL(url);
@@ -355,8 +428,8 @@ export default function Analytics({ user }: Props) {
     const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
         if (active && payload && payload.length) {
             return (
-                <div className="bg-white p-4 border border-beige-200 shadow-lg rounded-lg">
-                    <p className="text-maroon-800 font-semibold">{`${label}`}</p>
+                <div className="bg-white dark:bg-gray-800 p-4 border border-beige-200 dark:border-gray-700 shadow-lg rounded-lg">
+                    <p className="text-maroon-800 dark:text-gray-200 font-semibold">{`${label}`}</p>
                     {payload.map((entry, index: number) => (
                         <p key={index} style={{ color: entry.color }}>
                             {`${entry.name}: ${entry.value}`}
@@ -374,34 +447,15 @@ export default function Analytics({ user }: Props) {
         return `${months} ${months === 1 ? 'month' : 'months'}`;
     };
 
-    const getTrendIcon = (current: number, previous: number) => {
-        if (current < previous) return <TrendingDown className="h-4 w-4 text-green-600" />;
-        if (current > previous) return <TrendingUp className="h-4 w-4 text-red-600" />;
-        return <TrendingUp className="h-4 w-4 text-gray-600" />;
-    };
-
-    // Helper functions for system analytics
-    const getSystemTrendIcon = (value: number) => {
-        if (value > 0) return <ArrowUp className="h-4 w-4 text-green-600" />;
-        if (value < 0) return <ArrowDown className="h-4 w-4 text-red-600" />;
-        return <Minus className="h-4 w-4 text-gray-600" />;
-    };
-
-    const getSystemTrendColor = (value: number) => {
-        if (value > 0) return 'text-green-600';
-        if (value < 0) return 'text-red-600';
-        return 'text-gray-600';
-    };
-
-    const loading = dashboardLoading || timeToJobLoading;
+    const loading = dashboardLoading || timeToJobLoading || comprehensiveLoading;
 
     if (loading) {
         return (
             <AdminBaseLayout title="Analytics Dashboard" user={user}>
                 <div className="flex items-center justify-center min-h-96">
                     <div className="flex items-center space-x-2">
-                        <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
-                        <span className="text-maroon-800 font-medium">Loading analytics...</span>
+                        <RefreshCw className="h-8 w-8 text-maroon-600 dark:text-gray-400 animate-spin" />
+                        <span className="text-maroon-800 dark:text-gray-200 font-medium">Loading analytics...</span>
                     </div>
                 </div>
             </AdminBaseLayout>
@@ -432,8 +486,8 @@ export default function Analytics({ user }: Props) {
                 {/* Header with Controls */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h2 className="text-3xl font-bold text-maroon-800">Analytics Dashboard</h2>
-                        <p className="text-maroon-600">Comprehensive system analytics and insights</p>
+                        <h2 className="text-3xl font-bold text-maroon-800 dark:text-gray-200">Analytics Dashboard</h2>
+                        <p className="text-maroon-600 dark:text-gray-400">Comprehensive alumni tracking and performance metrics</p>
                     </div>
 
                     <div className="flex items-center space-x-2">
@@ -446,796 +500,1003 @@ export default function Analytics({ user }: Props) {
                             onClick={handleRefresh}
                             variant="outline"
                             size="sm"
-                            className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                         >
                             <RefreshCw className="h-4 w-4 mr-2" />
                             Refresh
                         </Button>
 
-                        <div className="flex space-x-1">
+                        <div className="flex flex-wrap gap-1">
                             <Button
                                 onClick={() => handleExport('csv')}
                                 variant="outline"
                                 size="sm"
-                                className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                             >
                                 <Download className="h-4 w-4 mr-1" />
-                                CSV
-                            </Button>
-                            <Button
-                                onClick={() => handleExport('excel')}
-                                variant="outline"
-                                size="sm"
-                                className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
-                            >
-                                Excel
-                            </Button>
-                            <Button
-                                onClick={() => handleExport('pdf')}
-                                variant="outline"
-                                size="sm"
-                                className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
-                            >
-                                PDF
+                                Export All Analytics
                             </Button>
                         </div>
                     </div>
                 </div>
 
-                {/* Tabs for Different Analytics Views */}
-                <Tabs defaultValue="overview" className="space-y-6">
-                    <TabsList className="bg-beige-100">
-                        <TabsTrigger value="overview" className="data-[state=active]:bg-maroon-700 data-[state=active]:text-white">
-                            <BarChart3 className="h-4 w-4 mr-2" />
-                            Overview
-                        </TabsTrigger>
-                        <TabsTrigger value="employment" className="data-[state=active]:bg-maroon-700 data-[state=active]:text-white">
-                            <Briefcase className="h-4 w-4 mr-2" />
-                            Employment Analytics
-                        </TabsTrigger>
-                        {user.role === 'super_admin' && (
-                            <TabsTrigger value="system" className="data-[state=active]:bg-maroon-700 data-[state=active]:text-white">
-                                <Activity className="h-4 w-4 mr-2" />
-                                System Analytics
-                            </TabsTrigger>
-                        )}
-                    </TabsList>
+                {/* Section 1: Key Performance Indicators */}
+                <div className="space-y-4">
+                    <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                        <Target className="h-5 w-5 mr-2" />
+                        Key Performance Indicators
+                    </h3>
 
-                    {/* Overview Tab */}
-                    <TabsContent value="overview" className="space-y-6">
-                        {/* System Statistics Cards */}
-                        {dashboardStats && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                                <Card className="border-beige-200 shadow-lg hover:shadow-xl transition-all">
-                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                        <CardTitle className="text-sm font-medium text-maroon-800">Total Alumni</CardTitle>
-                                        <div className="p-2 bg-maroon-100 rounded-lg">
-                                            <Users className="h-5 w-5 text-maroon-600" />
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="text-3xl font-bold text-maroon-800">
-                                            {dashboardStats.overview.total_alumni || 0}
-                                        </div>
-                                        <p className="text-xs text-maroon-600 mt-1">Registered in system</p>
-                                        <div className="mt-3 flex items-center text-xs">
-                                            <TrendingUp className="h-3 w-3 text-green-600 mr-1" />
-                                            <span className="text-green-600 font-medium">
-                                                {dashboardStats.recent_activity.recent_registrations || 0} new (30 days)
-                                            </span>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                        {/* Total Alumni */}
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Alumni</CardTitle>
+                                <div className="p-2 bg-maroon-100 dark:bg-maroon-800/30 rounded-lg">
+                                    <Users className="h-5 w-5 text-maroon-600 dark:text-gray-400" />
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold text-maroon-800 dark:text-gray-200">
+                                    {dashboardStats?.overview.total_alumni || 0}
+                                </div>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Registered in system</p>
+                            </CardContent>
+                        </Card>
 
-                                <Card className="border-beige-200 shadow-lg hover:shadow-xl transition-all">
-                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                        <CardTitle className="text-sm font-medium text-maroon-800">Total Surveys</CardTitle>
-                                        <div className="p-2 bg-blue-100 rounded-lg">
-                                            <ClipboardList className="h-5 w-5 text-blue-600" />
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="text-3xl font-bold text-blue-600">
-                                            {dashboardStats.overview.total_surveys || 0}
-                                        </div>
-                                        <p className="text-xs text-gray-600 mt-1">Created surveys</p>
-                                    </CardContent>
-                                </Card>
+                        {/* Performance Rate (Employed within 2 years) */}
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-green-50 to-white dark:from-green-900/20 dark:to-gray-800">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-green-800">Performance Rate</CardTitle>
+                                <div className="p-2 bg-green-100 rounded-lg">
+                                    <Award className="h-5 w-5 text-green-600" />
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold text-green-700">
+                                    {comprehensiveData?.performance_indicator.performance_rate || 0}%
+                                </div>
+                                <p className="text-xs text-green-600 mt-1">Employed within 2 years</p>
+                                <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                                    {comprehensiveData?.performance_indicator.employed_within_2_years || 0} of {comprehensiveData?.performance_indicator.total_graduates || dashboardStats?.overview.total_alumni || 0} alumni
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                                <Card className="border-beige-200 shadow-lg hover:shadow-xl transition-all">
-                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                        <CardTitle className="text-sm font-medium text-maroon-800">Total Responses</CardTitle>
-                                        <div className="p-2 bg-purple-100 rounded-lg">
-                                            <Activity className="h-5 w-5 text-purple-600" />
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="text-3xl font-bold text-purple-600">
-                                            {dashboardStats.overview.total_responses || 0}
-                                        </div>
-                                        <p className="text-xs text-gray-600 mt-1">Survey submissions</p>
-                                        <div className="mt-3 flex items-center text-xs">
-                                            <TrendingUp className="h-3 w-3 text-green-600 mr-1" />
-                                            <span className="text-green-600 font-medium">
-                                                {dashboardStats.recent_activity.recent_responses || 0} recent
-                                            </span>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                        {/* Job Alignment Rate */}
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-800">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-blue-800">Job Alignment</CardTitle>
+                                <div className="p-2 bg-blue-100 rounded-lg">
+                                    <CheckCircle className="h-5 w-5 text-blue-600" />
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold text-blue-700">
+                                    {comprehensiveData?.job_alignment.alignment_rate || 0}%
+                                </div>
+                                <p className="text-xs text-blue-600 mt-1">Working in related field</p>
+                                <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                                    {comprehensiveData?.job_alignment.aligned.count || 0} of {comprehensiveData?.job_alignment.total_employed || 0} employed
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                                <Card className="border-beige-200 shadow-lg hover:shadow-xl transition-all">
-                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                        <CardTitle className="text-sm font-medium text-maroon-800">Response Rate</CardTitle>
-                                        <div className="p-2 bg-green-100 rounded-lg">
-                                            <TrendingUp className="h-5 w-5 text-green-600" />
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="text-3xl font-bold text-green-600">
-                                            {dashboardStats.overview.response_rate ? dashboardStats.overview.response_rate.toFixed(2) : '0.00'}%
-                                        </div>
-                                        <p className="text-xs text-gray-600 mt-1">Survey completion rate</p>
-                                        <div className="mt-3">
-                                            <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                                <div
-                                                    className="bg-green-600 h-1.5 rounded-full transition-all"
-                                                    style={{ width: `${Math.min(dashboardStats.overview.response_rate || 0, 100)}%` }}
-                                                ></div>
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        )}
+                        {/* Employment Rate */}
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-purple-50 to-white dark:from-purple-900/20 dark:to-gray-800">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-purple-800">Employment Rate</CardTitle>
+                                <div className="p-2 bg-purple-100 rounded-lg">
+                                    <GraduationCap className="h-5 w-5 text-purple-600" />
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold text-purple-700">
+                                    {dashboardStats?.overview.total_alumni && dashboardStats.overview.total_alumni > 0
+                                        ? Math.round(((comprehensiveData?.job_alignment.total_employed || 0) / dashboardStats.overview.total_alumni) * 100)
+                                        : 0}%
+                                </div>
+                                <p className="text-xs text-purple-600 mt-1">Of all alumni</p>
+                                <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                                    {comprehensiveData?.job_alignment.total_employed || 0} of {dashboardStats?.overview.total_alumni || 0} alumni
+                                </div>
+                            </CardContent>
+                        </Card>
 
-                        {/* Charts Row */}
-                        {dashboardStats && (
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                {/* Monthly Registration Trend */}
-                                <Card className="border-beige-200 shadow-lg">
-                                    <CardHeader>
-                                        <CardTitle className="text-xl text-maroon-800">Monthly Registration Trend</CardTitle>
-                                        <CardDescription className="text-maroon-600">
-                                            Alumni registrations over time
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <AreaChart data={dashboardStats.monthly_trend}>
-                                                <defs>
-                                                    <linearGradient id="colorRegistrations" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.8} />
-                                                        <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0.1} />
-                                                    </linearGradient>
-                                                </defs>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                                <XAxis dataKey="month" stroke={COLORS.primary} fontSize={12} />
-                                                <YAxis stroke={COLORS.primary} fontSize={12} />
-                                                <Tooltip content={<CustomTooltip />} />
-                                                <Area
-                                                    type="monotone"
-                                                    dataKey="registrations"
-                                                    stroke={COLORS.primary}
-                                                    fillOpacity={1}
-                                                    fill="url(#colorRegistrations)"
-                                                    strokeWidth={2}
-                                                    name="Registrations"
-                                                />
-                                            </AreaChart>
-                                        </ResponsiveContainer>
-                                    </CardContent>
-                                </Card>
+                        {/* Non-Employment Rate */}
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-red-50 to-white dark:from-red-900/20 dark:to-gray-800">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-red-800">Non-Employment</CardTitle>
+                                <div className="p-2 bg-red-100 rounded-lg">
+                                    <AlertTriangle className="h-5 w-5 text-red-600" />
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-3xl font-bold text-red-700">
+                                    {comprehensiveData?.attrition_rate.summary.overall_attrition_rate || 0}%
+                                </div>
+                                <p className="text-xs text-red-600 mt-1">Unemployed + Continuing Ed.</p>
+                                <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                                    {(comprehensiveData?.attrition_rate.summary.total_dropout || 0) + (comprehensiveData?.attrition_rate.summary.total_transferred || 0)} alumni
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
 
-                                {/* Employment Status Distribution */}
-                                <Card className="border-beige-200 shadow-lg">
-                                    <CardHeader>
-                                        <CardTitle className="text-xl text-maroon-800">Employment Status Distribution</CardTitle>
-                                        <CardDescription className="text-maroon-600">
-                                            Current employment breakdown
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <BarChart
-                                                data={Object.entries(dashboardStats.employment_stats).map(([key, value]) => ({
-                                                    status: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-                                                    count: value,
-                                                }))}
-                                            >
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                                <XAxis dataKey="status" stroke={COLORS.primary} fontSize={12} />
-                                                <YAxis stroke={COLORS.primary} fontSize={12} />
-                                                <Tooltip content={<CustomTooltip />} />
-                                                <Bar dataKey="count" fill={COLORS.primary} radius={[4, 4, 0, 0]} name="Alumni Count" />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </CardContent>
-                                </Card>
+                {/* Section 2: Employment Analytics */}
+                <div className="space-y-4">
+                    <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                        <Briefcase className="h-5 w-5 mr-2" />
+                        Employment Analytics
+                    </h3>
 
-                                {/* Batch Distribution */}
-                                <Card className="border-beige-200 shadow-lg lg:col-span-2">
-                                    <CardHeader>
-                                        <CardTitle className="text-xl text-maroon-800">Batch Distribution</CardTitle>
-                                        <CardDescription className="text-maroon-600">
-                                            Alumni count by graduation batch
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <BarChart
-                                                data={dashboardStats.batch_distribution}
-                                                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-                                            >
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                                <XAxis dataKey="batch_name" stroke={COLORS.primary} fontSize={12} />
-                                                <YAxis stroke={COLORS.primary} fontSize={12} />
-                                                <Tooltip content={<CustomTooltip />} />
-                                                <Bar dataKey="alumni_count" fill={COLORS.secondary} radius={[4, 4, 0, 0]} name="Alumni Count" />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        )}
-                    </TabsContent>
-
-                    {/* Employment Analytics Tab */}
-                    <TabsContent value="employment" className="space-y-6">
-                        {/* Employment KPI Cards */}
-                        {kpiMetrics && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                                <Card className="border-beige-200 shadow-lg">
-                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                        <CardTitle className="text-sm font-medium text-maroon-800">Overall Average</CardTitle>
-                                        <Calendar className="h-4 w-4 text-maroon-600" />
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold text-maroon-800">
-                                            {formatDays(kpiMetrics.overall_avg_days)}
-                                        </div>
-                                        <p className="text-xs text-maroon-600 mt-1">Time to first job</p>
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="border-beige-200 shadow-lg">
-                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                        <CardTitle className="text-sm font-medium text-maroon-800">Current Year</CardTitle>
-                                        <TrendingUp className="h-4 w-4 text-maroon-600" />
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold text-maroon-800">
-                                            {formatDays(kpiMetrics.current_year_avg)}
-                                        </div>
-                                        <div className="flex items-center text-xs mt-1">
-                                            {getTrendIcon(kpiMetrics.current_year_avg, kpiMetrics.overall_avg_days)}
-                                            <span className="ml-1 text-maroon-600">vs overall average</span>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="border-beige-200 shadow-lg">
-                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                        <CardTitle className="text-sm font-medium text-maroon-800">Improvement</CardTitle>
-                                        <BarChart3 className="h-4 w-4 text-maroon-600" />
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold text-maroon-800">
-                                            {kpiMetrics.improvement_rate > 0 ? '+' : ''}{kpiMetrics.improvement_rate.toFixed(1)}%
-                                        </div>
-                                        <p className="text-xs text-maroon-600 mt-1">Year over year</p>
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="border-beige-200 shadow-lg">
-                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                        <CardTitle className="text-sm font-medium text-maroon-800">Best Program</CardTitle>
-                                        <Briefcase className="h-4 w-4 text-maroon-600" />
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="text-sm font-bold text-maroon-800 truncate">
-                                            {kpiMetrics.fastest_employment_program}
-                                        </div>
-                                        <p className="text-xs text-maroon-600 mt-1">Fastest employment</p>
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="border-beige-200 shadow-lg">
-                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                        <CardTitle className="text-sm font-medium text-maroon-800">Alumni Tracked</CardTitle>
-                                        <Users className="h-4 w-4 text-maroon-600" />
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="text-2xl font-bold text-maroon-800">
-                                            {kpiMetrics.total_tracked_alumni.toLocaleString()}
-                                        </div>
-                                        <p className="text-xs text-maroon-600 mt-1">With employment data</p>
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        )}
-
-                        {/* Employment Charts */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Time-to-Job Trend */}
-                            <Card className="border-beige-200 shadow-lg">
-                                <CardHeader>
-                                    <CardTitle className="text-xl text-maroon-800">Time-to-Job Trend</CardTitle>
-                                    <CardDescription className="text-maroon-600">
-                                        Average days to secure first employment by graduation year
-                                    </CardDescription>
+                    {/* Employment KPI Cards */}
+                    {kpiMetrics && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Avg Time to Job</CardTitle>
+                                    <Calendar className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                                 </CardHeader>
                                 <CardContent>
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <AreaChart data={timeToJobData}>
-                                            <defs>
-                                                <linearGradient id="timeGradient" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.8} />
-                                                    <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0.1} />
-                                                </linearGradient>
-                                            </defs>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                            <XAxis dataKey="graduation_year" stroke={COLORS.primary} fontSize={12} />
-                                            <YAxis stroke={COLORS.primary} fontSize={12} tickFormatter={(value) => `${value}d`} />
-                                            <Tooltip content={<CustomTooltip />} />
-                                            <Area
-                                                type="monotone"
-                                                dataKey="avg_days_to_job"
-                                                stroke={COLORS.primary}
-                                                fillOpacity={1}
-                                                fill="url(#timeGradient)"
-                                                strokeWidth={2}
-                                                name="Avg Days to Job"
-                                            />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
+                                    <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">
+                                        {formatDays(kpiMetrics.overall_avg_days)}
+                                    </div>
+                                    <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">After graduation</p>
                                 </CardContent>
                             </Card>
 
-                            {/* Employment Rate vs Time-to-Job */}
-                            <Card className="border-beige-200 shadow-lg">
-                                <CardHeader>
-                                    <CardTitle className="text-xl text-maroon-800">Employment Rate & Time Correlation</CardTitle>
-                                    <CardDescription className="text-maroon-600">
-                                        Relationship between employment rate and time to find jobs
-                                    </CardDescription>
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Good Match</CardTitle>
+                                    <CheckCircle className="h-4 w-4 text-green-600" />
                                 </CardHeader>
                                 <CardContent>
-                                    <ResponsiveContainer width="100%" height={300}>
-                                        <LineChart data={timeToJobData}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                            <XAxis dataKey="graduation_year" stroke={COLORS.primary} fontSize={12} />
-                                            <YAxis yAxisId="days" stroke={COLORS.primary} fontSize={12} tickFormatter={(value) => `${value}d`} />
-                                            <YAxis yAxisId="rate" orientation="right" stroke={COLORS.secondary} fontSize={12} tickFormatter={(value) => `${value}%`} />
-                                            <Tooltip content={<CustomTooltip />} />
-                                            <Legend />
-                                            <Line
-                                                yAxisId="days"
-                                                type="monotone"
-                                                dataKey="avg_days_to_job"
-                                                stroke={COLORS.primary}
-                                                strokeWidth={3}
-                                                dot={{ fill: COLORS.primary, strokeWidth: 2, r: 4 }}
-                                                name="Avg Days to Job"
-                                            />
-                                            <Line
-                                                yAxisId="rate"
-                                                type="monotone"
-                                                dataKey="employment_rate"
-                                                stroke={COLORS.secondary}
-                                                strokeWidth={3}
-                                                dot={{ fill: COLORS.secondary, strokeWidth: 2, r: 4 }}
-                                                name="Employment Rate"
-                                            />
-                                        </LineChart>
-                                    </ResponsiveContainer>
+                                    <div className="text-2xl font-bold text-green-600">
+                                        {jobMismatchStats?.good_match_count || 0}
+                                    </div>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                        {jobMismatchStats?.good_match_percentage || 0}% of employed
+                                    </p>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Overqualified</CardTitle>
+                                    <ArrowUp className="h-4 w-4 text-orange-600" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-orange-600">
+                                        {jobMismatchStats?.overqualified_count || 0}
+                                    </div>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                        {jobMismatchStats?.overqualified_percentage || 0}% of employed
+                                    </p>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Unfit/Mismatch</CardTitle>
+                                    <XCircle className="h-4 w-4 text-red-600" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-red-600">
+                                        {jobMismatchStats?.unfit_count || 0}
+                                    </div>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                        {jobMismatchStats?.unfit_percentage || 0}% of employed
+                                    </p>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Underqualified</CardTitle>
+                                    <ArrowDown className="h-4 w-4 text-blue-600" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold text-blue-600">
+                                        {jobMismatchStats?.underqualified_count || 0}
+                                    </div>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                        {jobMismatchStats?.underqualified_percentage || 0}% of employed
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    )}
+
+                    {/* Employment Charts Row */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Job Qualification Match Distribution */}
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader>
+                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Job Qualification Match</CardTitle>
+                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                    Distribution of job matches among employed alumni
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart
+                                        data={[
+                                            { name: 'Good Match', value: jobMismatchStats?.good_match_count || 0, color: COLORS.success },
+                                            { name: 'Overqualified', value: jobMismatchStats?.overqualified_count || 0, color: COLORS.warning },
+                                            { name: 'Unfit', value: jobMismatchStats?.unfit_count || 0, color: COLORS.danger },
+                                            { name: 'Underqualified', value: jobMismatchStats?.underqualified_count || 0, color: COLORS.info },
+                                        ]}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis dataKey="name" stroke={COLORS.primary} fontSize={12} />
+                                        <YAxis stroke={COLORS.primary} fontSize={12} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="value" radius={[4, 4, 0, 0]} name="Alumni Count">
+                                            {[
+                                                { name: 'Good Match', color: COLORS.success },
+                                                { name: 'Overqualified', color: COLORS.warning },
+                                                { name: 'Unfit', color: COLORS.danger },
+                                                { name: 'Underqualified', color: COLORS.info },
+                                            ].map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.color} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+
+                        {/* Program Performance Comparison */}
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader>
+                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Program Performance</CardTitle>
+                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                    Average time-to-job by degree program
+                                    {(() => {
+                                        const yearWithData = [...timeToJobData].reverse().find(y => y.program_breakdown && y.program_breakdown.length > 0);
+                                        return yearWithData ? ` (${yearWithData.graduation_year})` : '';
+                                    })()}
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={250}>
+                                    <BarChart
+                                        data={(() => {
+                                            // Find the most recent year with program breakdown data
+                                            const yearWithData = [...timeToJobData].reverse().find(y => y.program_breakdown && y.program_breakdown.length > 0);
+                                            return yearWithData?.program_breakdown || [];
+                                        })()}
+                                        margin={{ top: 20, right: 10, left: 10, bottom: 60 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis
+                                            dataKey="program"
+                                            stroke={COLORS.primary}
+                                            fontSize={9}
+                                            angle={-45}
+                                            textAnchor="end"
+                                            height={80}
+                                            interval={0}
+                                            tick={({ x, y, payload }: { x: number; y: number; payload: { value: string } }) => {
+                                                const label = payload.value.length > 20 ? payload.value.substring(0, 18) + '…' : payload.value;
+                                                return (
+                                                    <g transform={`translate(${x},${y})`}>
+                                                        <text x={0} y={0} dy={8} textAnchor="end" fill={COLORS.primary} fontSize={9} transform="rotate(-45)">
+                                                            {label}
+                                                        </text>
+                                                    </g>
+                                                );
+                                            }}
+                                        />
+                                        <YAxis stroke={COLORS.primary} fontSize={12} tickFormatter={(value) => `${value}d`} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Bar dataKey="avg_days" name="Avg Days to Job" radius={[4, 4, 0, 0]}>
+                                            {(() => {
+                                                const yearWithData = [...timeToJobData].reverse().find(y => y.program_breakdown && y.program_breakdown.length > 0);
+                                                return (yearWithData?.program_breakdown || []).map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color || COLORS.primary} />
+                                                ));
+                                            })()}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+
+                {/* Section 3: Enrollment & Attrition Analytics */}
+                <div className="space-y-4">
+                    <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                        <GraduationCap className="h-5 w-5 mr-2" />
+                        Enrollment & Attrition Analytics
+                    </h3>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Enrollment vs Graduation Chart */}
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader>
+                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Graduates vs Employed</CardTitle>
+                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                    Graduated alumni and employment count by year
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart
+                                        data={comprehensiveData?.enrollment_metrics.yearly_breakdown.slice(0, 10) || []}
+                                        margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis dataKey="year" stroke={COLORS.primary} fontSize={11} />
+                                        <YAxis stroke={COLORS.primary} fontSize={11} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                                        <Bar dataKey="graduated" name="Graduated" fill={COLORS.info} radius={[4, 4, 0, 0]} />
+                                        <Bar dataKey="employed" name="Employed" fill={COLORS.success} radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+
+                        {/* Attrition Breakdown */}
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader>
+                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Unemployment Breakdown</CardTitle>
+                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                    Unemployed and continuing education by graduation year
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <BarChart
+                                        data={comprehensiveData?.attrition_rate.yearly_breakdown.slice(0, 10) || []}
+                                        margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis dataKey="year" stroke={COLORS.primary} fontSize={11} />
+                                        <YAxis stroke={COLORS.primary} fontSize={11} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                                        <Bar dataKey="dropout" name="Unemployed" fill={COLORS.danger} radius={[4, 4, 0, 0]} />
+                                        <Bar dataKey="transferred" name="Continuing Ed." fill={COLORS.warning} radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* College-level Breakdown */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                        {/* Alumni by College */}
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader>
+                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Alumni by College</CardTitle>
+                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                    Total alumni and employment by college/department
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={280}>
+                                    <BarChart
+                                        data={comprehensiveData?.college_breakdown || []}
+                                        layout="vertical"
+                                        margin={{ top: 10, right: 20, left: 10, bottom: 5 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis type="number" stroke={COLORS.primary} fontSize={11} />
+                                        <YAxis
+                                            dataKey="college_code"
+                                            type="category"
+                                            stroke={COLORS.primary}
+                                            fontSize={10}
+                                            width={65}
+                                        />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                                        <Bar dataKey="total_alumni" name="Total Alumni" fill={COLORS.info} radius={[0, 4, 4, 0]} />
+                                        <Bar dataKey="employed" name="Employed" fill={COLORS.success} radius={[0, 4, 4, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+
+                        {/* Job Alignment by College */}
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader>
+                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Job Alignment by College</CardTitle>
+                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                    Employed vs job-aligned alumni by college/department
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={280}>
+                                    <BarChart
+                                        data={comprehensiveData?.college_breakdown || []}
+                                        layout="vertical"
+                                        margin={{ top: 10, right: 20, left: 10, bottom: 5 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis type="number" stroke={COLORS.primary} fontSize={11} />
+                                        <YAxis
+                                            dataKey="college_code"
+                                            type="category"
+                                            stroke={COLORS.primary}
+                                            fontSize={10}
+                                            width={65}
+                                        />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                                        <Bar dataKey="employed" name="Employed" fill={COLORS.success} radius={[0, 4, 4, 0]} />
+                                        <Bar dataKey="aligned" name="Job Aligned" fill={COLORS.warning} radius={[0, 4, 4, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Course-level Table */}
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg mt-6">
+                        <CardHeader>
+                            <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Course Alumni & Employment Breakdown</CardTitle>
+                            <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                Alumni employment and job alignment by course/program (Top 15)
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {/* Mobile Card View */}
+                            <div className="md:hidden space-y-3">
+                                {comprehensiveData?.course_breakdown?.map((course, index) => (
+                                    <div key={index} className="border border-beige-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
+                                        <div className="font-medium text-maroon-700 dark:text-gray-300 text-sm">{course.course}</div>
+                                        <div className="text-xs text-gray-500 dark:text-gray-400">{course.college}</div>
+                                        <div className="grid grid-cols-2 gap-2 text-sm">
+                                            <div className="bg-beige-50 dark:bg-gray-800 rounded p-2">
+                                                <span className="text-gray-500 dark:text-gray-400 text-xs">Alumni</span>
+                                                <p className="font-semibold">{course.total_alumni}</p>
+                                            </div>
+                                            <div className="bg-beige-50 dark:bg-gray-800 rounded p-2">
+                                                <span className="text-gray-500 dark:text-gray-400 text-xs">Employed</span>
+                                                <p className="font-semibold">{course.employed}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${course.employment_rate >= 80 ? 'bg-green-100 text-green-700' : course.employment_rate >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                                                Emp: {course.employment_rate}%
+                                            </span>
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${course.alignment_rate >= 50 ? 'bg-green-100 text-green-700' : course.alignment_rate >= 25 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                                                Align: {course.alignment_rate}%
+                                            </span>
+                                            <span className="text-xs text-blue-600">Aligned: {course.aligned}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Desktop Table View */}
+                            <div className="hidden md:block overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-beige-200 dark:border-gray-700 bg-beige-50 dark:bg-gray-800">
+                                            <th className="text-left py-3 px-4 font-semibold text-maroon-800 dark:text-gray-200">Course</th>
+                                            <th className="text-left py-3 px-4 font-semibold text-maroon-800 dark:text-gray-200">College</th>
+                                            <th className="text-center py-3 px-4 font-semibold text-maroon-800 dark:text-gray-200">Alumni</th>
+                                            <th className="text-center py-3 px-4 font-semibold text-maroon-800 dark:text-gray-200">Employed</th>
+                                            <th className="text-center py-3 px-4 font-semibold text-maroon-800 dark:text-gray-200">Emp. Rate</th>
+                                            <th className="text-center py-3 px-4 font-semibold text-maroon-800 dark:text-gray-200">Aligned</th>
+                                            <th className="text-center py-3 px-4 font-semibold text-maroon-800 dark:text-gray-200">Align Rate</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {comprehensiveData?.course_breakdown?.map((course, index) => (
+                                            <tr key={index} className="border-b border-beige-100 dark:border-gray-700 hover:bg-beige-50/50 dark:hover:bg-gray-800 transition-colors">
+                                                <td className="py-3 px-4">
+                                                    <span className="font-medium text-maroon-700 dark:text-gray-300">{course.course}</span>
+                                                </td>
+                                                <td className="py-3 px-4 text-gray-600 dark:text-gray-400">{course.college}</td>
+                                                <td className="text-center py-3 px-4 font-medium">{course.total_alumni}</td>
+                                                <td className="text-center py-3 px-4">{course.employed}</td>
+                                                <td className="text-center py-3 px-4">
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${course.employment_rate >= 80 ? 'bg-green-100 text-green-700' :
+                                                        course.employment_rate >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                                                            'bg-red-100 text-red-700'
+                                                        }`}>
+                                                        {course.employment_rate}%
+                                                    </span>
+                                                </td>
+                                                <td className="text-center py-3 px-4 text-blue-600">{course.aligned}</td>
+                                                <td className="text-center py-3 px-4">
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${course.alignment_rate >= 50 ? 'bg-green-100 text-green-700' :
+                                                        course.alignment_rate >= 25 ? 'bg-yellow-100 text-yellow-700' :
+                                                            'bg-red-100 text-red-700'
+                                                        }`}>
+                                                        {course.alignment_rate}%
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Section 4: Performance Trends */}
+                <div className="space-y-4">
+                    <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                        <TrendingUp className="h-5 w-5 mr-2" />
+                        Performance Trends
+                    </h3>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Performance Indicator by Year */}
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader>
+                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Employment Performance by Year</CardTitle>
+                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                    Percentage of graduates employed within 2 years
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <LineChart
+                                        data={comprehensiveData?.performance_indicator.yearly_breakdown || []}
+                                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis dataKey="year" stroke={COLORS.primary} fontSize={12} />
+                                        <YAxis
+                                            stroke={COLORS.primary}
+                                            fontSize={12}
+                                            tickFormatter={(value) => `${value}%`}
+                                            domain={[0, 100]}
+                                        />
+                                        <Tooltip
+                                            formatter={(value: number) => [`${value}%`, 'Performance Rate']}
+                                        />
+                                        <Line
+                                            type="monotone"
+                                            dataKey="performance_rate"
+                                            stroke={COLORS.success}
+                                            strokeWidth={3}
+                                            dot={{ fill: COLORS.success, strokeWidth: 2, r: 4 }}
+                                            name="Performance Rate"
+                                        />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+
+                        {/* Time-to-Job Trend */}
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader>
+                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Time-to-Job Trend</CardTitle>
+                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                    Average days to secure employment by graduation year
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <AreaChart data={timeToJobData}>
+                                        <defs>
+                                            <linearGradient id="timeGradient" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.8} />
+                                                <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0.1} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                        <XAxis dataKey="graduation_year" stroke={COLORS.primary} fontSize={12} />
+                                        <YAxis stroke={COLORS.primary} fontSize={12} tickFormatter={(value) => `${value}d`} />
+                                        <Tooltip content={<CustomTooltip />} />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="avg_days_to_job"
+                                            stroke={COLORS.primary}
+                                            fillOpacity={1}
+                                            fill="url(#timeGradient)"
+                                            strokeWidth={2}
+                                            name="Avg Days to Job"
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+
+                {/* Section 5: Program-wise Performance Table */}
+                <div className="space-y-4">
+                    <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                        <Building className="h-5 w-5 mr-2" />
+                        Program-wise Performance
+                    </h3>
+
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                        <CardHeader>
+                            <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Detailed Program Metrics</CardTitle>
+                            <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                Employment and job alignment rates by degree program
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {/* Mobile Card View */}
+                            <div className="md:hidden space-y-3">
+                                {comprehensiveData?.program_performance.map((program, index) => (
+                                    <div key={index} className="border border-beige-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
+                                        <div className="flex items-center gap-2">
+                                            <GraduationCap className="h-4 w-4 text-maroon-600 dark:text-gray-400 flex-shrink-0" />
+                                            <span className="font-medium text-sm text-gray-900 dark:text-gray-100">{program.program}</span>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2 text-sm">
+                                            <div className="bg-beige-50 dark:bg-gray-800 rounded p-2 text-center">
+                                                <span className="text-gray-500 dark:text-gray-400 text-xs block">Alumni</span>
+                                                <p className="font-semibold">{program.total_alumni}</p>
+                                            </div>
+                                            <div className="bg-beige-50 dark:bg-gray-800 rounded p-2 text-center">
+                                                <span className="text-gray-500 dark:text-gray-400 text-xs block">Employed</span>
+                                                <p className="font-semibold">{program.employed}</p>
+                                            </div>
+                                            <div className="bg-beige-50 dark:bg-gray-800 rounded p-2 text-center">
+                                                <span className="text-gray-500 dark:text-gray-400 text-xs block">Avg Days</span>
+                                                <p className="font-semibold text-xs">{program.avg_days_to_job > 0 ? formatDays(program.avg_days_to_job) : 'N/A'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <Badge variant="outline" className={`text-xs ${program.employment_rate >= 75 ? 'bg-green-100 text-green-800 border-green-300' : program.employment_rate >= 50 ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-red-100 text-red-800 border-red-300'}`}>
+                                                Emp: {program.employment_rate}%
+                                            </Badge>
+                                            <Badge variant="outline" className={`text-xs ${program.alignment_rate >= 50 ? 'bg-blue-100 text-blue-800 border-blue-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}>
+                                                Align: {program.alignment_rate}%
+                                            </Badge>
+                                            <span className="text-xs text-gray-500 dark:text-gray-400">Aligned: {program.aligned}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Desktop Table View */}
+                            <div className="hidden md:block overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                    <thead className="bg-maroon-50 dark:bg-gray-800">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
+                                                Program
+                                            </th>
+                                            <th className="px-4 py-3 text-center text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
+                                                Alumni
+                                            </th>
+                                            <th className="px-4 py-3 text-center text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
+                                                Employed
+                                            </th>
+                                            <th className="px-4 py-3 text-center text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
+                                                Employment Rate
+                                            </th>
+                                            <th className="px-4 py-3 text-center text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
+                                                Job Aligned
+                                            </th>
+                                            <th className="px-4 py-3 text-center text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
+                                                Alignment Rate
+                                            </th>
+                                            <th className="px-4 py-3 text-center text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
+                                                Avg Days to Job
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                                        {comprehensiveData?.program_performance.map((program, index) => (
+                                            <tr key={index} className="hover:bg-maroon-50 dark:hover:bg-gray-800 transition-colors">
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    <div className="flex items-center">
+                                                        <GraduationCap className="h-4 w-4 text-maroon-600 dark:text-gray-400 mr-2" />
+                                                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 max-w-xs truncate">
+                                                            {program.program}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                                    <span className="text-sm text-gray-900 dark:text-gray-100">{program.total_alumni}</span>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                                    <span className="text-sm text-gray-900 dark:text-gray-100">{program.employed}</span>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                                    <Badge
+                                                        variant="outline"
+                                                        className={`${program.employment_rate >= 75
+                                                            ? 'bg-green-100 text-green-800 border-green-300'
+                                                            : program.employment_rate >= 50
+                                                                ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
+                                                                : 'bg-red-100 text-red-800 border-red-300'
+                                                            }`}
+                                                    >
+                                                        {program.employment_rate}%
+                                                    </Badge>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                                    <span className="text-sm text-gray-900 dark:text-gray-100">{program.aligned}</span>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                                    <Badge
+                                                        variant="outline"
+                                                        className={`${program.alignment_rate >= 50
+                                                            ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'
+                                                            }`}
+                                                    >
+                                                        {program.alignment_rate}%
+                                                    </Badge>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap text-center">
+                                                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                                                        {program.avg_days_to_job > 0 ? formatDays(program.avg_days_to_job) : 'N/A'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Section 5.5: Employment Location Analytics */}
+                {comprehensiveData?.employment_location && (
+                    <div className="space-y-4">
+                        <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                            <Globe className="h-5 w-5 mr-2" />
+                            Employment Location (Local vs Foreign)
+                        </h3>
+
+                        {/* Summary Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30">
+                                <CardContent className="p-6">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="p-2 bg-emerald-500 rounded-lg"><MapPin className="h-5 w-5 text-white" /></div>
+                                        <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Local (Philippines)</span>
+                                    </div>
+                                    <p className="text-3xl font-bold text-emerald-800 dark:text-emerald-200">{comprehensiveData.employment_location.summary.local}</p>
+                                    <p className="text-sm text-emerald-600 dark:text-emerald-400">{comprehensiveData.employment_location.summary.local_rate}% of employed</p>
+                                </CardContent>
+                            </Card>
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-950/30 dark:to-blue-950/30">
+                                <CardContent className="p-6">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="p-2 bg-sky-500 rounded-lg"><Globe className="h-5 w-5 text-white" /></div>
+                                        <span className="text-sm font-semibold text-sky-700 dark:text-sky-300">Foreign / OFW</span>
+                                    </div>
+                                    <p className="text-3xl font-bold text-sky-800 dark:text-sky-200">{comprehensiveData.employment_location.summary.foreign}</p>
+                                    <p className="text-sm text-sky-600 dark:text-sky-400">{comprehensiveData.employment_location.summary.foreign_rate}% working abroad</p>
+                                </CardContent>
+                            </Card>
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/30">
+                                <CardContent className="p-6">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="p-2 bg-violet-500 rounded-lg"><Briefcase className="h-5 w-5 text-white" /></div>
+                                        <span className="text-sm font-semibold text-violet-700 dark:text-violet-300">Remote (Foreign Co.)</span>
+                                    </div>
+                                    <p className="text-3xl font-bold text-violet-800 dark:text-violet-200">{comprehensiveData.employment_location.summary.remote}</p>
+                                    <p className="text-sm text-violet-600 dark:text-violet-400">{comprehensiveData.employment_location.summary.remote_rate}% remote work</p>
                                 </CardContent>
                             </Card>
                         </div>
 
-                        {/* Job Mismatch Stats */}
-                        {jobMismatchStats && (
-                            <>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                    <Card className="border-beige-200 shadow-lg">
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium text-maroon-800">Overqualified</CardTitle>
-                                            <TrendingUp className="h-4 w-4 text-orange-600" />
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="text-2xl font-bold text-maroon-800">
-                                                {jobMismatchStats.overqualified_count}
-                                            </div>
-                                            <p className="text-xs text-maroon-600 mt-1">
-                                                {jobMismatchStats.overqualified_percentage}% of employed alumni
-                                            </p>
-                                            <Badge variant="outline" className="mt-2 text-orange-600 border-orange-300">
-                                                Job requires less education
-                                            </Badge>
-                                        </CardContent>
-                                    </Card>
+                        {/* Yearly Trend Chart */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                <CardHeader>
+                                    <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Location Trend by Year</CardTitle>
+                                    <CardDescription className="text-maroon-600 dark:text-gray-400">Employment location distribution per graduation year</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <BarChart data={comprehensiveData.employment_location.yearly_trend} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                            <XAxis dataKey="year" stroke={COLORS.primary} fontSize={12} />
+                                            <YAxis stroke={COLORS.primary} fontSize={12} />
+                                            <Tooltip content={<CustomTooltip />} />
+                                            <Legend />
+                                            <Bar dataKey="local" stackId="location" fill="#10B981" name="Local" radius={[0, 0, 0, 0]} />
+                                            <Bar dataKey="foreign" stackId="location" fill="#0EA5E9" name="Foreign/OFW" radius={[0, 0, 0, 0]} />
+                                            <Bar dataKey="remote" stackId="location" fill="#8B5CF6" name="Remote" radius={[4, 4, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
 
-                                    <Card className="border-beige-200 shadow-lg">
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium text-maroon-800">Unfit/Mismatch</CardTitle>
-                                            <Briefcase className="h-4 w-4 text-red-600" />
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="text-2xl font-bold text-maroon-800">
-                                                {jobMismatchStats.unfit_count}
-                                            </div>
-                                            <p className="text-xs text-maroon-600 mt-1">
-                                                {jobMismatchStats.unfit_percentage}% of employed alumni
-                                            </p>
-                                            <Badge variant="outline" className="mt-2 text-red-600 border-red-300">
-                                                Job not related to degree
-                                            </Badge>
-                                        </CardContent>
-                                    </Card>
+                            {/* Department Breakdown */}
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                <CardHeader>
+                                    <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Location by Department</CardTitle>
+                                    <CardDescription className="text-maroon-600 dark:text-gray-400">Where each department's alumni work</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <BarChart
+                                            data={comprehensiveData.employment_location.department_breakdown}
+                                            layout="vertical"
+                                            margin={{ top: 10, right: 10, left: 20, bottom: 5 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                            <XAxis type="number" stroke={COLORS.primary} fontSize={12} />
+                                            <YAxis dataKey="department" type="category" stroke={COLORS.primary} fontSize={10} width={120} />
+                                            <Tooltip content={<CustomTooltip />} />
+                                            <Legend />
+                                            <Bar dataKey="local" stackId="loc" fill="#10B981" name="Local" />
+                                            <Bar dataKey="foreign" stackId="loc" fill="#0EA5E9" name="Foreign" />
+                                            <Bar dataKey="remote" stackId="loc" fill="#8B5CF6" name="Remote" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                )}
 
-                                    <Card className="border-beige-200 shadow-lg">
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium text-maroon-800">Underqualified</CardTitle>
-                                            <TrendingDown className="h-4 w-4 text-blue-600" />
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="text-2xl font-bold text-maroon-800">
-                                                {jobMismatchStats.underqualified_count}
-                                            </div>
-                                            <p className="text-xs text-maroon-600 mt-1">
-                                                {jobMismatchStats.underqualified_percentage}% of employed alumni
-                                            </p>
-                                            <Badge variant="outline" className="mt-2 text-blue-600 border-blue-300">
-                                                Job requires more education
-                                            </Badge>
-                                        </CardContent>
-                                    </Card>
+                {/* Section 6: System Overview (only for super_admin) */}
+                {user.role === 'super_admin' && dashboardStats && (
+                    <div className="space-y-4">
+                        <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                            <Activity className="h-5 w-5 mr-2" />
+                            System Overview
+                        </h3>
 
-                                    <Card className="border-beige-200 shadow-lg">
-                                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                            <CardTitle className="text-sm font-medium text-maroon-800">Good Match</CardTitle>
-                                            <Users className="h-4 w-4 text-green-600" />
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="text-2xl font-bold text-maroon-800">
-                                                {jobMismatchStats.good_match_count}
-                                            </div>
-                                            <p className="text-xs text-maroon-600 mt-1">
-                                                {jobMismatchStats.good_match_percentage}% of employed alumni
-                                            </p>
-                                            <Badge variant="outline" className="mt-2 text-green-600 border-green-300">
-                                                Perfect job match
-                                            </Badge>
-                                        </CardContent>
-                                    </Card>
-                                </div>
-
-                                {/* Job Mismatch Charts */}
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    <Card className="border-beige-200 shadow-lg">
-                                        <CardHeader>
-                                            <CardTitle className="text-xl text-maroon-800">Job Qualification Match Distribution</CardTitle>
-                                            <CardDescription className="text-maroon-600">
-                                                Breakdown of job matches among employed alumni
-                                            </CardDescription>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <ResponsiveContainer width="100%" height={300}>
-                                                <BarChart
-                                                    data={[
-                                                        { name: 'Good Match', value: jobMismatchStats.good_match_count, color: COLORS.success },
-                                                        { name: 'Overqualified', value: jobMismatchStats.overqualified_count, color: COLORS.warning },
-                                                        { name: 'Unfit', value: jobMismatchStats.unfit_count, color: COLORS.danger },
-                                                        { name: 'Underqualified', value: jobMismatchStats.underqualified_count, color: COLORS.info },
-                                                    ]}
-                                                >
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                                    <XAxis dataKey="name" stroke={COLORS.primary} fontSize={12} />
-                                                    <YAxis stroke={COLORS.primary} fontSize={12} />
-                                                    <Tooltip content={<CustomTooltip />} />
-                                                    <Bar dataKey="value" radius={[4, 4, 0, 0]} name="Alumni Count">
-                                                        {[
-                                                            { name: 'Good Match', value: jobMismatchStats.good_match_count, color: COLORS.success },
-                                                            { name: 'Overqualified', value: jobMismatchStats.overqualified_count, color: COLORS.warning },
-                                                            { name: 'Unfit', value: jobMismatchStats.unfit_count, color: COLORS.danger },
-                                                            { name: 'Underqualified', value: jobMismatchStats.underqualified_count, color: COLORS.info },
-                                                        ].map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={entry.color} />
-                                                        ))}
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </CardContent>
-                                    </Card>
-
-                                    <Card className="border-beige-200 shadow-lg">
-                                        <CardHeader>
-                                            <CardTitle className="text-xl text-maroon-800">Program Performance Comparison</CardTitle>
-                                            <CardDescription className="text-maroon-600">
-                                                Average time-to-job by degree program (most recent year)
-                                            </CardDescription>
-                                            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                                <p className="text-sm text-blue-900 flex items-start">
-                                                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-xs font-bold mr-2 mt-0.5 flex-shrink-0">i</span>
-                                                    <span>
-                                                        <strong>Negative values indicate jobs secured BEFORE graduation</strong> (e.g., -1274 days = ~3.5 years before graduation).
-                                                        This shows successful internships, early hiring, and strong industry connections. More negative = better performance.
-                                                    </span>
-                                                </p>
-                                            </div>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <ResponsiveContainer width="100%" height={300}>
-                                                <BarChart
-                                                    data={timeToJobData[timeToJobData.length - 1]?.program_breakdown || []}
-                                                    margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
-                                                >
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                                    <XAxis
-                                                        dataKey="program"
-                                                        stroke={COLORS.primary}
-                                                        fontSize={12}
-                                                        angle={-45}
-                                                        textAnchor="end"
-                                                        height={100}
-                                                    />
-                                                    <YAxis stroke={COLORS.primary} fontSize={12} tickFormatter={(value) => `${value}d`} />
-                                                    <Tooltip content={<CustomTooltip />} labelFormatter={(label) => `Program: ${label}`} />
-                                                    <Bar dataKey="avg_days" name="Avg Days to Job" radius={[4, 4, 0, 0]}>
-                                                        {(timeToJobData[timeToJobData.length - 1]?.program_breakdown || []).map((entry, index) => (
-                                                            <Cell key={`cell-${index}`} fill={entry.color || COLORS.primary} />
-                                                        ))}
-                                                    </Bar>
-                                                </BarChart>
-                                            </ResponsiveContainer>
-                                        </CardContent>
-                                    </Card>
-                                </div>
-                            </>
-                        )}
-                    </TabsContent>
-
-                    {/* System Analytics Tab (Super Admin Only) */}
-                    {user.role === 'super_admin' && (
-                        <TabsContent value="system" className="space-y-6">
-                            {/* Header with Time Range Selector */}
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h3 className="text-xl font-bold text-maroon-800">System-Wide Metrics</h3>
-                                    <p className="text-sm text-maroon-600">Comprehensive system performance and trends</p>
-                                </div>
-                                <select
-                                    value={timeRange}
-                                    onChange={(e) => setTimeRange(e.target.value as 'week' | 'month' | 'year')}
-                                    className="px-4 py-2 border border-maroon-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500"
-                                >
-                                    <option value="week">Last Week</option>
-                                    <option value="month">Last Month</option>
-                                    <option value="year">Last Year</option>
-                                </select>
-                            </div>
-
-                            {/* Key System Metrics - Only show if data is available */}
-                            {systemStats && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                                    <Card className="border-beige-200 shadow-lg">
-                                        <CardContent className="p-6">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <div className="p-3 bg-blue-100 rounded-lg">
-                                                    <Users className="h-6 w-6 text-blue-600" />
-                                                </div>
-                                                <div className={`flex items-center space-x-1 ${getSystemTrendColor(systemStats.userGrowth)}`}>
-                                                    {getSystemTrendIcon(systemStats.userGrowth)}
-                                                    <span className="text-sm font-semibold">{Math.abs(systemStats.userGrowth)}%</span>
-                                                </div>
-                                            </div>
-                                            <p className="text-sm font-medium text-gray-600">Total Users</p>
-                                            <p className="text-3xl font-bold text-gray-900 mt-1">{systemStats.totalUsers.toLocaleString()}</p>
-                                            <p className="text-xs text-gray-500 mt-2">+{systemStats.recentRegistrations} this {timeRange}</p>
-                                        </CardContent>
-                                    </Card>
-
-                                    <Card className="border-beige-200 shadow-lg">
-                                        <CardContent className="p-6">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <div className="p-3 bg-green-100 rounded-lg">
-                                                    <GraduationCap className="h-6 w-6 text-green-600" />
-                                                </div>
-                                                <div className={`flex items-center space-x-1 ${getSystemTrendColor(8.2)}`}>
-                                                    {getSystemTrendIcon(8.2)}
-                                                    <span className="text-sm font-semibold">8.2%</span>
-                                                </div>
-                                            </div>
-                                            <p className="text-sm font-medium text-gray-600">Total Alumni</p>
-                                            <p className="text-3xl font-bold text-gray-900 mt-1">{systemStats.totalAlumni.toLocaleString()}</p>
-                                            <p className="text-xs text-gray-500 mt-2">Registered alumni</p>
-                                        </CardContent>
-                                    </Card>
-
-                                    <Card className="border-beige-200 shadow-lg">
-                                        <CardContent className="p-6">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <div className="p-3 bg-purple-100 rounded-lg">
-                                                    <Building className="h-6 w-6 text-purple-600" />
-                                                </div>
-                                                <div className={`flex items-center space-x-1 ${getSystemTrendColor(0)}`}>
-                                                    {getSystemTrendIcon(0)}
-                                                    <span className="text-sm font-semibold">0%</span>
-                                                </div>
-                                            </div>
-                                            <p className="text-sm font-medium text-gray-600">Departments</p>
-                                            <p className="text-3xl font-bold text-gray-900 mt-1">{systemStats.totalDepartments}</p>
-                                            <p className="text-xs text-gray-500 mt-2">{systemStats.totalCourses} total courses</p>
-                                        </CardContent>
-                                    </Card>
-
-                                    <Card className="border-beige-200 shadow-lg">
-                                        <CardContent className="p-6">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <div className="p-3 bg-orange-100 rounded-lg">
-                                                    <ClipboardList className="h-6 w-6 text-orange-600" />
-                                                </div>
-                                                <div className={`flex items-center space-x-1 ${getSystemTrendColor(5.4)}`}>
-                                                    {getSystemTrendIcon(5.4)}
-                                                    <span className="text-sm font-semibold">5.4%</span>
-                                                </div>
-                                            </div>
-                                            <p className="text-sm font-medium text-gray-600">Surveys</p>
-                                            <p className="text-3xl font-bold text-gray-900 mt-1">{systemStats.totalSurveys}</p>
-                                            <p className="text-xs text-gray-500 mt-2">{systemStats.activeSurveys} active</p>
-                                        </CardContent>
-                                    </Card>
-                                </div>
-                            )}
-
-                            {/* Activity Overview - Only show if data is available */}
-                            {activityData.length > 0 && (
-                                <Card className="border-beige-200 shadow-lg">
-                                    <CardHeader>
-                                        <CardTitle className="text-xl text-maroon-800">Recent Activity</CardTitle>
-                                        <CardDescription className="text-maroon-600">
-                                            Daily activity breakdown
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="space-y-4">
-                                            <div className="grid grid-cols-4 gap-4 pb-2 border-b border-gray-200 text-sm font-medium text-gray-600">
-                                                <div>Date</div>
-                                                <div className="text-center">Active Users</div>
-                                                <div className="text-center">Survey Responses</div>
-                                                <div className="text-center">New Registrations</div>
-                                            </div>
-                                            {activityData.map((day, index) => (
-                                                <div key={index} className="grid grid-cols-4 gap-4 py-3 border-b border-gray-100 hover:bg-gray-50">
-                                                    <div className="flex items-center space-x-2">
-                                                        <Calendar className="h-4 w-4 text-gray-400" />
-                                                        <span className="text-sm text-gray-900">{new Date(day.date).toLocaleDateString()}</span>
-                                                    </div>
-                                                    <div className="text-center">
-                                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                                                            {day.users}
-                                                        </span>
-                                                    </div>
-                                                    <div className="text-center">
-                                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                                                            {day.surveys}
-                                                        </span>
-                                                    </div>
-                                                    <div className="text-center">
-                                                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
-                                                            {day.registrations}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            ))}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                <CardContent className="p-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="p-3 bg-blue-100 rounded-lg">
+                                            <Users className="h-6 w-6 text-blue-600" />
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            )}
+                                    </div>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Users</p>
+                                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                                        {dashboardStats.overview.total_users || 0}
+                                    </p>
+                                </CardContent>
+                            </Card>
 
-                            {/* Department Performance - Only show if data is available */}
-                            {departmentStats.length > 0 && (
-                                <Card className="border-beige-200 shadow-lg">
-                                    <CardHeader>
-                                        <CardTitle className="text-xl text-maroon-800">Department Performance</CardTitle>
-                                        <CardDescription className="text-maroon-600">
-                                            Student enrollment and growth by department
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="overflow-x-auto">
-                                            <table className="min-w-full">
-                                                <thead>
-                                                    <tr className="border-b border-gray-200">
-                                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                            Department
-                                                        </th>
-                                                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                            Students
-                                                        </th>
-                                                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                            Courses
-                                                        </th>
-                                                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                            Growth
-                                                        </th>
-                                                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                            Trend
-                                                        </th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-gray-100">
-                                                    {departmentStats.map((dept, index) => (
-                                                        <tr key={index} className="hover:bg-gray-50">
-                                                            <td className="px-4 py-4">
-                                                                <div className="flex items-center space-x-3">
-                                                                    <div className="p-2 bg-maroon-100 rounded-lg">
-                                                                        <Building className="h-5 w-5 text-maroon-600" />
-                                                                    </div>
-                                                                    <div>
-                                                                        <p className="text-sm font-medium text-gray-900">{dept.name}</p>
-                                                                        <p className="text-xs text-gray-500">{dept.code}</p>
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-4 text-center">
-                                                                <span className="text-sm font-semibold text-gray-900">{dept.students}</span>
-                                                            </td>
-                                                            <td className="px-4 py-4 text-center">
-                                                                <span className="text-sm font-semibold text-gray-900">{dept.courses}</span>
-                                                            </td>
-                                                            <td className="px-4 py-4 text-center">
-                                                                <span className={`text-sm font-semibold ${getSystemTrendColor(dept.growth)}`}>
-                                                                    {dept.growth > 0 ? '+' : ''}{dept.growth}%
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-4 py-4 text-right">
-                                                                <div className="flex items-center justify-end">
-                                                                    {getSystemTrendIcon(dept.growth)}
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                <CardContent className="p-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="p-3 bg-purple-100 rounded-lg">
+                                            <Building className="h-6 w-6 text-purple-600" />
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            )}
+                                    </div>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Departments</p>
+                                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                                        {dashboardStats.overview.total_departments || 0}
+                                    </p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                        {dashboardStats.overview.total_courses || 0} total courses
+                                    </p>
+                                </CardContent>
+                            </Card>
 
-                            {/* Quick Stats Grid - Only show if data is available */}
-                            {systemStats && (
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <Card className="bg-gradient-to-br from-blue-500 to-blue-600 border-0">
-                                        <CardContent className="p-6 text-white">
-                                            <Activity className="h-8 w-8 mb-4 opacity-80" />
-                                            <p className="text-sm opacity-90">Total Activity</p>
-                                            <p className="text-3xl font-bold mt-2">{systemStats.totalActivity.toLocaleString()}</p>
-                                            <p className="text-xs opacity-80 mt-2">System actions this {timeRange}</p>
-                                        </CardContent>
-                                    </Card>
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                <CardContent className="p-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="p-3 bg-orange-100 rounded-lg">
+                                            <ClipboardList className="h-6 w-6 text-orange-600" />
+                                        </div>
+                                    </div>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Surveys</p>
+                                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                                        {dashboardStats.overview.total_surveys || 0}
+                                    </p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                        {dashboardStats.overview.active_surveys || 0} active
+                                    </p>
+                                </CardContent>
+                            </Card>
 
-                                    <Card className="bg-gradient-to-br from-green-500 to-green-600 border-0">
-                                        <CardContent className="p-6 text-white">
-                                            <TrendingUp className="h-8 w-8 mb-4 opacity-80" />
-                                            <p className="text-sm opacity-90">Engagement Rate</p>
-                                            <p className="text-3xl font-bold mt-2">{systemStats.engagementRate}%</p>
-                                            <p className="text-xs opacity-80 mt-2">Alumni engagement</p>
-                                        </CardContent>
-                                    </Card>
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                <CardContent className="p-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="p-3 bg-green-100 rounded-lg">
+                                            <BarChart3 className="h-6 w-6 text-green-600" />
+                                        </div>
+                                    </div>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Response Rate</p>
+                                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                                        {dashboardStats.overview.response_rate?.toFixed(1) || 0}%
+                                    </p>
+                                    <div className="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                        <div
+                                            className="bg-green-600 h-2 rounded-full transition-all"
+                                            style={{ width: `${Math.min(dashboardStats.overview.response_rate || 0, 100)}%` }}
+                                        ></div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                )}
 
-                                    <Card className="bg-gradient-to-br from-purple-500 to-purple-600 border-0">
-                                        <CardContent className="p-6 text-white">
-                                            <BarChart3 className="h-8 w-8 mb-4 opacity-80" />
-                                            <p className="text-sm opacity-90">Completion Rate</p>
-                                            <p className="text-3xl font-bold mt-2">{systemStats.completionRate}%</p>
-                                            <p className="text-xs opacity-80 mt-2">Survey completion</p>
-                                        </CardContent>
-                                    </Card>
-                                </div>
-                            )}
-                        </TabsContent>
-                    )}
-                </Tabs>
+                {/* Section 7: Additional Charts */}
+                {dashboardStats && (
+                    <div className="space-y-4">
+                        <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                            <BarChart3 className="h-5 w-5 mr-2" />
+                            Additional Insights
+                        </h3>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Employment Status Distribution */}
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                <CardHeader>
+                                    <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Employment Status Distribution</CardTitle>
+                                    <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                        Current employment breakdown
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <ResponsiveContainer width="100%" height={280}>
+                                        <BarChart
+                                            data={Object.entries(dashboardStats.employment_stats).map(([key, value]) => {
+                                                const statusLabels: Record<string, string> = {
+                                                    'employed_full_time': 'Full Time',
+                                                    'employed_part_time': 'Part Time',
+                                                    'self_employed': 'Self Emp.',
+                                                    'unemployed_seeking': 'Seeking',
+                                                    'unemployed_not_seeking': 'Not Seeking',
+                                                    'continuing_education': 'Education',
+                                                    'other': 'Other'
+                                                };
+                                                return {
+                                                    status: statusLabels[key] || key,
+                                                    count: value,
+                                                };
+                                            })}
+                                            margin={{ top: 10, right: 10, left: 0, bottom: 50 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                            <XAxis
+                                                dataKey="status"
+                                                stroke={COLORS.primary}
+                                                fontSize={10}
+                                                angle={-45}
+                                                textAnchor="end"
+                                                height={55}
+                                            />
+                                            <YAxis stroke={COLORS.primary} fontSize={11} />
+                                            <Tooltip content={<CustomTooltip />} />
+                                            <Bar dataKey="count" fill={COLORS.primary} radius={[4, 4, 0, 0]} name="Alumni Count" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+
+                            {/* Batch Distribution */}
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                <CardHeader>
+                                    <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Batch Distribution</CardTitle>
+                                    <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                        Alumni count by graduation batch
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <ResponsiveContainer width="100%" height={280}>
+                                        <BarChart
+                                            data={dashboardStats.batch_distribution}
+                                            margin={{ top: 10, right: 10, left: 10, bottom: 5 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                            <XAxis dataKey="batch_name" stroke={COLORS.primary} fontSize={12} />
+                                            <YAxis stroke={COLORS.primary} fontSize={12} />
+                                            <Tooltip content={<CustomTooltip />} />
+                                            <Bar dataKey="alumni_count" fill={COLORS.secondary} radius={[4, 4, 0, 0]} name="Alumni Count" />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+                        </div>
+                    </div>
+                )}
             </div>
         </AdminBaseLayout>
     );

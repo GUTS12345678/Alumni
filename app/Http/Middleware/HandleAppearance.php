@@ -21,7 +21,11 @@ class HandleAppearance
         View::share('appearance', $request->cookie('appearance') ?? 'system');
         
         // Share full appearance settings for logos and favicon
-        $appearanceSettings = DB::table('system_appearance_settings')->first();
+        try {
+            $appearanceSettings = DB::table('system_appearance_settings')->first();
+        } catch (\Exception $e) {
+            $appearanceSettings = null;
+        }
         View::share('appearanceSettings', $appearanceSettings);
 
         return $next($request);

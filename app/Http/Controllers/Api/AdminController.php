@@ -14,6 +14,7 @@ use App\Models\EmailTemplate;
 use App\Models\AdminSetting;
 use App\Models\Department;
 use App\Models\Course;
+use App\Services\EmailNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -108,7 +109,14 @@ class AdminController extends Controller
                 ->pluck('count', 'employment_status');
 
             // Recent surveys
-            $recentSurveysQuery = Survey::with('creator:id,email');
+            // Recent surveys — eager-load creator and count completed responses to avoid N+1
+            $recentSurveysQuery = Survey::with('creator:id,email')
+                ->withCount(['responses as responses_count' => function ($q) use ($campusId) {
+                    $q->where('status', 'completed');
+                    if ($campusId) {
+                        $q->where('campus_id', $campusId);
+                    }
+                }]);
             if ($campusId) {
                 $recentSurveysQuery->where(function($q) use ($campusId) {
                     $q->where('campus_id', $campusId)->orWhere('is_multi_campus', true);
@@ -117,18 +125,14 @@ class AdminController extends Controller
             $recentSurveys = $recentSurveysQuery->orderBy('created_at', 'desc')
                 ->take(5)
                 ->get()
-                ->map(function ($survey) use ($campusId) {
-                    $responsesQuery = $survey->responses()->where('status', 'completed');
-                    if ($campusId) {
-                        $responsesQuery->where('campus_id', $campusId);
-                    }
+                ->map(function ($survey) {
                     return [
                         'id' => $survey->id,
                         'title' => $survey->title,
                         'status' => $survey->status,
                         'created_by' => $survey->creator->email ?? 'Unknown',
                         'created_at' => $survey->created_at->format('Y-m-d H:i:s'),
-                        'responses_count' => $responsesQuery->count()
+                        'responses_count' => $survey->responses_count
                     ];
                 });
 
@@ -183,21 +187,25 @@ class AdminController extends Controller
             $validRecords = 0;
             
             foreach ($alumniWithJobDates as $alumni) {
-                // Assume graduation date is June 1st of graduation year
-                $graduationDate = Carbon::parse($alumni->graduation_year . '-06-01');
+                // Use actual graduation_date if available, otherwise assume June 1st
+                $graduationDate = $alumni->graduation_date 
+                    ? Carbon::parse($alumni->graduation_date)
+                    : Carbon::parse($alumni->graduation_year . '-06-01');
                 $jobStartDate = Carbon::parse($alumni->job_start_date);
                 
-                // Only count if job started after graduation
+                // Only count if job started after graduation AND within 5 years (1825 days)
                 if ($jobStartDate->greaterThanOrEqualTo($graduationDate)) {
                     $daysToJob = $graduationDate->diffInDays($jobStartDate);
-                    $totalDays += $daysToJob;
-                    $validRecords++;
+                    if ($daysToJob <= 1825) { // 5-year cap to filter outliers
+                        $totalDays += $daysToJob;
+                        $validRecords++;
+                    }
                 }
             }
             
             $avgDaysToJob = $validRecords > 0 ? round($totalDays / $validRecords) : 0;
 
-            // 3. Job Alignment Analysis
+            // 3. Job Alignment Analysis — standardized: aligned = NULL or 'none' job_mismatch_reason
             $alignmentQuery = AlumniProfile::whereIn('employment_status', [
                 'employed_full_time', 
                 'employed_part_time', 
@@ -207,7 +215,10 @@ class AdminController extends Controller
                 $alignmentQuery->where('campus_id', $campusId);
             }
             
-            $alignedJobs = (clone $alignmentQuery)->where('job_related_to_degree', 1)->count();
+            $alignedJobs = (clone $alignmentQuery)->where(function($q) {
+                $q->whereNull('job_mismatch_reason')
+                  ->orWhere('job_mismatch_reason', 'none');
+            })->count();
             $jobAlignmentRate = $totalEmployed > 0 ? round(($alignedJobs / $totalEmployed) * 100, 2) : 0;
 
             // 4. Job Mismatch Breakdown
@@ -218,7 +229,7 @@ class AdminController extends Controller
                 'good_match' => (clone $alignmentQuery)->where(function($q) {
                     $q->whereNull('job_mismatch_reason')
                       ->orWhere('job_mismatch_reason', 'none');
-                })->where('job_related_to_degree', 1)->count()
+                })->count()
             ];
 
             // 5. Unemployment Breakdown
@@ -229,7 +240,20 @@ class AdminController extends Controller
             $unemploymentStats = [
                 'seeking' => (clone $unemployedQuery)->where('employment_status', 'unemployed_seeking')->count(),
                 'not_seeking' => (clone $unemployedQuery)->where('employment_status', 'unemployed_not_seeking')->count(),
-                'continuing_education' => (clone $unemployedQuery)->where('employment_status', 'pursuing_higher_education')->count()
+                'continuing_education' => (clone $unemployedQuery)->where('employment_status', 'continuing_education')->count()
+            ];
+
+            // 6. Employment Location Breakdown (Local vs Foreign)
+            $locationQuery = AlumniProfile::whereIn('employment_status', [
+                'employed_full_time', 'employed_part_time', 'self_employed'
+            ]);
+            if ($campusId) {
+                $locationQuery->where('campus_id', $campusId);
+            }
+            $employmentLocationStats = [
+                'local' => (clone $locationQuery)->where('employment_location_type', 'local')->count(),
+                'foreign' => (clone $locationQuery)->where('employment_location_type', 'foreign')->count(),
+                'remote' => (clone $locationQuery)->where('employment_location_type', 'remote')->count(),
             ];
 
             return response()->json([
@@ -255,6 +279,7 @@ class AdminController extends Controller
                     ],
                     'mismatch_stats' => $mismatchStats,
                     'unemployment_stats' => $unemploymentStats,
+                    'employment_location_stats' => $employmentLocationStats,
                     'recent_activity' => [
                         'recent_registrations' => $recentRegistrations,
                         'recent_responses' => $recentResponses
@@ -372,26 +397,55 @@ class AdminController extends Controller
                 });
             }
 
-            // Sorting options
-            $sortBy = $request->get('sort_by', 'created_at');
-            $sortOrder = $request->get('sort_order', 'desc');
+            // Sorting options - handle both old format (sort_by/sort_order) and new format (sort)
+            if ($request->has('sort') && $request->sort) {
+                $sort = $request->sort;
+                switch ($sort) {
+                    case 'name_asc':
+                        $query->orderBy('first_name', 'asc')->orderBy('last_name', 'asc');
+                        break;
+                    case 'name_desc':
+                        $query->orderBy('first_name', 'desc')->orderBy('last_name', 'desc');
+                        break;
+                    case 'grad_year_desc':
+                        $query->leftJoin('batches', 'alumni_profiles.batch_id', '=', 'batches.id')
+                            ->orderBy('batches.graduation_year', 'desc')
+                            ->select('alumni_profiles.*');
+                        break;
+                    case 'grad_year_asc':
+                        $query->leftJoin('batches', 'alumni_profiles.batch_id', '=', 'batches.id')
+                            ->orderBy('batches.graduation_year', 'asc')
+                            ->select('alumni_profiles.*');
+                        break;
+                    case 'recent':
+                        $query->orderBy('updated_at', 'desc');
+                        break;
+                    default:
+                        $query->orderBy('created_at', 'desc');
+                        break;
+                }
+            } else {
+                // Fallback to old sorting format for backward compatibility
+                $sortBy = $request->get('sort_by', 'created_at');
+                $sortOrder = $request->get('sort_order', 'desc');
 
-            switch ($sortBy) {
-                case 'name':
-                    $query->orderBy('first_name', $sortOrder)->orderBy('last_name', $sortOrder);
-                    break;
-                case 'graduation_year':
-                    $query->whereHas('batch', function ($q) use ($sortOrder) {
-                        $q->orderBy('graduation_year', $sortOrder);
-                    });
-                    break;
-                case 'employment_status':
-                    $query->orderBy('employment_status', $sortOrder);
-                    break;
-                case 'created_at':
-                default:
-                    $query->orderBy('created_at', $sortOrder);
-                    break;
+                switch ($sortBy) {
+                    case 'name':
+                        $query->orderBy('first_name', $sortOrder)->orderBy('last_name', $sortOrder);
+                        break;
+                    case 'graduation_year':
+                        $query->leftJoin('batches', 'alumni_profiles.batch_id', '=', 'batches.id')
+                            ->orderBy('batches.graduation_year', $sortOrder)
+                            ->select('alumni_profiles.*');
+                        break;
+                    case 'employment_status':
+                        $query->orderBy('employment_status', $sortOrder);
+                        break;
+                    case 'created_at':
+                    default:
+                        $query->orderBy('created_at', $sortOrder);
+                        break;
+                }
             }
 
             // Pagination
@@ -565,13 +619,26 @@ class AdminController extends Controller
     public function getSurveys(Request $request): JsonResponse
     {
         try {
+            $campusId = $request->input('campus_id');
+            
             $query = Survey::with(['creator:id,email'])
-                ->withCount(['responses', 'questions'])
-                ->orderBy('created_at', 'desc');
+                ->withCount(['questions']);
+
+            // Add campus-filtered responses count
+            if ($campusId) {
+                $query->withCount(['responses as responses_count' => function ($query) use ($campusId) {
+                    $query->whereHas('user', function ($q) use ($campusId) {
+                        $q->where('campus_id', $campusId);
+                    });
+                }]);
+            } else {
+                $query->withCount(['responses as responses_count']);
+            }
+
+            $query->orderBy('created_at', 'desc');
 
             // Filter by campus
-            if ($request->has('campus_id') && $request->campus_id) {
-                $campusId = $request->campus_id;
+            if ($campusId) {
                 $query->where(function ($q) use ($campusId) {
                     $q->where('campus_id', $campusId)
                       ->orWhere('is_multi_campus', true)
@@ -865,6 +932,13 @@ class AdminController extends Controller
 
             $batches = $query->paginate($perPage);
 
+            // Get total alumni count across all batches (not just current page)
+            $totalAlumniQuery = AlumniProfile::query();
+            if ($campusId) {
+                $totalAlumniQuery->where('campus_id', $campusId);
+            }
+            $totalAlumniCount = $totalAlumniQuery->count();
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -875,6 +949,7 @@ class AdminController extends Controller
                     'total' => $batches->total(),
                     'from' => $batches->firstItem(),
                     'to' => $batches->lastItem(),
+                    'total_alumni' => $totalAlumniCount,
                 ]
             ]);
         } catch (\Exception $e) {
@@ -1321,7 +1396,7 @@ class AdminController extends Controller
     public function createSurvey(Request $request): JsonResponse
     {
         try {
-            $request->validate([
+            $validator = \Validator::make($request->all(), [
                 'title' => 'required|string|max:255',
                 'description' => 'nullable|string',
                 'instructions' => 'nullable|string',
@@ -1340,6 +1415,14 @@ class AdminController extends Controller
                 'send_reminder_emails' => 'boolean',
                 'reminder_interval_days' => 'nullable|integer|min:1|max:30',
             ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
 
             $survey = Survey::create([
                 'title' => $request->title,
@@ -1362,9 +1445,24 @@ class AdminController extends Controller
                 'created_by' => $request->user()->id,
             ]);
 
+            // Send email notifications if survey is active
+            $emailInfo = '';
+            if ($survey->status === 'active') {
+                try {
+                    $emailService = app(EmailNotificationService::class);
+                    $emailResult = $emailService->sendSurveyNotificationBulk($survey);
+                    
+                    $emailInfo = $emailResult['success'] 
+                        ? " Email invitations queued for {$emailResult['total_recipients']} alumni."
+                        : '';
+                } catch (\Exception $e) {
+                    \Log::error('Failed to send survey emails: ' . $e->getMessage());
+                }
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Survey created successfully',
+                'message' => 'Survey created successfully' . $emailInfo,
                 'data' => $survey->load('creator:id,email')
             ], 201);
         } catch (\Exception $e) {
@@ -1383,6 +1481,7 @@ class AdminController extends Controller
     {
         try {
             $survey = Survey::findOrFail($id);
+            $wasNotActive = $survey->status !== 'active';
 
             $request->validate([
                 'title' => 'sometimes|required|string|max:255',
@@ -1424,9 +1523,24 @@ class AdminController extends Controller
                 'reminder_interval_days'
             ]));
 
+            // Send email notifications if survey was just activated
+            $emailInfo = '';
+            if ($wasNotActive && $survey->status === 'active') {
+                try {
+                    $emailService = app(EmailNotificationService::class);
+                    $emailResult = $emailService->sendSurveyNotificationBulk($survey);
+                    
+                    $emailInfo = $emailResult['success'] 
+                        ? " Email invitations queued for {$emailResult['total_recipients']} alumni."
+                        : '';
+                } catch (\Exception $e) {
+                    \Log::error('Failed to send survey emails: ' . $e->getMessage());
+                }
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Survey updated successfully',
+                'message' => 'Survey updated successfully' . $emailInfo,
                 'data' => $survey->load('creator:id,email')
             ]);
         } catch (\Exception $e) {
@@ -1928,8 +2042,7 @@ class AdminController extends Controller
         try {
             $currentUser = auth()->user();
             
-            $query = User::with(['alumniProfile:id,user_id,first_name,last_name,phone', 'campus:id,name,code'])
-                ->orderBy('created_at', 'desc');
+            $query = User::with(['alumniProfile:id,user_id,first_name,last_name,phone', 'campus:id,name,code']);
 
             // Restrict admin users to super_admin only
             if ($currentUser->role !== 'super_admin') {
@@ -1962,6 +2075,28 @@ class AdminController extends Controller
             // Status filter
             if ($request->has('status') && $request->status !== 'all') {
                 $query->where('status', $request->status);
+            }
+
+            // Sorting options - handle new sort parameter format
+            if ($request->has('sort') && $request->sort) {
+                $sort = $request->sort;
+                switch ($sort) {
+                    case 'name_asc':
+                        $query->orderBy('name', 'asc');
+                        break;
+                    case 'name_desc':
+                        $query->orderBy('name', 'desc');
+                        break;
+                    case 'last_login':
+                        $query->orderBy('last_login_at', 'desc')->orderBy('created_at', 'desc');
+                        break;
+                    case 'recent':
+                    default:
+                        $query->orderBy('created_at', 'desc');
+                        break;
+                }
+            } else {
+                $query->orderBy('created_at', 'desc');
             }
 
             // Pagination
@@ -2159,6 +2294,58 @@ class AdminController extends Controller
     }
 
     /**
+     * Set user password manually (admin feature)
+     */
+    public function setUserPassword(Request $request, $id): JsonResponse
+    {
+        try {
+            $user = User::findOrFail($id);
+            $currentUser = auth()->user();
+            
+            // Only super_admin can set password for admin/super_admin users
+            if (in_array($user->role, ['admin', 'super_admin']) && $currentUser->role !== 'super_admin') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only super admin can change password for admin users'
+                ], 403);
+            }
+            
+            // Cannot change own password through this endpoint
+            if ($user->id === $currentUser->id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Use your profile settings to change your own password'
+                ], 403);
+            }
+            
+            $validated = $request->validate([
+                'password' => 'required|string|min:8|confirmed',
+            ]);
+            
+            $user->update([
+                'password' => \Hash::make($validated['password'])
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Password updated successfully for ' . $user->name
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update password',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Create a new user
      */
     public function createUser(Request $request): JsonResponse
@@ -2311,6 +2498,7 @@ class AdminController extends Controller
     {
         try {
             $roles = \App\Models\Role::with('permissions:id,name,display_name')
+                ->withCount('users')
                 ->get()
                 ->map(function ($role) {
                     return [
@@ -2319,6 +2507,8 @@ class AdminController extends Controller
                         'display_name' => $role->display_name,
                         'description' => $role->description,
                         'is_system_role' => $role->is_system_role,
+                        'is_active' => $role->is_active ?? true,
+                        'users_count' => $role->users_count,
                         'permissions' => $role->permissions->pluck('id')->toArray(),
                         'permissions_details' => $role->permissions->map(function ($perm) {
                             return [
@@ -2495,27 +2685,30 @@ class AdminController extends Controller
     {
         try {
             $totalUsers = User::count();
-            $adminCount = User::where('role', 'admin')->count();
-            $alumniCount = User::where('role', 'alumni')->count();
+            $totalRoles = \App\Models\Role::count();
+            $totalPermissions = \App\Models\Permission::count();
 
-            // Determine most used role
-            $mostUsedRole = $alumniCount >= $adminCount ? 'Alumni' : 'Admin';
+            // Determine most used role from the enum column
+            $roleCounts = User::selectRaw('role, COUNT(*) as cnt')
+                ->groupBy('role')
+                ->orderByDesc('cnt')
+                ->first();
+            $mostUsedRole = $roleCounts ? ucfirst(str_replace('_', ' ', $roleCounts->role)) : 'N/A';
+
+            // Real permission categories
+            $permissionCategories = \App\Models\Permission::selectRaw('category, COUNT(*) as count')
+                ->groupBy('category')
+                ->orderBy('category')
+                ->get()
+                ->map(fn($row) => ['name' => $row->category, 'count' => $row->count])
+                ->toArray();
 
             $stats = [
-                'total_roles' => 2, // admin, alumni
-                'total_permissions' => 10, // Updated to include alumni permissions
+                'total_roles' => $totalRoles,
+                'total_permissions' => $totalPermissions,
                 'total_users_with_roles' => $totalUsers,
                 'most_used_role' => $mostUsedRole,
-                'permission_categories' => [
-                    ['name' => 'Dashboard', 'count' => 1],
-                    ['name' => 'User Management', 'count' => 1],
-                    ['name' => 'Alumni Management', 'count' => 1],
-                    ['name' => 'Survey Management', 'count' => 1],
-                    ['name' => 'Analytics', 'count' => 1],
-                    ['name' => 'Batch Management', 'count' => 1],
-                    ['name' => 'Profile', 'count' => 2],
-                    ['name' => 'Surveys', 'count' => 2]
-                ]
+                'permission_categories' => $permissionCategories,
             ];
             
             return response()->json([
@@ -3544,48 +3737,44 @@ class AdminController extends Controller
     {
         try {
             $validated = $request->validate([
-                'name' => 'required|string|max:255|regex:/^[a-z0-9_]+$/',
+                'name' => 'required|string|max:255|regex:/^[a-z0-9_]+$/|unique:roles,name',
                 'display_name' => 'required|string|max:255',
                 'description' => 'required|string|max:1000',
-                'guard_name' => 'required|string|max:255',
                 'permission_ids' => 'nullable|array',
-                'permission_ids.*' => 'string'
+                'permission_ids.*' => 'exists:permissions,id'
             ]);
 
-            // Check if role name already exists
-            // For now, just check against existing admin/alumni roles
-            if (in_array($validated['name'], ['admin', 'alumni'])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'A role with this name already exists',
-                    'errors' => [
-                        'name' => ['This role name is already in use']
-                    ]
-                ], 422);
-            }
-
-            // In a real implementation, you would:
-            // 1. Create the role in a roles table
-            // 2. Attach permissions to the role
-            // For now, return success with mock data
-            
-            $newRole = [
-                'id' => '3',
+            $role = \App\Models\Role::create([
                 'name' => $validated['name'],
                 'display_name' => $validated['display_name'],
                 'description' => $validated['description'],
-                'guard_name' => $validated['guard_name'],
-                'permissions' => [],
-                'users_count' => 0,
-                'is_default' => false,
-                'created_at' => now()->toISOString(),
-                'updated_at' => now()->toISOString()
-            ];
+                'is_system_role' => false,
+                'is_active' => true,
+            ]);
+
+            if (!empty($validated['permission_ids'])) {
+                $role->syncPermissions($validated['permission_ids']);
+            }
+
+            $role->load('permissions:id,name,display_name');
 
             return response()->json([
                 'success' => true,
                 'message' => 'Role created successfully',
-                'data' => $newRole
+                'data' => [
+                    'id' => $role->id,
+                    'name' => $role->name,
+                    'display_name' => $role->display_name,
+                    'description' => $role->description,
+                    'is_system_role' => $role->is_system_role,
+                    'permissions' => $role->permissions->pluck('id')->toArray(),
+                    'permissions_details' => $role->permissions->map(fn($p) => [
+                        'id' => $p->id, 'name' => $p->name, 'display_name' => $p->display_name
+                    ]),
+                    'users_count' => 0,
+                    'created_at' => $role->created_at?->toISOString(),
+                    'updated_at' => $role->updated_at?->toISOString(),
+                ]
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -3608,49 +3797,56 @@ class AdminController extends Controller
     public function updateRole(Request $request, $id): JsonResponse
     {
         try {
-            $validated = $request->validate([
-                'name' => 'sometimes|string|max:255|regex:/^[a-z0-9_]+$/',
-                'display_name' => 'sometimes|string|max:255',
-                'description' => 'sometimes|string|max:1000',
-                'guard_name' => 'sometimes|string|max:255',
-                'permission_ids' => 'nullable|array',
-                'permission_ids.*' => 'string'
-            ]);
+            $role = \App\Models\Role::findOrFail($id);
 
-            // Check if role exists and is not a default role
-            $roles = $this->getRoles(new Request())->getData(true);
-            $role = collect($roles['data'])->firstWhere('id', $id);
-            
-            if (!$role) {
+            // Prevent renaming system roles
+            if ($role->is_system_role && $request->has('name') && $request->name !== $role->name) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Role not found'
-                ], 404);
-            }
-
-            if ($role['is_default'] && isset($validated['name']) && $validated['name'] !== $role['name']) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cannot change the name of default roles',
-                    'errors' => [
-                        'name' => ['Default role names cannot be modified']
-                    ]
+                    'message' => 'Cannot change the name of system roles',
+                    'errors' => ['name' => ['System role names cannot be modified']]
                 ], 422);
             }
 
-            // In a real implementation, update the role in database
-            // For now, return success with updated mock data
-            
-            $updatedRole = array_merge($role, [
-                'display_name' => $validated['display_name'] ?? $role['display_name'],
-                'description' => $validated['description'] ?? $role['description'],
-                'updated_at' => now()->toISOString()
+            $validated = $request->validate([
+                'name' => 'sometimes|string|max:255|regex:/^[a-z0-9_]+$/|unique:roles,name,' . $id,
+                'display_name' => 'sometimes|string|max:255',
+                'description' => 'sometimes|string|max:1000',
+                'permission_ids' => 'nullable|array',
+                'permission_ids.*' => 'exists:permissions,id'
             ]);
+
+            $role->update(collect($validated)->only(['name', 'display_name', 'description'])->toArray());
+
+            if (array_key_exists('permission_ids', $validated)) {
+                // Don't allow modifying super_admin permissions
+                if ($role->is_system_role && $role->name === 'super_admin') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Super Admin permissions cannot be modified'
+                    ], 403);
+                }
+                $role->syncPermissions($validated['permission_ids'] ?? []);
+            }
+
+            $role->load('permissions:id,name,display_name');
 
             return response()->json([
                 'success' => true,
                 'message' => 'Role updated successfully',
-                'data' => $updatedRole
+                'data' => [
+                    'id' => $role->id,
+                    'name' => $role->name,
+                    'display_name' => $role->display_name,
+                    'description' => $role->description,
+                    'is_system_role' => $role->is_system_role,
+                    'permissions' => $role->permissions->pluck('id')->toArray(),
+                    'permissions_details' => $role->permissions->map(fn($p) => [
+                        'id' => $p->id, 'name' => $p->name, 'display_name' => $p->display_name
+                    ]),
+                    'created_at' => $role->created_at?->toISOString(),
+                    'updated_at' => $role->updated_at?->toISOString(),
+                ]
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
@@ -3673,36 +3869,27 @@ class AdminController extends Controller
     public function deleteRole($id): JsonResponse
     {
         try {
-            // Check if role exists
-            $roles = $this->getRoles(new Request())->getData(true);
-            $role = collect($roles['data'])->firstWhere('id', $id);
-            
-            if (!$role) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Role not found'
-                ], 404);
-            }
+            $role = \App\Models\Role::findOrFail($id);
 
-            // Check if it's a default role
-            if ($role['is_default']) {
+            if ($role->is_system_role) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Cannot delete default system roles'
+                    'message' => 'Cannot delete system roles'
                 ], 422);
             }
 
-            // Check if role has users
-            if ($role['users_count'] > 0) {
+            $usersCount = $role->users()->count();
+            if ($usersCount > 0) {
                 return response()->json([
                     'success' => false,
-                    'message' => "Cannot delete role. It has {$role['users_count']} users assigned to it."
+                    'message' => "Cannot delete role. It has {$usersCount} users assigned to it."
                 ], 422);
             }
 
-            // In a real implementation, delete the role from database
-            // For now, return success
-            
+            // Detach all permissions first
+            $role->permissions()->detach();
+            $role->delete();
+
             return response()->json([
                 'success' => true,
                 'message' => 'Role deleted successfully'

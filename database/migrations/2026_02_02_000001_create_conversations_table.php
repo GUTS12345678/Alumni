@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('conversations')) {
         Schema::create('conversations', function (Blueprint $table) {
             $table->id();
             $table->enum('type', ['direct', 'group', 'support'])->default('direct');
@@ -28,6 +29,7 @@ return new class extends Migration
             $table->index('support_status');
             $table->index('created_at');
         });
+        }
     }
 
     /**

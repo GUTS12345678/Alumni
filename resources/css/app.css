@@ -122,55 +122,91 @@
 }
 
 .dark {
-    /* Improved dark mode with better contrast and visual hierarchy */
-    --background: oklch(0.11 0 0);
-    /* Darker background (gray-950) */
-    --foreground: oklch(0.96 0 0);
-    /* Brighter text */
-    --card: oklch(0.18 0 0);
-    /* Slightly lighter card (gray-900) */
-    --card-foreground: oklch(0.96 0 0);
-    --popover: oklch(0.18 0 0);
-    --popover-foreground: oklch(0.96 0 0);
-    --primary: oklch(0.96 0 0);
-    --primary-foreground: oklch(0.18 0 0);
-    --secondary: oklch(0.24 0 0);
-    /* Better contrast (gray-800) */
-    --secondary-foreground: oklch(0.96 0 0);
-    --muted: oklch(0.24 0 0);
+    /* Softer dark mode - not too dark, with better contrast */
+    --background: oklch(0.16 0.005 260);
+    /* Softer dark blue-gray background */
+    --foreground: oklch(0.93 0 0);
+    /* Slightly softer white text */
+    --card: oklch(0.20 0.005 260);
+    /* Card surfaces slightly lighter */
+    --card-foreground: oklch(0.93 0 0);
+    --popover: oklch(0.20 0.005 260);
+    --popover-foreground: oklch(0.93 0 0);
+    --primary: oklch(0.93 0 0);
+    --primary-foreground: oklch(0.20 0 0);
+    --secondary: oklch(0.26 0.005 260);
+    /* Subtle secondary */
+    --secondary-foreground: oklch(0.93 0 0);
+    --muted: oklch(0.26 0.005 260);
     --muted-foreground: oklch(0.65 0 0);
-    /* Improved muted text */
-    --accent: oklch(0.24 0 0);
-    --accent-foreground: oklch(0.96 0 0);
-    --destructive: oklch(0.50 0.20 25);
-    /* Better red */
-    --destructive-foreground: oklch(0.96 0 0);
-    --border: oklch(0.24 0 0);
-    /* Subtle borders (gray-800) */
-    --input: oklch(0.24 0 0);
-    --ring: oklch(0.42 0.175 25);
-    /* Maroon-600 for focus rings */
+    --accent: oklch(0.26 0.005 260);
+    --accent-foreground: oklch(0.93 0 0);
+    --destructive: oklch(0.55 0.20 25);
+    --destructive-foreground: oklch(0.93 0 0);
+    --border: oklch(0.28 0.005 260);
+    /* Softer borders */
+    --input: oklch(0.26 0.005 260);
+    --ring: oklch(0.50 0.15 25);
+    /* Maroon focus ring */
     --chart-1: oklch(0.55 0.20 264);
     --chart-2: oklch(0.70 0.17 162);
     --chart-3: oklch(0.77 0.19 70);
     --chart-4: oklch(0.63 0.27 304);
     --chart-5: oklch(0.65 0.25 16);
-    --sidebar: oklch(0.18 0 0);
-    /* Dark sidebar (gray-900) */
-    --sidebar-foreground: oklch(0.96 0 0);
-    --sidebar-primary: oklch(0.42 0.175 25);
+    --sidebar: oklch(0.18 0.005 260);
+    /* Sidebar slightly darker than card */
+    --sidebar-foreground: oklch(0.93 0 0);
+    --sidebar-primary: oklch(0.50 0.15 25);
     /* Maroon accent */
-    --sidebar-primary-foreground: oklch(0.96 0 0);
-    --sidebar-accent: oklch(0.24 0 0);
-    /* Hover state */
-    --sidebar-accent-foreground: oklch(0.96 0 0);
-    --sidebar-border: oklch(0.24 0 0);
-    --sidebar-ring: oklch(0.42 0.175 25);
+    --sidebar-primary-foreground: oklch(0.93 0 0);
+    --sidebar-accent: oklch(0.26 0.005 260);
+    --sidebar-accent-foreground: oklch(0.93 0 0);
+    --sidebar-border: oklch(0.28 0.005 260);
+    --sidebar-ring: oklch(0.50 0.15 25);
 }
 
 @layer base {
     * {
         @apply border-border;
+    }
+
+    html,
+    body,
+    #app {
+        @apply h-full;
+    }
+
+    /* Apply overflow-hidden only on desktop for sidebar layout */
+    @media (min-width: 768px) {
+
+        html,
+        body,
+        #app {
+            @apply overflow-hidden;
+        }
+    }
+
+    /* Allow scrolling on public pages like landing page */
+    html.public-page,
+    html.public-page body,
+    html.public-page #app {
+        @apply overflow-auto;
+        scroll-behavior: smooth;
+    }
+
+    /* Section flash animation for navigation */
+    .section-flash {
+        animation: sectionFlash 0.5s ease-out;
+    }
+
+    @keyframes sectionFlash {
+        0% {
+            box-shadow: 0 0 0 4px rgba(128, 0, 32, 0.3);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0px rgba(128, 0, 32, 0);
+        }
     }
 
     body {
@@ -238,4 +274,157 @@
     .animate-fade-in {
         animation: fade-in 0.5s ease-out;
     }
+
+    /* Pop-out animation for scroll reveal */
+    @keyframes pop-out {
+        from {
+            opacity: 0;
+            transform: scale(0.85) translateY(30px);
+        }
+
+        to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+    }
+
+    @keyframes slide-up {
+        from {
+            opacity: 0;
+            transform: translateY(50px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes slide-left {
+        from {
+            opacity: 0;
+            transform: translateX(-50px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    @keyframes slide-right {
+        from {
+            opacity: 0;
+            transform: translateX(50px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    .animate-pop-out {
+        animation: pop-out 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+
+    .animate-slide-up {
+        animation: slide-up 0.6s ease-out forwards;
+    }
+
+    .animate-slide-left {
+        animation: slide-left 0.6s ease-out forwards;
+    }
+
+    .animate-slide-right {
+        animation: slide-right 0.6s ease-out forwards;
+    }
+
+    /* Animation delays for staggered effects */
+    .animation-delay-100 {
+        animation-delay: 100ms;
+    }
+
+    .animation-delay-200 {
+        animation-delay: 200ms;
+    }
+
+    .animation-delay-300 {
+        animation-delay: 300ms;
+    }
+
+    .animation-delay-400 {
+        animation-delay: 400ms;
+    }
+
+    .animation-delay-500 {
+        animation-delay: 500ms;
+    }
+
+    /* Hide scrollbar for horizontal scroll on mobile */
+    .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* Hide scrollbar completely but keep scrollability */
+    .scrollbar-none {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    .scrollbar-none::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* Thin scrollbar utility */
+    .scrollbar-thin {
+        scrollbar-width: thin;
+    }
+
+    .scrollbar-thin::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+}
+
+/* Global consistent scrollbar styling */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(124, 37, 41, 0.3) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background-color: rgba(124, 37, 41, 0.3);
+    border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(124, 37, 41, 0.5);
+}
+
+/* Dark mode scrollbar */
+.dark * {
+    scrollbar-color: rgba(200, 160, 160, 0.3) transparent;
+}
+
+.dark *::-webkit-scrollbar-thumb {
+    background-color: rgba(200, 160, 160, 0.3);
+}
+
+.dark *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(200, 160, 160, 0.5);
 }

@@ -12,7 +12,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn(['gmail_otp_enabled', 'otp_code', 'otp_expires_at']);
+            $columnsToDrop = array_filter(
+                ['gmail_otp_enabled', 'otp_code', 'otp_expires_at'],
+                fn($col) => Schema::hasColumn('users', $col)
+            );
+            if (!empty($columnsToDrop)) {
+                $table->dropColumn($columnsToDrop);
+            }
         });
     }
 

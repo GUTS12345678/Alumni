@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Alumni;
 
 use App\Http\Controllers\Controller;
 use App\Models\CareerHistory;
+use App\Models\CareerHistoryVersion;
 use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -81,6 +82,9 @@ class CareerController extends Controller
             ...$request->all()
         ]);
 
+        // Create initial version snapshot
+        CareerHistoryVersion::createSnapshot($career, 'created', $user->id);
+
         ActivityLog::logActivity(
             $user->id,
             'career_added',
@@ -133,6 +137,20 @@ class CareerController extends Controller
                 ->update(['is_current' => false, 'end_date' => now()]);
         }
 
+        // Track changes before updating
+        $changes = $career->getFieldChanges($request->all());
+
+        // Create version snapshot before updating (only if there are actual changes)
+        if (!empty($changes)) {
+            CareerHistoryVersion::createSnapshot(
+                $career, 
+                'updated', 
+                $user->id, 
+                $changes,
+                $request->input('change_notes')
+            );
+        }
+
         $career->update($request->all());
 
         ActivityLog::logActivity(
@@ -147,7 +165,7 @@ class CareerController extends Controller
     }
 
     /**
-     * Delete career position
+     * Archive career position (soft delete with versioning)
      */
     public function destroy(Request $request, $id)
     {
@@ -160,16 +178,62 @@ class CareerController extends Controller
         $jobTitle = $career->job_title;
         $companyName = $career->company_name;
 
-        $career->delete();
+        // Get archive reason from request (optional)
+        $reason = $request->input('reason', 'Removed by user');
+
+        // Archive instead of hard delete
+        $career->archive($user->id, $reason);
 
         ActivityLog::logActivity(
             $user->id,
-            'career_deleted',
-            "Deleted career position: {$jobTitle} at {$companyName}",
+            'career_archived',
+            "Archived career position: {$jobTitle} at {$companyName}",
             'CareerHistory',
             $id
         );
 
-        return redirect()->back()->with('success', 'Career position deleted successfully!');
+        return redirect()->back()->with('success', 'Career position archived successfully!');
+    }
+
+    /**
+     * Restore an archived career position
+     */
+    public function restore(Request $request, $id)
+    {
+        $user = $request->user();
+
+        $career = CareerHistory::withTrashed()
+            ->where('id', $id)
+            ->where('user_id', $user->id)
+            ->firstOrFail();
+
+        $career->restoreRecord($user->id);
+
+        ActivityLog::logActivity(
+            $user->id,
+            'career_restored',
+            "Restored career position: {$career->job_title} at {$career->company_name}",
+            'CareerHistory',
+            $id
+        );
+
+        return redirect()->back()->with('success', 'Career position restored successfully!');
+    }
+
+    /**
+     * Get archived career positions
+     */
+    public function archived(Request $request)
+    {
+        $user = $request->user();
+        
+        $archivedCareers = CareerHistory::onlyTrashed()
+            ->where('user_id', $user->id)
+            ->ordered()
+            ->get();
+
+        return Inertia::render('Alumni/Career/Archived', [
+            'archivedCareers' => $archivedCareers,
+        ]);
     }
 }

@@ -4,6 +4,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { Checkbox } from '../../components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import {
     Table,
     TableBody,
@@ -39,7 +40,8 @@ import {
     MoreVertical,
     Edit,
     Trash2,
-    MessageCircle
+    MessageCircle,
+    ArrowUpDown
 } from 'lucide-react';
 import AdminBaseLayout from '../../components/base/AdminBaseLayout';
 import { useMultiSelect, BulkActionBar, SelectAllCheckbox } from '../../components/ui/multi-select';
@@ -96,13 +98,43 @@ export default function AlumniBank({ user }: Props) {
     const [editFormData, setEditFormData] = useState<Partial<AlumniProfile>>({});
     const [updating, setUpdating] = useState(false);
 
-    // Filter states
-    const [filterStatus, setFilterStatus] = useState<string>('');
-    const [filterYear, setFilterYear] = useState<string>('');
-    const [filterJobTitle, setFilterJobTitle] = useState<string>('');
-    const [filterEmployer, setFilterEmployer] = useState<string>('');
-    const [filterCareerField, setFilterCareerField] = useState<string>('');
-    const [filtersOpen, setFiltersOpen] = useState(false);
+    // Sort state
+    const [sortBy, setSortBy] = useState<string>(() => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('sort') || 'name_asc';
+    });
+
+    // Filter states - initialize from URL params if present
+    const [filterStatus, setFilterStatus] = useState<string>(() => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('employment_status') || '';
+    });
+    const [filterYear, setFilterYear] = useState<string>(() => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('graduation_year') || '';
+    });
+    const [filterJobTitle, setFilterJobTitle] = useState<string>(() => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('job_title') || '';
+    });
+    const [filterEmployer, setFilterEmployer] = useState<string>(() => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('employer') || '';
+    });
+    const [filterCareerField, setFilterCareerField] = useState<string>(() => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('career_field') || '';
+    });
+    const [filtersOpen, setFiltersOpen] = useState(() => {
+        // Auto-open filters panel if any filter is pre-set from URL
+        const params = new URLSearchParams(window.location.search);
+        return !!(params.get('graduation_year') || params.get('employment_status') ||
+            params.get('job_title') || params.get('employer') || params.get('career_field'));
+    });
+    const [batchName, setBatchName] = useState<string>(() => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('batch_name') || '';
+    });
 
     // Batch/graduation years for filter
     const [availableYears, setAvailableYears] = useState<number[]>([]);
@@ -140,6 +172,7 @@ export default function AlumniBank({ user }: Props) {
             if (filterJobTitle) params.append('job_title', filterJobTitle);
             if (filterEmployer) params.append('employer', filterEmployer);
             if (filterCareerField) params.append('career_field', filterCareerField);
+            if (sortBy) params.append('sort', sortBy);
             params.append('page', currentPage.toString());
             params.append('per_page', '15');
 
@@ -175,7 +208,7 @@ export default function AlumniBank({ user }: Props) {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [currentPage, debouncedSearchTerm, filterStatus, filterYear, filterJobTitle, filterEmployer, filterCareerField, selectedCampus]);
+    }, [currentPage, debouncedSearchTerm, filterStatus, filterYear, filterJobTitle, filterEmployer, filterCareerField, sortBy, selectedCampus]);
 
     // Re-fetch when campus changes
     useEffect(() => {
@@ -479,6 +512,40 @@ export default function AlumniBank({ user }: Props) {
     return (
         <AdminBaseLayout title="Alumni Bank" user={user}>
             <div className="space-y-6">
+                {/* Batch Filter Banner - shown when viewing a specific batch */}
+                {batchName && filterYear && (
+                    <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+                        <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-3">
+                                    <GraduationCap className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                                    <div>
+                                        <p className="font-medium text-blue-800 dark:text-blue-200">
+                                            Viewing Batch: {batchName}
+                                        </p>
+                                        <p className="text-sm text-blue-600 dark:text-blue-400">
+                                            Graduation Year: {filterYear}
+                                        </p>
+                                    </div>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                        setFilterYear('');
+                                        setBatchName('');
+                                        // Clear URL params
+                                        window.history.replaceState({}, '', '/admin/alumni');
+                                    }}
+                                    className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                                >
+                                    Clear Filter
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
                 {/* Header with Actions */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
@@ -531,6 +598,23 @@ export default function AlumniBank({ user }: Props) {
                                     />
                                 </div>
                             </div>
+                            <div className="flex gap-2">
+                                <Select value={sortBy} onValueChange={setSortBy}>
+                                    <SelectTrigger className="w-[180px] border-beige-300 dark:border-gray-700">
+                                        <ArrowUpDown className="h-4 w-4 mr-2" />
+                                        <SelectValue placeholder="Sort by..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="name_asc">Name A-Z</SelectItem>
+                                        <SelectItem value="name_desc">Name Z-A</SelectItem>
+                                        <SelectItem value="grad_year_desc">Grad Year (Newest)</SelectItem>
+                                        <SelectItem value="grad_year_asc">Grad Year (Oldest)</SelectItem>
+                                        <SelectItem value="recent">Recently Updated</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mt-4">
                             <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
                                 <Input
                                     placeholder="Filter by job title..."
@@ -697,7 +781,90 @@ export default function AlumniBank({ user }: Props) {
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-0">
-                        <div className="overflow-x-auto">
+                        {/* Mobile Card View */}
+                        <div className="md:hidden divide-y divide-beige-100 dark:divide-gray-700">
+                            {alumni.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-12 text-gray-500 dark:text-gray-400">
+                                    <Users className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
+                                    <p className="text-lg font-medium mb-1">No alumni found</p>
+                                    <p className="text-sm text-center px-4">
+                                        {debouncedSearchTerm || filterStatus || filterYear || filterJobTitle || filterEmployer || filterCareerField
+                                            ? 'Try adjusting your filters or search term'
+                                            : 'No alumni profiles have been added yet'}
+                                    </p>
+                                </div>
+                            ) : (
+                                alumni.map((alumnus) => (
+                                    <div key={alumnus.id} className="p-4 hover:bg-beige-50 dark:hover:bg-gray-800/50">
+                                        <div className="flex items-start gap-3">
+                                            <Checkbox
+                                                checked={multiSelect.isSelected(alumnus.id)}
+                                                onCheckedChange={() => multiSelect.toggleItem(alumnus.id)}
+                                                className="mt-1"
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div>
+                                                        <div className="font-medium text-maroon-800 dark:text-maroon-200">
+                                                            {alumnus.first_name} {alumnus.last_name}
+                                                        </div>
+                                                        <div className="text-xs text-gray-500 dark:text-gray-400">ID: {alumnus.id}</div>
+                                                    </div>
+                                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                                        {getEmploymentStatusBadge(alumnus.employment_status)}
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-gray-700 dark:text-gray-300">
+                                                                    <MoreVertical className="h-4 w-4" />
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end">
+                                                                <DropdownMenuItem onClick={() => handleViewAlumni(alumnus)}>
+                                                                    <Eye className="h-4 w-4 mr-2" />View
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => handleContactAlumni(alumnus)} className="text-blue-700">
+                                                                    <MessageCircle className="h-4 w-4 mr-2" />Contact
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => handleEditAlumni(alumnus)} className="text-green-700">
+                                                                    <Edit className="h-4 w-4 mr-2" />Edit
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem onClick={() => handleDeleteAlumni(alumnus)} className="text-red-700">
+                                                                    <Trash2 className="h-4 w-4 mr-2" />Delete
+                                                                </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-2 grid grid-cols-1 gap-1.5 text-sm">
+                                                    <div className="flex items-center text-gray-600 dark:text-gray-400">
+                                                        <GraduationCap className="h-3.5 w-3.5 mr-1.5 flex-shrink-0 text-gray-400" />
+                                                        <span className="truncate">{alumnus.degree_program} &middot; Class of {alumnus.graduation_year}</span>
+                                                    </div>
+                                                    <div className="flex items-center text-gray-600 dark:text-gray-400">
+                                                        <Mail className="h-3.5 w-3.5 mr-1.5 flex-shrink-0 text-gray-400" />
+                                                        <span className="truncate">{alumnus.email}</span>
+                                                    </div>
+                                                    {alumnus.phone && (
+                                                        <div className="flex items-center text-gray-600 dark:text-gray-400">
+                                                            <Phone className="h-3.5 w-3.5 mr-1.5 flex-shrink-0 text-gray-400" />
+                                                            {alumnus.phone}
+                                                        </div>
+                                                    )}
+                                                    {alumnus.current_job_title && (
+                                                        <div className="flex items-center text-gray-600 dark:text-gray-400">
+                                                            <Building className="h-3.5 w-3.5 mr-1.5 flex-shrink-0 text-gray-400" />
+                                                            <span className="truncate">{alumnus.current_job_title}{alumnus.current_employer ? ` at ${alumnus.current_employer}` : ''}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto">
                             <Table>
                                 <TableHeader>
                                     <TableRow className="bg-beige-50 dark:bg-gray-800/50">
@@ -718,122 +885,137 @@ export default function AlumniBank({ user }: Props) {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {alumni.map((alumnus) => (
-                                        <TableRow key={alumnus.id} className="hover:bg-beige-50 dark:hover:bg-gray-800/50">
-                                            <TableCell>
-                                                <Checkbox
-                                                    checked={multiSelect.isSelected(alumnus.id)}
-                                                    onCheckedChange={() => multiSelect.toggleItem(alumnus.id)}
-                                                />
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="font-medium text-maroon-800 dark:text-maroon-200">
-                                                    {alumnus.first_name} {alumnus.last_name}
-                                                </div>
-                                                <div className="text-sm text-gray-600 dark:text-gray-400">ID: {alumnus.id}</div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="space-y-1">
-                                                    <div className="flex items-center text-sm dark:text-gray-300">
-                                                        <Mail className="h-3 w-3 mr-1 text-gray-400 dark:text-gray-500" />
-                                                        {alumnus.email}
-                                                    </div>
-                                                    {alumnus.phone && (
-                                                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-                                                            <Phone className="h-3 w-3 mr-1 text-gray-400 dark:text-gray-500" />
-                                                            {alumnus.phone}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="space-y-1">
-                                                    <div className="flex items-center text-sm font-medium dark:text-gray-200">
-                                                        <GraduationCap className="h-3 w-3 mr-1 text-gray-400 dark:text-gray-500" />
-                                                        {alumnus.degree_program}
-                                                    </div>
-                                                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                                                        Class of {alumnus.graduation_year}
-                                                    </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="space-y-1">
-                                                    {alumnus.current_job_title && (
-                                                        <div className="text-sm font-medium dark:text-gray-200">
-                                                            {alumnus.current_job_title}
-                                                        </div>
-                                                    )}
-                                                    {alumnus.current_employer && (
-                                                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-                                                            <Building className="h-3 w-3 mr-1 text-gray-400 dark:text-gray-500" />
-                                                            {alumnus.current_employer}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                {getEmploymentStatusBadge(alumnus.employment_status)}
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center space-x-1">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleViewAlumni(alumnus)}
-                                                        className="text-maroon-700 dark:text-maroon-300 hover:text-maroon-800 dark:hover:text-maroon-200 hover:bg-maroon-50 dark:hover:bg-maroon-900/30"
-                                                        title="View Details"
-                                                    >
-                                                        <Eye className="h-4 w-4" />
-                                                    </Button>
-
-                                                    <DropdownMenu>
-                                                        <DropdownMenuTrigger asChild>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                className="text-gray-700 dark:text-gray-300 hover:text-maroon-800 dark:hover:text-maroon-200 hover:bg-maroon-50 dark:hover:bg-maroon-900/30"
-                                                            >
-                                                                <MoreVertical className="h-4 w-4" />
-                                                            </Button>
-                                                        </DropdownMenuTrigger>
-                                                        <DropdownMenuContent align="end">
-                                                            <DropdownMenuItem
-                                                                onClick={() => handleContactAlumni(alumnus)}
-                                                                className="text-blue-700 focus:text-blue-800"
-                                                            >
-                                                                <MessageCircle className="h-4 w-4 mr-2" />
-                                                                Contact
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                onClick={() => handleEditAlumni(alumnus)}
-                                                                className="text-green-700 focus:text-green-800"
-                                                            >
-                                                                <Edit className="h-4 w-4 mr-2" />
-                                                                Edit
-                                                            </DropdownMenuItem>
-                                                            <DropdownMenuItem
-                                                                onClick={() => handleDeleteAlumni(alumnus)}
-                                                                className="text-red-700 focus:text-red-800"
-                                                            >
-                                                                <Trash2 className="h-4 w-4 mr-2" />
-                                                                Delete
-                                                            </DropdownMenuItem>
-                                                        </DropdownMenuContent>
-                                                    </DropdownMenu>
+                                    {alumni.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={7} className="h-32 text-center">
+                                                <div className="flex flex-col items-center justify-center py-8 text-gray-500 dark:text-gray-400">
+                                                    <Users className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
+                                                    <p className="text-lg font-medium mb-1">No alumni found</p>
+                                                    <p className="text-sm">
+                                                        {debouncedSearchTerm || filterStatus || filterYear || filterJobTitle || filterEmployer || filterCareerField
+                                                            ? 'Try adjusting your filters or search term'
+                                                            : 'No alumni profiles have been added yet'}
+                                                    </p>
                                                 </div>
                                             </TableCell>
                                         </TableRow>
-                                    ))}
+                                    ) : (
+                                        alumni.map((alumnus) => (
+                                            <TableRow key={alumnus.id} className="hover:bg-beige-50 dark:hover:bg-gray-800/50">
+                                                <TableCell>
+                                                    <Checkbox
+                                                        checked={multiSelect.isSelected(alumnus.id)}
+                                                        onCheckedChange={() => multiSelect.toggleItem(alumnus.id)}
+                                                    />
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="font-medium text-maroon-800 dark:text-maroon-200">
+                                                        {alumnus.first_name} {alumnus.last_name}
+                                                    </div>
+                                                    <div className="text-sm text-gray-600 dark:text-gray-400">ID: {alumnus.id}</div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="space-y-1">
+                                                        <div className="flex items-center text-sm dark:text-gray-300">
+                                                            <Mail className="h-3 w-3 mr-1 text-gray-400 dark:text-gray-500" />
+                                                            {alumnus.email}
+                                                        </div>
+                                                        {alumnus.phone && (
+                                                            <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                                                                <Phone className="h-3 w-3 mr-1 text-gray-400 dark:text-gray-500" />
+                                                                {alumnus.phone}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="space-y-1">
+                                                        <div className="flex items-center text-sm font-medium dark:text-gray-200">
+                                                            <GraduationCap className="h-3 w-3 mr-1 text-gray-400 dark:text-gray-500" />
+                                                            {alumnus.degree_program}
+                                                        </div>
+                                                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                                                            Class of {alumnus.graduation_year}
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="space-y-1">
+                                                        {alumnus.current_job_title && (
+                                                            <div className="text-sm font-medium dark:text-gray-200">
+                                                                {alumnus.current_job_title}
+                                                            </div>
+                                                        )}
+                                                        {alumnus.current_employer && (
+                                                            <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                                                                <Building className="h-3 w-3 mr-1 text-gray-400 dark:text-gray-500" />
+                                                                {alumnus.current_employer}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {getEmploymentStatusBadge(alumnus.employment_status)}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center space-x-1">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleViewAlumni(alumnus)}
+                                                            className="text-maroon-700 dark:text-maroon-300 hover:text-maroon-800 dark:hover:text-maroon-200 hover:bg-maroon-50 dark:hover:bg-maroon-900/30"
+                                                            title="View Details"
+                                                        >
+                                                            <Eye className="h-4 w-4" />
+                                                        </Button>
+
+                                                        <DropdownMenu>
+                                                            <DropdownMenuTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="text-gray-700 dark:text-gray-300 hover:text-maroon-800 dark:hover:text-maroon-200 hover:bg-maroon-50 dark:hover:bg-maroon-900/30"
+                                                                >
+                                                                    <MoreVertical className="h-4 w-4" />
+                                                                </Button>
+                                                            </DropdownMenuTrigger>
+                                                            <DropdownMenuContent align="end">
+                                                                <DropdownMenuItem
+                                                                    onClick={() => handleContactAlumni(alumnus)}
+                                                                    className="text-blue-700 focus:text-blue-800"
+                                                                >
+                                                                    <MessageCircle className="h-4 w-4 mr-2" />
+                                                                    Contact
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem
+                                                                    onClick={() => handleEditAlumni(alumnus)}
+                                                                    className="text-green-700 focus:text-green-800"
+                                                                >
+                                                                    <Edit className="h-4 w-4 mr-2" />
+                                                                    Edit
+                                                                </DropdownMenuItem>
+                                                                <DropdownMenuItem
+                                                                    onClick={() => handleDeleteAlumni(alumnus)}
+                                                                    className="text-red-700 focus:text-red-800"
+                                                                >
+                                                                    <Trash2 className="h-4 w-4 mr-2" />
+                                                                    Delete
+                                                                </DropdownMenuItem>
+                                                            </DropdownMenuContent>
+                                                        </DropdownMenu>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )))}
                                 </TableBody>
                             </Table>
                         </div>
 
                         {/* Pagination */}
                         {totalPages > 1 && (
-                            <div className="flex items-center justify-between px-6 py-4 border-t border-beige-200 dark:border-gray-700">
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 sm:px-6 py-4 border-t border-beige-200 dark:border-gray-700">
                                 <div className="text-sm text-gray-700 dark:text-gray-300">
-                                    Showing page {currentPage} of {totalPages}
+                                    Page {currentPage} of {totalPages}
                                 </div>
                                 <div className="space-x-2">
                                     <Button

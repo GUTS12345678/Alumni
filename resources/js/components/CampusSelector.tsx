@@ -16,7 +16,7 @@ interface CampusSelectorProps {
     className?: string;
     variant?: 'default' | 'compact' | 'minimal';
     disabled?: boolean;
-    onChange?: (campus: Campus) => void;
+    onChange?: (campus: Campus | null) => void;
 }
 
 export const CampusSelector: React.FC<CampusSelectorProps> = ({
@@ -38,7 +38,7 @@ export const CampusSelector: React.FC<CampusSelectorProps> = ({
     const handleCampusChange = (value: string) => {
         if (value === 'all') {
             setSelectedCampus(null); // null means "All Campuses"
-            onChange?.(null as any);
+            onChange?.(null);
         } else {
             const campus = campuses.find(c => c.id.toString() === value);
             if (campus) {
@@ -62,24 +62,29 @@ export const CampusSelector: React.FC<CampusSelectorProps> = ({
     if (!canSwitchCampus && selectedCampus) {
         if (variant === 'minimal') {
             return (
-                <Badge variant="outline" className={cn("font-normal", className)}>
+                <Badge variant="outline" className={cn("font-normal bg-maroon-50 dark:bg-maroon-900/30 text-maroon-700 dark:text-maroon-300 border-maroon-200 dark:border-maroon-700", className)}>
                     <Building2 className="h-3 w-3 mr-1" />
-                    {selectedCampus.code}
+                    {selectedCampus.display_name || selectedCampus.code}
                 </Badge>
             );
         }
 
         return (
             <div className={cn("flex items-center gap-2", className)}>
-                <Building2 className="h-4 w-4 text-muted-foreground" />
+                <Building2 className="h-4 w-4 text-maroon-600 dark:text-maroon-400" />
                 <div className="flex flex-col">
                     {showLabel && variant === 'default' && (
                         <span className="text-xs text-muted-foreground">Campus</span>
                     )}
-                    <span className="text-sm font-medium">{selectedCampus.display_name}</span>
+                    <span className="text-sm font-medium text-maroon-800 dark:text-maroon-200">{selectedCampus.display_name}</span>
                 </div>
             </div>
         );
+    }
+
+    // If user cannot switch campus and no campus selected (shouldn't happen but handle it)
+    if (!canSwitchCampus && !selectedCampus) {
+        return null;
     }
 
     // Admin/SuperAdmin switchable view

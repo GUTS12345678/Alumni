@@ -11,25 +11,27 @@ import {
     Shield,
     Building,
     BarChart3,
-    Mail,
     AlertCircle,
     CheckCircle,
     Clock,
     ArrowRight,
     ArrowUpRight,
     Sparkles,
-    FileText,
     Settings,
     Zap,
     Target,
     TrendingDown,
     Calendar,
-    Bell
+    Bell,
+    Briefcase,
+    Megaphone,
+    MapPin,
+    Eye,
+    Globe,
 } from 'lucide-react';
 import { router } from '@inertiajs/react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import { useCampus } from '@/contexts/CampusContext';
-import { useCampusParams } from '@/hooks/useCampusFilter';
 
 interface DashboardStats {
     overview: {
@@ -56,6 +58,11 @@ interface DashboardStats {
         seeking: number;
         not_seeking: number;
         continuing_education: number;
+    };
+    employment_location_stats: {
+        local: number;
+        foreign: number;
+        remote: number;
     };
     recent_activity: {
         recent_registrations: number;
@@ -88,6 +95,26 @@ interface User {
     status: string;
 }
 
+interface RecentJob {
+    id: number;
+    title: string;
+    company_name: string;
+    location: string;
+    status: string;
+    is_featured: boolean;
+    views_count: number;
+    created_at: string;
+}
+
+interface RecentAnnouncement {
+    id: number;
+    title: string;
+    priority: string;
+    is_published: boolean;
+    reads_count: number;
+    created_at: string;
+}
+
 interface Props {
     user: User;
 }
@@ -96,18 +123,17 @@ export default function AdminDashboard({ user }: Props) {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [recentJobs, setRecentJobs] = useState<RecentJob[]>([]);
+    const [recentAnnouncements, setRecentAnnouncements] = useState<RecentAnnouncement[]>([]);
 
     // Campus context for filtering
     const { selectedCampus } = useCampus();
-    const { campusParams } = useCampusParams();
 
     useEffect(() => {
         const fetchDashboardData = async () => {
             try {
                 setLoading(true);
                 setError(null);
-
-                const token = localStorage.getItem('auth_token');
 
                 // Build URL with campus parameter
                 const params = new URLSearchParams();
@@ -118,9 +144,10 @@ export default function AdminDashboard({ user }: Props) {
 
                 const response = await fetch(url, {
                     headers: {
-                        'Authorization': `Bearer ${token}`,
                         'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
                     },
+                    credentials: 'include',
                 });
 
                 if (!response.ok) {
@@ -149,6 +176,61 @@ export default function AdminDashboard({ user }: Props) {
         fetchDashboardData();
     }, [selectedCampus?.id]); // Re-fetch when campus changes
 
+    // Fetch recent jobs
+    useEffect(() => {
+        const fetchRecentJobs = async () => {
+            try {
+                const params = new URLSearchParams();
+                params.append('per_page', '5');
+                if (selectedCampus?.id) {
+                    params.append('campus_id', selectedCampus.id.toString());
+                }
+                const response = await fetch(`/api/v1/admin/jobs?${params.toString()}`, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'include',
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setRecentJobs(data.data?.data || []);
+                }
+            } catch (error) {
+                console.error('Failed to fetch recent jobs:', error);
+            }
+        };
+
+        fetchRecentJobs();
+    }, [selectedCampus?.id]);
+
+    // Fetch recent announcements
+    useEffect(() => {
+        const fetchRecentAnnouncements = async () => {
+            try {
+                const params = new URLSearchParams();
+                if (selectedCampus?.id) {
+                    params.append('campus_id', selectedCampus.id.toString());
+                }
+                const response = await fetch(`/api/v1/announcements/admin/list?${params.toString()}`, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    credentials: 'include',
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setRecentAnnouncements((data.data?.data || []).slice(0, 5));
+                }
+            } catch (error) {
+                console.error('Failed to fetch recent announcements:', error);
+            }
+        };
+
+        fetchRecentAnnouncements();
+    }, [selectedCampus?.id]);
+
     if (loading) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-beige-50 to-beige-100 dark:from-gray-950 dark:to-gray-900 flex items-center justify-center">
@@ -162,13 +244,13 @@ export default function AdminDashboard({ user }: Props) {
 
     if (error) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-beige-50 to-beige-100 flex items-center justify-center">
+            <div className="min-h-screen bg-gradient-to-br from-beige-50 to-beige-100 dark:from-gray-950 dark:to-gray-900 flex items-center justify-center">
                 <Card className="w-full max-w-md">
                     <CardHeader>
-                        <CardTitle className="text-red-600">Error</CardTitle>
+                        <CardTitle className="text-red-600 dark:text-red-400">Error</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <p className="text-gray-600 mb-4">{error}</p>
+                        <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
                         <Button onClick={() => window.location.reload()} className="w-full">
                             Retry
                         </Button>
@@ -200,7 +282,7 @@ export default function AdminDashboard({ user }: Props) {
                         <div className="hidden lg:flex items-center space-x-4">
                             <Button
                                 onClick={() => router.visit('/admin/surveys/create')}
-                                className="bg-white text-maroon-700 hover:bg-beige-50 shadow-lg hover:shadow-xl transition-all"
+                                className="bg-white dark:bg-gray-800 text-maroon-700 dark:text-maroon-300 hover:bg-beige-50 dark:hover:bg-gray-700 shadow-lg hover:shadow-xl dark:shadow-gray-900/50 transition-all"
                             >
                                 <Zap className="h-4 w-4 mr-2" />
                                 Quick Create Survey
@@ -212,29 +294,29 @@ export default function AdminDashboard({ user }: Props) {
                 {/* Key Metrics - Employment Focused */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {/* Employment Rate - Primary Metric */}
-                    <Card className="relative overflow-hidden border-none shadow-lg hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-green-50 to-emerald-50">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-green-200 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
+                    <Card className="relative overflow-hidden border-none shadow-lg dark:shadow-gray-900/50 hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/40 dark:to-emerald-950/40">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-green-200 dark:bg-green-800 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                            <CardTitle className="text-sm font-bold text-green-900">Employment Rate</CardTitle>
+                            <CardTitle className="text-sm font-bold text-green-900 dark:text-green-100">Employment Rate</CardTitle>
                             <div className="p-3 bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-md group-hover:shadow-lg transition-all">
                                 <UserCheck className="h-5 w-5 text-white" />
                             </div>
                         </CardHeader>
                         <CardContent className="relative z-10">
-                            <div className="text-4xl font-extrabold text-green-800 mb-1">
+                            <div className="text-4xl font-extrabold text-green-800 dark:text-green-200 mb-1">
                                 {stats?.employment_metrics?.employment_rate ? stats.employment_metrics.employment_rate.toFixed(1) : '0.0'}%
                             </div>
-                            <p className="text-xs text-green-600 font-medium mb-3">
-                                {stats?.employment_metrics?.total_employed || 0} of {stats?.overview.total_alumni || 0} alumni employed
+                            <p className="text-xs text-green-600 dark:text-green-400 font-medium mb-3">
+                                {stats?.employment_metrics?.total_employed || 0} of {stats?.overview?.total_alumni || 0} alumni employed
                             </p>
-                            <div className="pt-2 border-t border-green-100">
+                            <div className="pt-2 border-t border-green-100 dark:border-green-800">
                                 <div className="flex items-center justify-between mb-1">
-                                    <span className="text-xs text-gray-600">Target: 75%</span>
-                                    <span className="text-xs font-bold text-green-700">
-                                        {stats?.employment_metrics?.employment_rate >= 75 ? '✓ Achieved' : 'In Progress'}
+                                    <span className="text-xs text-gray-600 dark:text-gray-400">Target: 75%</span>
+                                    <span className="text-xs font-bold text-green-700 dark:text-green-300">
+                                        {(stats?.employment_metrics?.employment_rate ?? 0) >= 75 ? '✓ Achieved' : 'In Progress'}
                                     </span>
                                 </div>
-                                <div className="w-full bg-green-100 rounded-full h-2 overflow-hidden">
+                                <div className="w-full bg-green-100 dark:bg-green-900 rounded-full h-2 overflow-hidden">
                                     <div
                                         className="bg-gradient-to-r from-green-500 to-green-600 h-2 rounded-full transition-all duration-500"
                                         style={{ width: `${Math.min(stats?.employment_metrics?.employment_rate || 0, 100)}%` }}
@@ -245,60 +327,60 @@ export default function AdminDashboard({ user }: Props) {
                     </Card>
 
                     {/* Avg Days to Job */}
-                    <Card className="relative overflow-hidden border-none shadow-lg hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-blue-50 to-sky-50">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-200 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
+                    <Card className="relative overflow-hidden border-none shadow-lg dark:shadow-gray-900/50 hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-blue-50 to-sky-50 dark:from-blue-950/40 dark:to-sky-950/40">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-200 dark:bg-blue-800 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                            <CardTitle className="text-sm font-bold text-blue-900">Avg Time to Employment</CardTitle>
+                            <CardTitle className="text-sm font-bold text-blue-900 dark:text-blue-100">Avg Time to Employment</CardTitle>
                             <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-md group-hover:shadow-lg transition-all">
                                 <Clock className="h-5 w-5 text-white" />
                             </div>
                         </CardHeader>
                         <CardContent className="relative z-10">
-                            <div className="text-4xl font-extrabold text-blue-800 mb-1">
+                            <div className="text-4xl font-extrabold text-blue-800 dark:text-blue-200 mb-1">
                                 {stats?.employment_metrics?.avg_days_to_job || 0}
                             </div>
-                            <p className="text-xs text-blue-600 font-medium mb-3">days after graduation</p>
-                            <div className="flex items-center gap-2 pt-2 border-t border-blue-100">
+                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-3">days after graduation</p>
+                            <div className="flex items-center gap-2 pt-2 border-t border-blue-100 dark:border-blue-800">
                                 {(stats?.employment_metrics?.avg_days_to_job || 0) <= 90 ? (
-                                    <div className="flex items-center text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full">
+                                    <div className="flex items-center text-xs bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-1 rounded-full">
                                         <TrendingUp className="h-3 w-3 mr-1" />
                                         <span className="font-bold">Excellent</span>
                                     </div>
                                 ) : (stats?.employment_metrics?.avg_days_to_job || 0) <= 180 ? (
-                                    <div className="flex items-center text-xs bg-yellow-50 text-yellow-700 px-2 py-1 rounded-full">
+                                    <div className="flex items-center text-xs bg-yellow-50 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 px-2 py-1 rounded-full">
                                         <Activity className="h-3 w-3 mr-1" />
                                         <span className="font-bold">Good</span>
                                     </div>
                                 ) : (
-                                    <div className="flex items-center text-xs bg-orange-50 text-orange-700 px-2 py-1 rounded-full">
+                                    <div className="flex items-center text-xs bg-orange-50 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 px-2 py-1 rounded-full">
                                         <AlertCircle className="h-3 w-3 mr-1" />
                                         <span className="font-bold">Needs Attention</span>
                                     </div>
                                 )}
-                                <span className="text-xs text-gray-500">≈ {Math.round((stats?.employment_metrics?.avg_days_to_job || 0) / 30)} months</span>
+                                <span className="text-xs text-gray-500 dark:text-gray-400">≈ {Math.round((stats?.employment_metrics?.avg_days_to_job || 0) / 30)} months</span>
                             </div>
                         </CardContent>
                     </Card>
 
                     {/* Job Alignment */}
-                    <Card className="relative overflow-hidden border-none shadow-lg hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-purple-50 to-violet-50">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-purple-200 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
+                    <Card className="relative overflow-hidden border-none shadow-lg dark:shadow-gray-900/50 hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/40 dark:to-violet-950/40">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-purple-200 dark:bg-purple-800 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                            <CardTitle className="text-sm font-bold text-purple-900">Job Alignment</CardTitle>
+                            <CardTitle className="text-sm font-bold text-purple-900 dark:text-purple-100">Job Alignment</CardTitle>
                             <div className="p-3 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-md group-hover:shadow-lg transition-all">
                                 <Target className="h-5 w-5 text-white" />
                             </div>
                         </CardHeader>
                         <CardContent className="relative z-10">
-                            <div className="text-4xl font-extrabold text-purple-800 mb-1">
+                            <div className="text-4xl font-extrabold text-purple-800 dark:text-purple-200 mb-1">
                                 {stats?.employment_metrics?.job_alignment_rate ? stats.employment_metrics.job_alignment_rate.toFixed(1) : '0.0'}%
                             </div>
-                            <p className="text-xs text-purple-600 font-medium mb-3">
+                            <p className="text-xs text-purple-600 dark:text-purple-400 font-medium mb-3">
                                 {stats?.employment_metrics?.aligned_jobs_count || 0} working in their field
                             </p>
                             <button
                                 onClick={() => router.visit('/admin/analytics')}
-                                className="flex items-center text-xs font-semibold text-purple-600 hover:text-purple-700 pt-2 border-t border-purple-100 transition-colors"
+                                className="flex items-center text-xs font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 pt-2 border-t border-purple-100 dark:border-purple-800 transition-colors"
                             >
                                 <BarChart3 className="h-3 w-3 mr-1" />
                                 View Detailed Analysis
@@ -308,23 +390,23 @@ export default function AdminDashboard({ user }: Props) {
                     </Card>
 
                     {/* Total Alumni */}
-                    <Card className="relative overflow-hidden border-none shadow-lg hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-maroon-50 to-beige-50">
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-maroon-200 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
+                    <Card className="relative overflow-hidden border-none shadow-lg dark:shadow-gray-900/50 hover:shadow-2xl transition-all duration-300 group bg-gradient-to-br from-maroon-50 to-beige-50 dark:from-maroon-950/40 dark:to-gray-900">
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-maroon-200 dark:bg-maroon-800 rounded-full -mr-16 -mt-16 opacity-20 group-hover:opacity-30 transition-opacity"></div>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                            <CardTitle className="text-sm font-bold text-maroon-900">Total Alumni</CardTitle>
+                            <CardTitle className="text-sm font-bold text-maroon-900 dark:text-gray-100">Total Alumni</CardTitle>
                             <div className="p-3 bg-gradient-to-br from-maroon-500 to-maroon-600 rounded-xl shadow-md group-hover:shadow-lg transition-all">
                                 <Users className="h-5 w-5 text-white" />
                             </div>
                         </CardHeader>
                         <CardContent className="relative z-10">
-                            <div className="text-4xl font-extrabold text-maroon-800 mb-1">{stats?.overview.total_alumni || 0}</div>
-                            <p className="text-xs text-maroon-600 font-medium mb-3">Registered in system</p>
-                            <div className="flex items-center gap-2 pt-2 border-t border-maroon-100">
-                                <div className="flex items-center text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full">
+                            <div className="text-4xl font-extrabold text-maroon-800 dark:text-gray-200 mb-1">{stats?.overview?.total_alumni || 0}</div>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400 font-medium mb-3">Registered in system</p>
+                            <div className="flex items-center gap-2 pt-2 border-t border-maroon-100 dark:border-gray-700">
+                                <div className="flex items-center text-xs bg-green-50 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-1 rounded-full">
                                     <TrendingUp className="h-3 w-3 mr-1" />
-                                    <span className="font-bold">+{stats?.recent_activity.recent_registrations || 0}</span>
+                                    <span className="font-bold">+{stats?.recent_activity?.recent_registrations || 0}</span>
                                 </div>
-                                <span className="text-xs text-gray-500">this month</span>
+                                <span className="text-xs text-gray-500 dark:text-gray-400">this month</span>
                             </div>
                         </CardContent>
                     </Card>
@@ -333,30 +415,30 @@ export default function AdminDashboard({ user }: Props) {
                 {/* Employment Breakdown - New Section */}
                 <div>
                     <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-2xl font-bold text-maroon-900">Employment Breakdown</h2>
-                        <Button variant="outline" size="sm" onClick={() => router.visit('/admin/alumni')} className="text-maroon-700 border-maroon-300 hover:bg-maroon-50">
+                        <h2 className="text-2xl font-bold text-maroon-900 dark:text-gray-100">Employment Breakdown</h2>
+                        <Button variant="outline" size="sm" onClick={() => router.visit('/admin/alumni')} className="text-maroon-700 dark:text-gray-300 border-maroon-300 dark:border-gray-600 hover:bg-maroon-50 dark:hover:bg-maroon-800/30">
                             <Users className="h-4 w-4 mr-2" />
                             View Alumni Bank
                         </Button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {/* Good Match */}
-                        <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-green-50 to-emerald-50">
+                        <Card className="border-none shadow-lg dark:shadow-gray-900/50 hover:shadow-xl transition-all bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/40 dark:to-emerald-950/40">
                             <CardHeader className="pb-3">
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="p-2 bg-gradient-to-br from-green-500 to-green-600 rounded-lg">
                                         <CheckCircle className="h-5 w-5 text-white" />
                                     </div>
-                                    <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded-full">
+                                    <span className="text-xs font-bold text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900 px-2 py-1 rounded-full">
                                         Good Match
                                     </span>
                                 </div>
-                                <div className="text-3xl font-extrabold text-green-800">
+                                <div className="text-3xl font-extrabold text-green-800 dark:text-green-200">
                                     {stats?.mismatch_stats?.good_match || 0}
                                 </div>
-                                <p className="text-xs text-green-600 font-medium">
-                                    {stats?.employment_metrics?.total_employed > 0
-                                        ? ((stats?.mismatch_stats?.good_match || 0) / stats.employment_metrics.total_employed * 100).toFixed(1)
+                                <p className="text-xs text-green-600 dark:text-green-400 font-medium">
+                                    {(stats?.employment_metrics?.total_employed ?? 0) > 0
+                                        ? ((stats?.mismatch_stats?.good_match || 0) / (stats?.employment_metrics?.total_employed ?? 1) * 100).toFixed(1)
                                         : '0.0'
                                     }% of employed alumni
                                 </p>
@@ -364,22 +446,22 @@ export default function AdminDashboard({ user }: Props) {
                         </Card>
 
                         {/* Overqualified */}
-                        <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-yellow-50 to-amber-50">
+                        <Card className="border-none shadow-lg dark:shadow-gray-900/50 hover:shadow-xl transition-all bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-yellow-950/40 dark:to-amber-950/40">
                             <CardHeader className="pb-3">
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="p-2 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg">
                                         <AlertCircle className="h-5 w-5 text-white" />
                                     </div>
-                                    <span className="text-xs font-bold text-yellow-700 bg-yellow-100 px-2 py-1 rounded-full">
+                                    <span className="text-xs font-bold text-yellow-700 dark:text-yellow-300 bg-yellow-100 dark:bg-yellow-900 px-2 py-1 rounded-full">
                                         Overqualified
                                     </span>
                                 </div>
-                                <div className="text-3xl font-extrabold text-yellow-800">
+                                <div className="text-3xl font-extrabold text-yellow-800 dark:text-yellow-200">
                                     {stats?.mismatch_stats?.overqualified || 0}
                                 </div>
-                                <p className="text-xs text-yellow-600 font-medium">
-                                    {stats?.employment_metrics?.total_employed > 0
-                                        ? ((stats?.mismatch_stats?.overqualified || 0) / stats.employment_metrics.total_employed * 100).toFixed(1)
+                                <p className="text-xs text-yellow-600 dark:text-yellow-400 font-medium">
+                                    {(stats?.employment_metrics?.total_employed ?? 0) > 0
+                                        ? ((stats?.mismatch_stats?.overqualified || 0) / (stats?.employment_metrics?.total_employed ?? 1) * 100).toFixed(1)
                                         : '0.0'
                                     }% of employed alumni
                                 </p>
@@ -387,22 +469,22 @@ export default function AdminDashboard({ user }: Props) {
                         </Card>
 
                         {/* Unfit */}
-                        <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-orange-50 to-red-50">
+                        <Card className="border-none shadow-lg dark:shadow-gray-900/50 hover:shadow-xl transition-all bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-950/40 dark:to-red-950/40">
                             <CardHeader className="pb-3">
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="p-2 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg">
                                         <TrendingDown className="h-5 w-5 text-white" />
                                     </div>
-                                    <span className="text-xs font-bold text-orange-700 bg-orange-100 px-2 py-1 rounded-full">
+                                    <span className="text-xs font-bold text-orange-700 dark:text-orange-300 bg-orange-100 dark:bg-orange-900 px-2 py-1 rounded-full">
                                         Unfit
                                     </span>
                                 </div>
-                                <div className="text-3xl font-extrabold text-orange-800">
+                                <div className="text-3xl font-extrabold text-orange-800 dark:text-orange-200">
                                     {stats?.mismatch_stats?.unfit || 0}
                                 </div>
-                                <p className="text-xs text-orange-600 font-medium">
-                                    {stats?.employment_metrics?.total_employed > 0
-                                        ? ((stats?.mismatch_stats?.unfit || 0) / stats.employment_metrics.total_employed * 100).toFixed(1)
+                                <p className="text-xs text-orange-600 dark:text-orange-400 font-medium">
+                                    {(stats?.employment_metrics?.total_employed ?? 0) > 0
+                                        ? ((stats?.mismatch_stats?.unfit || 0) / (stats?.employment_metrics?.total_employed ?? 1) * 100).toFixed(1)
                                         : '0.0'
                                     }% working in different field
                                 </p>
@@ -410,24 +492,101 @@ export default function AdminDashboard({ user }: Props) {
                         </Card>
 
                         {/* Underqualified */}
-                        <Card className="border-none shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-blue-50 to-indigo-50">
+                        <Card className="border-none shadow-lg dark:shadow-gray-900/50 hover:shadow-xl transition-all bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40">
                             <CardHeader className="pb-3">
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
                                         <GraduationCap className="h-5 w-5 text-white" />
                                     </div>
-                                    <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-full">
+                                    <span className="text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900 px-2 py-1 rounded-full">
                                         Underqualified
                                     </span>
                                 </div>
-                                <div className="text-3xl font-extrabold text-blue-800">
+                                <div className="text-3xl font-extrabold text-blue-800 dark:text-blue-200">
                                     {stats?.mismatch_stats?.underqualified || 0}
                                 </div>
-                                <p className="text-xs text-blue-600 font-medium">
-                                    {stats?.employment_metrics?.total_employed > 0
-                                        ? ((stats?.mismatch_stats?.underqualified || 0) / stats.employment_metrics.total_employed * 100).toFixed(1)
+                                <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                                    {(stats?.employment_metrics?.total_employed ?? 0) > 0
+                                        ? ((stats?.mismatch_stats?.underqualified || 0) / (stats?.employment_metrics?.total_employed ?? 1) * 100).toFixed(1)
                                         : '0.0'
                                     }% need more education
+                                </p>
+                            </CardHeader>
+                        </Card>
+                    </div>
+                </div>
+
+                {/* Employment Location Breakdown */}
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-2xl font-bold text-maroon-900 dark:text-gray-100">Employment Location</h2>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Local */}
+                        <Card className="border-none shadow-lg dark:shadow-gray-900/50 hover:shadow-xl transition-all bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/40">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="p-2 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg">
+                                        <MapPin className="h-5 w-5 text-white" />
+                                    </div>
+                                    <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900 px-2 py-1 rounded-full">
+                                        Local
+                                    </span>
+                                </div>
+                                <div className="text-3xl font-extrabold text-emerald-800 dark:text-emerald-200">
+                                    {stats?.employment_location_stats?.local || 0}
+                                </div>
+                                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                                    {(stats?.employment_metrics?.total_employed ?? 0) > 0
+                                        ? ((stats?.employment_location_stats?.local || 0) / (stats?.employment_metrics?.total_employed ?? 1) * 100).toFixed(1)
+                                        : '0.0'
+                                    }% working in the Philippines
+                                </p>
+                            </CardHeader>
+                        </Card>
+
+                        {/* Foreign / OFW */}
+                        <Card className="border-none shadow-lg dark:shadow-gray-900/50 hover:shadow-xl transition-all bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-950/40 dark:to-blue-950/40">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="p-2 bg-gradient-to-br from-sky-500 to-blue-600 rounded-lg">
+                                        <Globe className="h-5 w-5 text-white" />
+                                    </div>
+                                    <span className="text-xs font-bold text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900 px-2 py-1 rounded-full">
+                                        Foreign / OFW
+                                    </span>
+                                </div>
+                                <div className="text-3xl font-extrabold text-sky-800 dark:text-sky-200">
+                                    {stats?.employment_location_stats?.foreign || 0}
+                                </div>
+                                <p className="text-xs text-sky-600 dark:text-sky-400 font-medium">
+                                    {(stats?.employment_metrics?.total_employed ?? 0) > 0
+                                        ? ((stats?.employment_location_stats?.foreign || 0) / (stats?.employment_metrics?.total_employed ?? 1) * 100).toFixed(1)
+                                        : '0.0'
+                                    }% working abroad
+                                </p>
+                            </CardHeader>
+                        </Card>
+
+                        {/* Remote */}
+                        <Card className="border-none shadow-lg dark:shadow-gray-900/50 hover:shadow-xl transition-all bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/40 dark:to-purple-950/40">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="p-2 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg">
+                                        <Briefcase className="h-5 w-5 text-white" />
+                                    </div>
+                                    <span className="text-xs font-bold text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900 px-2 py-1 rounded-full">
+                                        Remote
+                                    </span>
+                                </div>
+                                <div className="text-3xl font-extrabold text-violet-800 dark:text-violet-200">
+                                    {stats?.employment_location_stats?.remote || 0}
+                                </div>
+                                <p className="text-xs text-violet-600 dark:text-violet-400 font-medium">
+                                    {(stats?.employment_metrics?.total_employed ?? 0) > 0
+                                        ? ((stats?.employment_location_stats?.remote || 0) / (stats?.employment_metrics?.total_employed ?? 1) * 100).toFixed(1)
+                                        : '0.0'
+                                    }% remote for foreign company
                                 </p>
                             </CardHeader>
                         </Card>
@@ -437,7 +596,7 @@ export default function AdminDashboard({ user }: Props) {
                 {/* Two Column Layout for Survey Stats and Recent Activity */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Survey & Response Stats */}
-                    <Card className="border-none shadow-lg bg-gradient-to-br from-white to-blue-50">
+                    <Card className="border-none shadow-lg dark:shadow-gray-900/50 bg-gradient-to-br from-white to-blue-50 dark:from-gray-800 dark:to-blue-950/30">
                         <CardHeader className="pb-3">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
@@ -445,15 +604,15 @@ export default function AdminDashboard({ user }: Props) {
                                         <ClipboardList className="h-5 w-5 text-white" />
                                     </div>
                                     <div>
-                                        <CardTitle className="text-xl text-maroon-900 font-bold">Survey Engagement</CardTitle>
-                                        <CardDescription className="text-xs text-gray-500">Current statistics</CardDescription>
+                                        <CardTitle className="text-xl text-maroon-900 dark:text-gray-100 font-bold">Survey Engagement</CardTitle>
+                                        <CardDescription className="text-xs text-gray-500 dark:text-gray-400">Current statistics</CardDescription>
                                     </div>
                                 </div>
                                 <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => router.visit('/admin/surveys')}
-                                    className="text-maroon-600 hover:text-maroon-700 hover:bg-maroon-50"
+                                    className="text-maroon-600 dark:text-gray-400 hover:text-maroon-700 dark:hover:text-gray-200 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                 >
                                     View All
                                 </Button>
@@ -461,37 +620,37 @@ export default function AdminDashboard({ user }: Props) {
                         </CardHeader>
                         <CardContent className="space-y-3">
                             <div className="grid grid-cols-2 gap-3">
-                                <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-50 to-sky-50 p-4 border-2 border-blue-200/50">
+                                <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-50 to-sky-50 dark:from-blue-950/40 dark:to-sky-950/40 p-4 border-2 border-blue-200/50 dark:border-blue-700/50">
                                     <div className="flex flex-col">
-                                        <span className="text-xs text-blue-600 font-medium mb-1">Active Surveys</span>
-                                        <span className="text-3xl font-black text-blue-800">{stats?.overview.total_surveys || 0}</span>
-                                        <span className="text-xs text-gray-500 mt-1">Created</span>
+                                        <span className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">Active Surveys</span>
+                                        <span className="text-3xl font-black text-blue-800 dark:text-blue-200">{stats?.overview?.total_surveys || 0}</span>
+                                        <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">Created</span>
                                     </div>
                                 </div>
-                                <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-purple-50 to-violet-50 p-4 border-2 border-purple-200/50">
+                                <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/40 dark:to-violet-950/40 p-4 border-2 border-purple-200/50 dark:border-purple-700/50">
                                     <div className="flex flex-col">
-                                        <span className="text-xs text-purple-600 font-medium mb-1">Responses</span>
-                                        <span className="text-3xl font-black text-purple-800">{stats?.overview.total_responses || 0}</span>
-                                        <span className="text-xs text-gray-500 mt-1">Submitted</span>
+                                        <span className="text-xs text-purple-600 dark:text-purple-400 font-medium mb-1">Responses</span>
+                                        <span className="text-3xl font-black text-purple-800 dark:text-purple-200">{stats?.overview?.total_responses || 0}</span>
+                                        <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">Submitted</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 p-4 border-2 border-green-200/50">
+                            <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/40 dark:via-emerald-950/40 dark:to-teal-950/40 p-4 border-2 border-green-200/50 dark:border-green-700/50">
                                 <div className="flex items-center justify-between mb-2">
-                                    <span className="text-sm font-bold text-green-900">Response Rate</span>
-                                    <span className="text-2xl font-black text-green-700">
-                                        {stats?.overview.response_rate ? stats.overview.response_rate.toFixed(1) : '0.0'}%
+                                    <span className="text-sm font-bold text-green-900 dark:text-green-100">Response Rate</span>
+                                    <span className="text-2xl font-black text-green-700 dark:text-green-300">
+                                        {stats?.overview?.response_rate ? stats.overview.response_rate.toFixed(1) : '0.0'}%
                                     </span>
                                 </div>
-                                <div className="w-full bg-green-100 rounded-full h-3 overflow-hidden">
+                                <div className="w-full bg-green-100 dark:bg-green-900 rounded-full h-3 overflow-hidden">
                                     <div
                                         className="bg-gradient-to-r from-green-500 to-emerald-600 h-3 rounded-full transition-all duration-500"
-                                        style={{ width: `${Math.min(stats?.overview.response_rate || 0, 100)}%` }}
+                                        style={{ width: `${Math.min(stats?.overview?.response_rate || 0, 100)}%` }}
                                     ></div>
                                 </div>
-                                <p className="text-xs text-green-600 font-medium mt-2">
-                                    +{stats?.recent_activity.recent_responses || 0} new responses this month
+                                <p className="text-xs text-green-600 dark:text-green-400 font-medium mt-2">
+                                    +{stats?.recent_activity?.recent_responses || 0} new responses this month
                                 </p>
                             </div>
 
@@ -508,7 +667,7 @@ export default function AdminDashboard({ user }: Props) {
                     </Card>
 
                     {/* Recent Activity & Unemployment Stats */}
-                    <Card className="border-none shadow-lg bg-gradient-to-br from-white to-gray-50">
+                    <Card className="border-none shadow-lg dark:shadow-gray-900/50 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-800">
                         <CardHeader className="pb-3">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
@@ -516,46 +675,46 @@ export default function AdminDashboard({ user }: Props) {
                                         <Activity className="h-5 w-5 text-white" />
                                     </div>
                                     <div>
-                                        <CardTitle className="text-xl text-maroon-900 font-bold">Alumni Status</CardTitle>
-                                        <CardDescription className="text-xs text-gray-500">Current overview</CardDescription>
+                                        <CardTitle className="text-xl text-maroon-900 dark:text-gray-100 font-bold">Alumni Status</CardTitle>
+                                        <CardDescription className="text-xs text-gray-500 dark:text-gray-400">Current overview</CardDescription>
                                     </div>
                                 </div>
                             </div>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                            <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 p-4 border-2 border-green-200/50">
+                            <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 dark:from-green-950/40 dark:via-emerald-950/40 dark:to-teal-950/40 p-4 border-2 border-green-200/50 dark:border-green-700/50">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-start gap-3">
-                                        <div className="p-2.5 bg-white rounded-lg shadow-sm">
+                                        <div className="p-2.5 bg-white dark:bg-gray-800 rounded-lg shadow-sm dark:shadow-gray-900/50">
                                             <Users className="h-5 w-5 text-green-600" />
                                         </div>
                                         <div>
-                                            <p className="font-bold text-gray-900 mb-0.5">New Registrations</p>
-                                            <p className="text-sm text-gray-600">{stats?.recent_activity.recent_registrations || 0} alumni joined</p>
-                                            <p className="text-xs text-green-700 font-medium mt-1 flex items-center gap-1">
+                                            <p className="font-bold text-gray-900 dark:text-gray-100 mb-0.5">New Registrations</p>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">{stats?.recent_activity?.recent_registrations || 0} alumni joined</p>
+                                            <p className="text-xs text-green-700 dark:text-green-300 font-medium mt-1 flex items-center gap-1">
                                                 <Calendar className="h-3 w-3" />
                                                 Last 30 days
                                             </p>
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <div className="text-2xl font-black text-green-600">+{stats?.recent_activity.recent_registrations || 0}</div>
+                                        <div className="text-2xl font-black text-green-600 dark:text-green-400">+{stats?.recent_activity?.recent_registrations || 0}</div>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-3 gap-2">
-                                <div className="rounded-lg bg-gradient-to-br from-orange-50 to-red-50 p-3 border border-orange-200/50">
-                                    <div className="text-xs text-orange-600 font-medium mb-1">Seeking Work</div>
-                                    <div className="text-2xl font-black text-orange-700">{stats?.unemployment_stats?.seeking || 0}</div>
+                                <div className="rounded-lg bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-950/40 dark:to-red-950/40 p-3 border border-orange-200/50 dark:border-orange-700/50">
+                                    <div className="text-xs text-orange-600 dark:text-orange-400 font-medium mb-1">Seeking Work</div>
+                                    <div className="text-2xl font-black text-orange-700 dark:text-orange-300">{stats?.unemployment_stats?.seeking || 0}</div>
                                 </div>
-                                <div className="rounded-lg bg-gradient-to-br from-gray-50 to-slate-50 p-3 border border-gray-200/50">
-                                    <div className="text-xs text-gray-600 font-medium mb-1">Not Seeking</div>
-                                    <div className="text-2xl font-black text-gray-700">{stats?.unemployment_stats?.not_seeking || 0}</div>
+                                <div className="rounded-lg bg-gradient-to-br from-gray-50 to-slate-50 dark:from-gray-800 dark:to-slate-900 p-3 border border-gray-200/50 dark:border-gray-700/50">
+                                    <div className="text-xs text-gray-600 dark:text-gray-400 font-medium mb-1">Not Seeking</div>
+                                    <div className="text-2xl font-black text-gray-700 dark:text-gray-300">{stats?.unemployment_stats?.not_seeking || 0}</div>
                                 </div>
-                                <div className="rounded-lg bg-gradient-to-br from-indigo-50 to-blue-50 p-3 border border-indigo-200/50">
-                                    <div className="text-xs text-indigo-600 font-medium mb-1">Studying</div>
-                                    <div className="text-2xl font-black text-indigo-700">{stats?.unemployment_stats?.continuing_education || 0}</div>
+                                <div className="rounded-lg bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-950/40 dark:to-blue-950/40 p-3 border border-indigo-200/50 dark:border-indigo-700/50">
+                                    <div className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mb-1">Studying</div>
+                                    <div className="text-2xl font-black text-indigo-700 dark:text-indigo-300">{stats?.unemployment_stats?.continuing_education || 0}</div>
                                 </div>
                             </div>
 
@@ -568,6 +727,164 @@ export default function AdminDashboard({ user }: Props) {
                                     View All Alumni
                                 </Button>
                             </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Recent Jobs & Announcements Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Recent Job Postings */}
+                    <Card className="border-none shadow-lg dark:shadow-gray-900/50 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-800">
+                        <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg">
+                                        <Briefcase className="h-5 w-5 text-white" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-xl text-maroon-900 dark:text-gray-100 font-bold">Recent Jobs</CardTitle>
+                                        <CardDescription className="text-xs text-gray-500 dark:text-gray-400">Latest job postings</CardDescription>
+                                    </div>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                                    onClick={() => router.visit('/admin/job-board')}
+                                >
+                                    View All
+                                    <ArrowRight className="h-4 w-4 ml-1" />
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            {recentJobs.length > 0 ? (
+                                recentJobs.map((job) => (
+                                    <div
+                                        key={job.id}
+                                        className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-900 hover:bg-blue-50/50 dark:hover:bg-gray-800 transition-colors cursor-pointer border border-gray-100 dark:border-gray-700"
+                                        onClick={() => router.visit('/admin/job-board')}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <div className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm dark:shadow-gray-900/50">
+                                                <Briefcase className="h-4 w-4 text-blue-600" />
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm line-clamp-1">{job.title}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">{job.company_name}</p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    {job.location && (
+                                                        <span className="flex items-center text-xs text-gray-400 dark:text-gray-500">
+                                                            <MapPin className="h-3 w-3 mr-1" />
+                                                            {job.location}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${job.status === 'published'
+                                                ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300'
+                                                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                                                }`}>
+                                                {job.status}
+                                            </span>
+                                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                                <Eye className="h-3 w-3 inline mr-1" />
+                                                {job.views_count || 0}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                                    <Briefcase className="h-12 w-12 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
+                                    <p className="text-sm">No job postings yet</p>
+                                </div>
+                            )}
+                            <Button
+                                onClick={() => router.visit('/admin/job-board')}
+                                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md hover:shadow-lg transition-all"
+                            >
+                                <Briefcase className="h-4 w-4 mr-2" />
+                                Manage Job Board
+                            </Button>
+                        </CardContent>
+                    </Card>
+
+                    {/* Recent Announcements */}
+                    <Card className="border-none shadow-lg dark:shadow-gray-900/50 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-800">
+                        <CardHeader className="pb-3">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-2 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg">
+                                        <Megaphone className="h-5 w-5 text-white" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-xl text-maroon-900 dark:text-gray-100 font-bold">Announcements</CardTitle>
+                                        <CardDescription className="text-xs text-gray-500 dark:text-gray-400">Recent broadcasts</CardDescription>
+                                    </div>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30"
+                                    onClick={() => router.visit('/admin/announcements')}
+                                >
+                                    View All
+                                    <ArrowRight className="h-4 w-4 ml-1" />
+                                </Button>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            {recentAnnouncements.length > 0 ? (
+                                recentAnnouncements.map((announcement) => (
+                                    <div
+                                        key={announcement.id}
+                                        className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-900 hover:bg-amber-50/50 dark:hover:bg-gray-800 transition-colors cursor-pointer border border-gray-100 dark:border-gray-700"
+                                        onClick={() => router.visit('/admin/announcements')}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <div className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm dark:shadow-gray-900/50">
+                                                <Bell className={`h-4 w-4 ${announcement.priority === 'urgent' ? 'text-red-500' :
+                                                    announcement.priority === 'high' ? 'text-orange-500' :
+                                                        'text-amber-600'
+                                                    }`} />
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm line-clamp-1">{announcement.title}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                    {new Date(announcement.created_at).toLocaleDateString()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${announcement.is_published
+                                                ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300'
+                                                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                                                }`}>
+                                                {announcement.is_published ? 'Published' : 'Draft'}
+                                            </span>
+                                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                                                <Eye className="h-3 w-3 inline mr-1" />
+                                                {announcement.reads_count || 0}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                                    <Megaphone className="h-12 w-12 mx-auto mb-2 text-gray-300 dark:text-gray-600" />
+                                    <p className="text-sm">No announcements yet</p>
+                                </div>
+                            )}
+                            <Button
+                                onClick={() => router.visit('/admin/announcements')}
+                                className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white shadow-md hover:shadow-lg transition-all"
+                            >
+                                <Megaphone className="h-4 w-4 mr-2" />
+                                Manage Announcements
+                            </Button>
                         </CardContent>
                     </Card>
                 </div>

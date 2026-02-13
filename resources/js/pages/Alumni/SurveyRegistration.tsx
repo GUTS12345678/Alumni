@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { GraduationCap, ArrowLeft, ArrowRight, User, BookOpen, Briefcase, MapPin, Heart, Lock, CheckCircle, AlertCircle, Eye, EyeOff, Shield, Sparkles, Building, Mail, RefreshCw, X, Award, FileText, School } from 'lucide-react';
+import { GraduationCap, ArrowLeft, ArrowRight, User, Briefcase, Heart, Lock, CheckCircle, AlertCircle, Eye, EyeOff, Shield, Sparkles, Building, Mail, RefreshCw, X, Award, School } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
 import axios from 'axios';
@@ -346,6 +346,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
     });
 
     const [errors, setErrors] = useState<Record<string, string>>({});
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [error, setError] = useState<string>(''); // General form-level error message
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -373,6 +374,14 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
         error: boolean;
         countdown: number;
     }>({ sent: false, verified: false, sending: false, verifying: false, code: '', message: '', error: false, countdown: 0 });
+
+    // Add public-page class to html for proper scrolling (same as LandingPage)
+    useEffect(() => {
+        document.documentElement.classList.add('public-page');
+        return () => {
+            document.documentElement.classList.remove('public-page');
+        };
+    }, []);
 
     // Countdown timer for OTP resend
     useEffect(() => {
@@ -494,7 +503,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                         message: 'Email is available'
                     });
                 }
-            } catch (error) {
+            } catch {
                 setEmailValidation({ checking: false, exists: false, message: '' });
             }
         };
@@ -531,7 +540,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                         message: 'Student ID is available'
                     });
                 }
-            } catch (error) {
+            } catch {
                 setStudentIdValidation({ checking: false, exists: false, message: '' });
             }
         };
@@ -540,14 +549,14 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
         return () => clearTimeout(timer);
     }, [formData.studentId]);
 
-    const handleInputChange = useCallback((key: string, value: string) => {
+    const handleInputChange = useCallback((key: string, value: string | boolean | Array<{ name: string; place: string; dateTaken: string; rating: string }>) => {
         setFormData(prev => {
             // If campus changes, reset department and course selection and populate campus name
             if (key === 'campusId') {
                 const selectedCampus = campuses.find(c => c.id.toString() === value);
                 return {
                     ...prev,
-                    campusId: value,
+                    campusId: value as string,
                     campus: selectedCampus?.name || '',
                     departmentId: '',
                     courseId: ''
@@ -555,10 +564,9 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
             }
             // If department changes, reset course selection and populate department name
             if (key === 'departmentId') {
-                const selectedDept = departments.find(d => d.id.toString() === value);
                 return {
                     ...prev,
-                    departmentId: value,
+                    departmentId: value as string,
                     courseId: ''
                 };
             }
@@ -567,12 +575,12 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                 const selectedCourse = courses.find(c => c.id.toString() === value);
                 return {
                     ...prev,
-                    courseId: value,
+                    courseId: value as string,
                     course: selectedCourse?.name || '',
                     major: selectedCourse?.name || '' // Course includes major
                 };
             }
-            return { ...prev, [key]: value };
+            return { ...prev, [key]: value } as SurveyData;
         });
         // Clear error when user starts typing
         if (errors[key]) {
@@ -582,7 +590,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
         if (key === 'email') {
             setOtpState({ sent: false, verified: false, sending: false, verifying: false, code: '', message: '', error: false, countdown: 0 });
         }
-    }, [errors, campuses, departments, courses]);
+    }, [errors, campuses, courses]);
 
     // Send OTP to email
     const handleSendOtp = useCallback(async () => {
@@ -880,24 +888,25 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
             setIsSubmitting(false);
         }
     }, [formData, validateSection, surveyId, responseToken]); const renderQuestion = (question: Question) => {
-        const value = formData[question.key as keyof SurveyData];
+        const rawValue = formData[question.key as keyof SurveyData];
+        const value = typeof rawValue === 'string' ? rawValue : '';
         const error = errors[question.key];
 
         switch (question.type) {
             case 'campus-select':
                 return (
                     <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800">
+                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
                             {question.label}
                             {question.required && <span className="text-red-500 ml-1">*</span>}
                         </Label>
                         <div className="relative">
-                            <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+                            <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
                             <select
                                 id={question.key}
-                                value={value}
+                                value={value as string}
                                 onChange={(e) => handleInputChange(question.key, e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 border border-beige-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500 bg-white text-gray-900 appearance-none cursor-pointer"
+                                className="w-full pl-10 pr-4 py-2.5 border border-beige-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 appearance-none cursor-pointer"
                                 disabled={loadingCampuses}
                             >
                                 <option value="">
@@ -925,17 +934,17 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
             case 'department-select':
                 return (
                     <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800">
+                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
                             {question.label}
                             {question.required && <span className="text-red-500 ml-1">*</span>}
                         </Label>
                         <div className="relative">
-                            <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+                            <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
                             <select
                                 id={question.key}
-                                value={value}
+                                value={value as string}
                                 onChange={(e) => handleInputChange(question.key, e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 border border-beige-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500 bg-white text-gray-900 appearance-none cursor-pointer disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                className="w-full pl-10 pr-4 py-2.5 border border-beige-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 appearance-none cursor-pointer disabled:bg-gray-100 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
                                 disabled={!formData.campusId || loadingDepartments}
                             >
                                 <option value="">
@@ -967,17 +976,17 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
             case 'course-select':
                 return (
                     <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800">
+                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
                             {question.label}
                             {question.required && <span className="text-red-500 ml-1">*</span>}
                         </Label>
                         <div className="relative">
-                            <GraduationCap className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+                            <GraduationCap className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
                             <select
                                 id={question.key}
-                                value={value}
+                                value={value as string}
                                 onChange={(e) => handleInputChange(question.key, e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 border border-beige-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500 bg-white text-gray-900 appearance-none cursor-pointer disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                className="w-full pl-10 pr-4 py-2.5 border border-beige-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 appearance-none cursor-pointer disabled:bg-gray-100 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
                                 disabled={!formData.departmentId || loadingCourses}
                             >
                                 <option value="">
@@ -1009,7 +1018,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
             case 'select':
                 return (
                     <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800">
+                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
                             {question.label}
                             {question.required && <span className="text-red-500 ml-1">*</span>}
                         </Label>
@@ -1017,7 +1026,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                             id={question.key}
                             value={value}
                             onChange={(e) => handleInputChange(question.key, e.target.value)}
-                            className="w-full px-4 py-2.5 border border-beige-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500 bg-white text-gray-900 appearance-none cursor-pointer"
+                            className="w-full px-4 py-2.5 border border-beige-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 appearance-none cursor-pointer"
                         >
                             <option value="">Select {question.label.toLowerCase()}</option>
                             {question.options?.map((option) => {
@@ -1036,7 +1045,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
             case 'radio':
                 return (
                     <div className="space-y-3">
-                        <Label className="text-base font-medium text-maroon-800">{question.label}</Label>
+                        <Label className="text-base font-medium text-maroon-800 dark:text-maroon-200">{question.label}</Label>
                         <RadioGroup
                             value={value}
                             onValueChange={(val) => handleInputChange(question.key, val)}
@@ -1046,11 +1055,11 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                 const optionValue = typeof option === 'string' ? option : option.value;
                                 const optionLabel = typeof option === 'string' ? option : option.label;
                                 return (
-                                    <div key={optionValue} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                                    <div key={optionValue} className="flex items-center space-x-3 p-3 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                                         <RadioGroupItem value={optionValue} id={`${question.key}-${optionValue}`} className="h-5 w-5" />
                                         <Label
                                             htmlFor={`${question.key}-${optionValue}`}
-                                            className="text-base text-gray-900 cursor-pointer flex-1 font-medium"
+                                            className="text-base text-gray-900 dark:text-gray-100 cursor-pointer flex-1 font-medium"
                                         >
                                             {optionLabel}
                                         </Label>
@@ -1065,14 +1074,14 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
             case 'textarea':
                 return (
                     <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800">
+                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
                             {question.label}
                         </Label>
                         <Textarea
                             id={question.key}
                             value={value}
                             onChange={(e) => handleInputChange(question.key, e.target.value)}
-                            className="min-h-[100px] border-beige-300 focus:border-maroon-500 focus:ring-maroon-500"
+                            className="min-h-[100px] border-beige-300 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
                             placeholder={`Enter your ${question.label.toLowerCase()}`}
                         />
                         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -1082,7 +1091,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
             case 'password':
                 return (
                     <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800">
+                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
                             {question.label}
                             {question.required && <span className="text-red-500 ml-1">*</span>}
                         </Label>
@@ -1092,13 +1101,13 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                 type={question.key === 'password' ? (showPassword ? 'text' : 'password') : (showConfirmPassword ? 'text' : 'password')}
                                 value={value}
                                 onChange={(e) => handleInputChange(question.key, e.target.value)}
-                                className="border-beige-300 focus:border-maroon-500 focus:ring-maroon-500 pr-10"
+                                className="border-beige-300 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 pr-10"
                                 placeholder={`Enter your ${question.label.toLowerCase()}`}
                             />
                             <button
                                 type="button"
                                 onClick={() => question.key === 'password' ? setShowPassword(!showPassword) : setShowConfirmPassword(!showConfirmPassword)}
-                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
                             >
                                 {(question.key === 'password' ? showPassword : showConfirmPassword) ? (
                                     <EyeOff className="h-4 w-4" />
@@ -1109,7 +1118,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                         </div>
                         {error && <p className="text-sm text-red-600">{error}</p>}
                         {question.key === 'password' && !error && value && (
-                            <div className="text-xs text-gray-600">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
                                 Password strength: {value.length >= 8 ? 'Strong' : value.length >= 6 ? 'Medium' : 'Weak'}
                             </div>
                         )}
@@ -1119,7 +1128,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
             case 'checkbox-group':
                 return (
                     <div className="space-y-3">
-                        <Label className="text-base font-medium text-maroon-800">
+                        <Label className="text-base font-medium text-maroon-800 dark:text-maroon-200">
                             {question.label}
                             {question.required && <span className="text-red-500 ml-1">*</span>}
                         </Label>
@@ -1145,7 +1154,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                             "w-full p-3 text-left text-sm font-medium rounded-lg border-2 transition-all duration-200",
                                             isChecked
                                                 ? "bg-maroon-600 text-white border-maroon-600 shadow-md"
-                                                : "bg-white text-gray-700 border-gray-300 hover:border-maroon-400 hover:bg-maroon-50"
+                                                : "bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-maroon-400 hover:bg-maroon-50 dark:hover:bg-gray-600"
                                         )}
                                     >
                                         <div className="flex items-center justify-between">
@@ -1165,16 +1174,16 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
             case 'examination-list':
                 return (
                     <div className="space-y-4">
-                        <Label className="text-base font-medium text-maroon-800">
+                        <Label className="text-base font-medium text-maroon-800 dark:text-maroon-200">
                             {question.label}
                             {question.required && <span className="text-red-500 ml-1">*</span>}
                         </Label>
-                        <p className="text-sm text-gray-600">Add your professional licenses and government examinations passed</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Add your professional licenses and government examinations passed</p>
 
                         {formData.examinations.map((exam, index) => (
-                            <div key={index} className="border-2 border-maroon-200 rounded-lg p-4 space-y-3 bg-maroon-50">
+                            <div key={index} className="border-2 border-maroon-200 dark:border-gray-600 rounded-lg p-4 space-y-3 bg-maroon-50 dark:bg-gray-700/50">
                                 <div className="flex justify-between items-center">
-                                    <h4 className="font-semibold text-maroon-800">Examination {index + 1}</h4>
+                                    <h4 className="font-semibold text-maroon-800 dark:text-maroon-200">Examination {index + 1}</h4>
                                     <Button
                                         type="button"
                                         onClick={() => {
@@ -1257,7 +1266,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                 handleInputChange('examinations', newExams);
                             }}
                             variant="outline"
-                            className="w-full border-2 border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="w-full border-2 border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-maroon-300 hover:bg-maroon-50 dark:hover:bg-gray-700"
                         >
                             <Award className="h-4 w-4 mr-2" />
                             Add Examination
@@ -1285,55 +1294,55 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                         </div>
 
                         {/* Consent Content */}
-                        <div className="bg-white border-2 border-maroon-200 rounded-lg p-4 space-y-3">
-                            <p className="text-gray-700 font-medium text-sm">
+                        <div className="bg-white dark:bg-gray-800 border-2 border-maroon-200 dark:border-gray-600 rounded-lg p-4 space-y-3">
+                            <p className="text-gray-700 dark:text-gray-300 font-medium text-sm">
                                 <em>In accordance with RA 10173 or Data Privacy Act of 2012, I consent to the following terms and condition on the collection, use, processing and disclosure of my personal data:</em>
                             </p>
 
-                            <div className="space-y-2 text-gray-700 text-sm">
+                            <div className="space-y-2 text-gray-700 dark:text-gray-300 text-sm">
                                 <div className="flex items-start space-x-3">
-                                    <span className="font-bold text-maroon-700 min-w-[24px]">1.</span>
+                                    <span className="font-bold text-maroon-700 dark:text-maroon-400 min-w-[24px]">1.</span>
                                     <p>I am aware that EARISTAA has collected and stored my personal data during Graduation Process. These data include my demographic profile, contact details like address/email, landline/mobile numbers.</p>
                                 </div>
 
                                 <div className="flex items-start space-x-3">
-                                    <span className="font-bold text-maroon-700 min-w-[24px]">2.</span>
+                                    <span className="font-bold text-maroon-700 dark:text-maroon-400 min-w-[24px]">2.</span>
                                     <p>I express my consent for EARISTAA to collect, use, record, disclose, transfer, store, organize update, monitor and/or process my personal information.</p>
                                 </div>
 
                                 <div className="flex items-start space-x-3">
-                                    <span className="font-bold text-maroon-700 min-w-[24px]">3.</span>
+                                    <span className="font-bold text-maroon-700 dark:text-maroon-400 min-w-[24px]">3.</span>
                                     <p>I agree to personally update these data thru email request as needed.</p>
                                 </div>
 
                                 <div className="flex items-start space-x-3">
-                                    <span className="font-bold text-maroon-700 min-w-[24px]">4.</span>
+                                    <span className="font-bold text-maroon-700 dark:text-maroon-400 min-w-[24px]">4.</span>
                                     <p>For the efficient management of the school records, I authorize EARISTAA to manage my data for sharing with accredited company/industry partners government agencies.</p>
                                 </div>
 
                                 <div className="flex items-start space-x-3">
-                                    <span className="font-bold text-maroon-700 min-w-[24px]">5.</span>
+                                    <span className="font-bold text-maroon-700 dark:text-maroon-400 min-w-[24px]">5.</span>
                                     <p>To ensure the protection of my rights as a data subject, I understand that EARISTAA shall warrant to me the following Rights/:</p>
-                                    <div className="ml-6 italic text-sm text-gray-600">
+                                    <div className="ml-6 italic text-sm text-gray-600 dark:text-gray-400">
                                         Received notices on changes in the above-cited purposes for my data processing, or personal data breaches provided for in Section 39 of the Data Privacy Act's Implementing Guidelines;
                                     </div>
                                 </div>
 
                                 <div className="flex items-start space-x-3">
-                                    <span className="font-bold text-maroon-700 min-w-[24px]">6.</span>
+                                    <span className="font-bold text-maroon-700 dark:text-maroon-400 min-w-[24px]">6.</span>
                                     <p>I hereby affirm my right to be informed, to access, and rectify and suspend and withdraw my personal data pursuant to the provision of the RA 10173 and its implementing rules and regulations.</p>
                                 </div>
                             </div>
 
-                            <div className="border-t-2 border-maroon-200 pt-3 mt-3">
-                                <p className="text-gray-700 italic font-medium text-center text-sm">
+                            <div className="border-t-2 border-maroon-200 dark:border-gray-600 pt-3 mt-3">
+                                <p className="text-gray-700 dark:text-gray-300 italic font-medium text-center text-sm">
                                     By clicking "I Agree" below, I warrant that I have read, understood all of the above provision, and agreed with its full implementation.
                                 </p>
                             </div>
                         </div>
 
                         {/* Agree/Disagree Buttons */}
-                        <div className="bg-gradient-to-r from-maroon-50 to-beige-50 border-2 border-maroon-300 rounded-lg p-3">
+                        <div className="bg-gradient-to-r from-maroon-50 to-beige-50 dark:from-gray-800 dark:to-gray-800 border-2 border-maroon-300 dark:border-gray-600 rounded-lg p-3">
                             <div className="flex flex-col sm:flex-row gap-3 justify-center items-stretch sm:items-center">
                                 <Button
                                     type="button"
@@ -1362,14 +1371,14 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
 
                             {/* Consent Status Indicator */}
                             {formData.dataPrivacyConsent && (
-                                <div className="mt-3 p-3 bg-green-50 border-2 border-green-300 rounded-lg">
+                                <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-700 rounded-lg">
                                     <div className="flex items-center justify-center space-x-3">
                                         <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
                                             <CheckCircle className="h-5 w-5 text-white" />
                                         </div>
                                         <div>
-                                            <p className="font-semibold text-green-900">Consent Granted</p>
-                                            <p className="text-sm text-green-700">You may now proceed to the next step.</p>
+                                            <p className="font-semibold text-green-900 dark:text-green-200">Consent Granted</p>
+                                            <p className="text-sm text-green-700 dark:text-green-400">You may now proceed to the next step.</p>
                                         </div>
                                     </div>
                                 </div>
@@ -1388,7 +1397,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
             default:
                 return (
                     <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800">
+                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
                             {question.label}
                             {question.required && <span className="text-red-500 ml-1">*</span>}
                         </Label>
@@ -1399,7 +1408,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                 value={value}
                                 onChange={(e) => handleInputChange(question.key, e.target.value)}
                                 className={cn(
-                                    "border-beige-300 focus:border-maroon-500 focus:ring-maroon-500",
+                                    "border-beige-300 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400",
                                     question.type === 'date' && "max-w-xs",
                                     question.key === 'email' && emailValidation.exists && "border-red-500 pr-10",
                                     question.key === 'email' && !emailValidation.exists && emailValidation.message && "border-green-500 pr-10",
@@ -1455,17 +1464,17 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
 
                         {/* OTP Verification Section */}
                         {question.key === 'email' && value && !emailValidation.exists && !emailValidation.checking && emailValidation.message && (
-                            <div className="mt-4 p-4 bg-gradient-to-r from-maroon-50 to-beige-50 rounded-xl border-2 border-maroon-200">
+                            <div className="mt-4 p-4 bg-gradient-to-r from-maroon-50 to-beige-50 dark:from-gray-700 dark:to-gray-700 rounded-xl border-2 border-maroon-200 dark:border-gray-600">
                                 {!otpState.verified ? (
                                     <>
                                         <div className="flex items-center mb-3">
-                                            <Mail className="h-5 w-5 text-maroon-600 mr-2" />
-                                            <span className="text-sm font-semibold text-maroon-800">Email Verification Required</span>
+                                            <Mail className="h-5 w-5 text-maroon-600 dark:text-maroon-400 mr-2" />
+                                            <span className="text-sm font-semibold text-maroon-800 dark:text-maroon-200">Email Verification Required</span>
                                         </div>
 
                                         {!otpState.sent ? (
                                             <div className="space-y-3">
-                                                <p className="text-sm text-gray-600">
+                                                <p className="text-sm text-gray-600 dark:text-gray-400">
                                                     We'll send a 6-digit verification code to <strong>{value}</strong>
                                                 </p>
                                                 <Button
@@ -1489,7 +1498,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                             </div>
                                         ) : (
                                             <div className="space-y-3">
-                                                <p className="text-sm text-gray-600">
+                                                <p className="text-sm text-gray-600 dark:text-gray-400">
                                                     Enter the 6-digit code sent to <strong>{value}</strong>
                                                 </p>
                                                 <div className="flex flex-col sm:flex-row gap-3">
@@ -1528,11 +1537,11 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
 
                                                 {/* Resend OTP */}
                                                 <div className="flex items-center justify-between pt-2">
-                                                    <span className="text-xs text-gray-500">
+                                                    <span className="text-xs text-gray-500 dark:text-gray-400">
                                                         Didn't receive the code?
                                                     </span>
                                                     {otpState.countdown > 0 ? (
-                                                        <span className="text-xs text-gray-500">
+                                                        <span className="text-xs text-gray-500 dark:text-gray-400">
                                                             Resend in {otpState.countdown}s
                                                         </span>
                                                     ) : (
@@ -1540,7 +1549,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                                             type="button"
                                                             onClick={handleSendOtp}
                                                             disabled={otpState.sending}
-                                                            className="text-xs text-maroon-600 hover:text-maroon-800 font-medium flex items-center"
+                                                            className="text-xs text-maroon-600 dark:text-maroon-400 hover:text-maroon-800 dark:hover:text-maroon-300 font-medium flex items-center"
                                                         >
                                                             <RefreshCw className="h-3 w-3 mr-1" />
                                                             Resend Code
@@ -1572,7 +1581,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                         </div>
                                         <div>
                                             <p className="font-semibold">Email Verified!</p>
-                                            <p className="text-sm text-gray-600">Your email has been successfully verified.</p>
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">Your email has been successfully verified.</p>
                                         </div>
                                     </div>
                                 )}
@@ -1601,11 +1610,11 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
         <>
             <Head title="Alumni Registration Survey" />
 
-            <div className="min-h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 relative overflow-hidden">
+            <div className="min-h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 relative overflow-x-hidden">
                 {/* Decorative Background Elements */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-maroon-200 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-pulse"></div>
-                    <div className="absolute bottom-0 left-0 w-96 h-96 bg-beige-200 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-pulse" style={{ animationDelay: '3s' }}></div>
+                    <div className="absolute top-0 right-0 w-96 h-96 bg-maroon-200 dark:bg-maroon-800 rounded-full mix-blend-multiply dark:mix-blend-normal filter blur-3xl opacity-10 dark:opacity-20 animate-pulse"></div>
+                    <div className="absolute bottom-0 left-0 w-96 h-96 bg-beige-200 dark:bg-gray-700 rounded-full mix-blend-multiply dark:mix-blend-normal filter blur-3xl opacity-10 dark:opacity-20 animate-pulse" style={{ animationDelay: '3s' }}></div>
                 </div>
 
                 {/* Header */}
@@ -1667,8 +1676,8 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                 {/* Main Content */}
                 <div className="container mx-auto px-4 py-4 relative z-10">
                     <div className="max-w-6xl mx-auto">
-                        <Card className="border-maroon-200 shadow-lg bg-white/95 backdrop-blur-sm overflow-hidden">
-                            <CardHeader className="bg-gradient-to-r from-maroon-50 to-beige-50 border-b border-maroon-200 py-3 px-4">
+                        <Card className="border-maroon-200 dark:border-gray-700 shadow-lg bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm overflow-hidden">
+                            <CardHeader className="bg-gradient-to-r from-maroon-50 to-beige-50 dark:from-gray-800 dark:to-gray-800 border-b border-maroon-200 dark:border-gray-700 py-3 px-4">
                                 <div className="flex items-start">
                                     <div className="w-12 h-12 bg-gradient-to-br from-maroon-600 to-maroon-700 rounded-xl flex items-center justify-center mr-3 shadow-lg flex-shrink-0">
                                         {React.createElement(currentSectionData.icon, {
@@ -1676,10 +1685,10 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                         })}
                                     </div>
                                     <div className="flex-1">
-                                        <CardTitle className="text-xl md:text-2xl text-maroon-900 font-bold mb-1">
+                                        <CardTitle className="text-xl md:text-2xl text-maroon-900 dark:text-white font-bold mb-1">
                                             {currentSectionData.title}
                                         </CardTitle>
-                                        <CardDescription className="text-maroon-600 text-sm">
+                                        <CardDescription className="text-maroon-600 dark:text-gray-400 text-sm">
                                             {currentSectionData.description}
                                         </CardDescription>
                                     </div>
@@ -1745,10 +1754,10 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                 {/* Submission Status */}
                                 {submissionStatus !== 'idle' && (
                                     <div className={`mt-8 p-5 rounded-xl flex items-start space-x-4 animate-fade-in shadow-lg ${submissionStatus === 'success'
-                                        ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300'
+                                        ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border-2 border-green-300 dark:border-green-700'
                                         : submissionStatus === 'error'
-                                            ? 'bg-gradient-to-r from-red-50 to-rose-50 border-2 border-red-300'
-                                            : 'bg-gradient-to-r from-blue-50 to-cyan-50 border-2 border-blue-300'
+                                            ? 'bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30 border-2 border-red-300 dark:border-red-700'
+                                            : 'bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 border-2 border-blue-300 dark:border-blue-700'
                                         }`}>
                                         <div className="flex-shrink-0">
                                             {submissionStatus === 'success' && (
@@ -1767,10 +1776,10 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                         </div>
                                         <div className="flex-1">
                                             <p className={`text-base font-bold ${submissionStatus === 'success'
-                                                ? 'text-green-900'
+                                                ? 'text-green-900 dark:text-green-200'
                                                 : submissionStatus === 'error'
-                                                    ? 'text-red-900'
-                                                    : 'text-blue-900'
+                                                    ? 'text-red-900 dark:text-red-200'
+                                                    : 'text-blue-900 dark:text-blue-200'
                                                 }`}>
                                                 {submissionStatus === 'submitting' && 'Processing your registration...'}
                                                 {submissionStatus === 'success' && 'Registration Successful!'}
@@ -1778,10 +1787,10 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                             </p>
                                             {submissionMessage && (
                                                 <p className={`text-sm mt-2 leading-relaxed ${submissionStatus === 'success'
-                                                    ? 'text-green-800'
+                                                    ? 'text-green-800 dark:text-green-300'
                                                     : submissionStatus === 'error'
-                                                        ? 'text-red-800'
-                                                        : 'text-blue-800'
+                                                        ? 'text-red-800 dark:text-red-300'
+                                                        : 'text-blue-800 dark:text-blue-300'
                                                     }`}>
                                                     {submissionMessage}
                                                 </p>
@@ -1791,12 +1800,12 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                 )}
 
                                 {/* Navigation Buttons */}
-                                <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mt-10 pt-8 border-t-2 border-maroon-100">
+                                <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mt-10 pt-8 border-t-2 border-maroon-100 dark:border-gray-700">
                                     <Button
                                         onClick={handlePrevious}
                                         disabled={currentSection === 0 || isSubmitting}
                                         variant="outline"
-                                        className="border-2 border-maroon-300 text-maroon-700 hover:bg-maroon-50 hover:border-maroon-500 disabled:opacity-50 h-12 px-6 text-base font-semibold transition-all duration-300 order-2 sm:order-1"
+                                        className="border-2 border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-gray-700 hover:border-maroon-500 disabled:opacity-50 h-12 px-6 text-base font-semibold transition-all duration-300 order-2 sm:order-1"
                                     >
                                         <ArrowLeft className="w-5 h-5 mr-2" />
                                         Previous
@@ -1849,7 +1858,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
 
                         {/* Section Navigation Dots */}
                         <div className="mt-8 flex justify-center">
-                            <div className="bg-white/90 backdrop-blur-sm px-6 py-4 rounded-full shadow-lg border-2 border-maroon-200">
+                            <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm px-6 py-4 rounded-full shadow-lg border-2 border-maroon-200 dark:border-gray-700">
                                 <div className="flex space-x-3">
                                     {sections.map((section, index) => (
                                         <button
@@ -1859,7 +1868,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                                 ? 'w-10 h-4 bg-gradient-to-r from-maroon-600 to-maroon-700 shadow-md'
                                                 : index < currentSection
                                                     ? 'w-4 h-4 bg-maroon-400 hover:bg-maroon-500'
-                                                    : 'w-4 h-4 bg-beige-300 hover:bg-beige-400'
+                                                    : 'w-4 h-4 bg-beige-300 dark:bg-gray-600 hover:bg-beige-400 dark:hover:bg-gray-500'
                                                 }`}
                                             title={section.title}
                                             aria-label={`Go to ${section.title}`}
@@ -1871,7 +1880,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
 
                         {/* Help Text */}
                         <div className="mt-6 text-center">
-                            <p className="text-sm text-maroon-600">
+                            <p className="text-sm text-maroon-600 dark:text-gray-400">
                                 <span className="inline-flex items-center">
                                     <Shield className="w-4 h-4 mr-1" />
                                     Your information is secure and encrypted

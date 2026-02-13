@@ -41,7 +41,20 @@ class ProfileController extends Controller
     {
         $user = Auth::user();
 
-        $validator = Validator::make($request->all(), [
+        // Convert empty strings to null for URL fields
+        $data = $request->all();
+        if (isset($data['website']) && $data['website'] === '') {
+            $data['website'] = null;
+        }
+        if (isset($data['social_links']) && is_array($data['social_links'])) {
+            foreach ($data['social_links'] as $key => $value) {
+                if ($value === '') {
+                    $data['social_links'][$key] = null;
+                }
+            }
+        }
+
+        $validator = Validator::make($data, [
             'name' => 'sometimes|required|string|max:255',
             'email' => 'sometimes|required|email|unique:users,email,' . $user->id,
             'phone_number' => 'nullable|string|max:20',

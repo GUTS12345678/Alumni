@@ -24,6 +24,14 @@ export default function ResetPassword({ email, token }: ResetPasswordProps) {
     const [errors, setErrors] = useState<{ email?: string; password?: string; password_confirmation?: string; general?: string }>({});
     const [passwordStrength, setPasswordStrength] = useState<{ score: number; label: string; color: string }>({ score: 0, label: '', color: '' });
 
+    // Add public-page class to html for proper scrolling
+    useEffect(() => {
+        document.documentElement.classList.add('public-page');
+        return () => {
+            document.documentElement.classList.remove('public-page');
+        };
+    }, []);
+
     // Evaluate password strength
     useEffect(() => {
         if (!formData.password) {
@@ -123,7 +131,7 @@ export default function ResetPassword({ email, token }: ResetPasswordProps) {
         <>
             <Head title="Reset Password - Alumni Tracer System" />
 
-            <div className="min-h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 flex relative overflow-hidden">
+            <div className="min-h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 flex relative overflow-x-hidden">
                 {/* Decorative Background Elements */}
                 <div className="absolute inset-0 overflow-hidden pointer-events-none">
                     <div className="absolute -top-40 -right-40 w-80 h-80 bg-maroon-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse"></div>
@@ -270,7 +278,7 @@ export default function ResetPassword({ email, token }: ResetPasswordProps) {
                                                 <div className="flex items-center justify-between mb-1">
                                                     <span className="text-xs text-maroon-600">Password strength:</span>
                                                     <span className={`text-xs font-medium ${passwordStrength.label === 'Weak' ? 'text-red-600' :
-                                                            passwordStrength.label === 'Medium' ? 'text-yellow-600' : 'text-green-600'
+                                                        passwordStrength.label === 'Medium' ? 'text-yellow-600' : 'text-green-600'
                                                         }`}>
                                                         {passwordStrength.label}
                                                     </span>
@@ -306,10 +314,10 @@ export default function ResetPassword({ email, token }: ResetPasswordProps) {
                                                 value={formData.password_confirmation}
                                                 onChange={(e) => handleInputChange('password_confirmation', e.target.value)}
                                                 className={`pl-12 pr-12 h-12 border-maroon-200 focus:border-maroon-600 focus:ring-maroon-600 bg-white text-maroon-900 placeholder:text-maroon-400 text-base ${formData.password_confirmation && formData.password === formData.password_confirmation
-                                                        ? 'border-green-400'
-                                                        : formData.password_confirmation && formData.password !== formData.password_confirmation
-                                                            ? 'border-red-400'
-                                                            : ''
+                                                    ? 'border-green-400'
+                                                    : formData.password_confirmation && formData.password !== formData.password_confirmation
+                                                        ? 'border-red-400'
+                                                        : ''
                                                     }`}
                                                 placeholder="Confirm new password"
                                             />
@@ -325,8 +333,8 @@ export default function ResetPassword({ email, token }: ResetPasswordProps) {
                                         {/* Password match indicator */}
                                         {formData.password_confirmation && (
                                             <p className={`text-sm flex items-center mt-1 ${formData.password === formData.password_confirmation
-                                                    ? 'text-green-600'
-                                                    : 'text-red-600'
+                                                ? 'text-green-600'
+                                                : 'text-red-600'
                                                 }`}>
                                                 {formData.password === formData.password_confirmation ? (
                                                     <>

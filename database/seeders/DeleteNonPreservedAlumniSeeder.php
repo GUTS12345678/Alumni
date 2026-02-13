@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Models\User;
 
 class DeleteNonPreservedAlumniSeeder extends Seeder
@@ -56,34 +57,49 @@ class DeleteNonPreservedAlumniSeeder extends Seeder
             echo "✅ Found alumni profiles to preserve: " . implode(', ', $preserveAlumniIds) . "\n\n";
         }
 
-        // Show what will be deleted
-        $willDelete = [
-            'employments' => DB::table('employments')
+        // Show what will be deleted (check if tables exist first)
+        $willDelete = [];
+        
+        if (Schema::hasTable('employments')) {
+            $willDelete['employments'] = DB::table('employments')
                 ->whereNotIn('alumni_id', $preserveAlumniIds)
-                ->count(),
-            'survey_responses' => DB::table('survey_responses')
+                ->count();
+        }
+        
+        if (Schema::hasTable('survey_responses')) {
+            $willDelete['survey_responses'] = DB::table('survey_responses')
                 ->whereNotIn('user_id', $preserveUserIds)
-                ->count(),
-            'job_applications' => DB::table('job_applications')
+                ->count();
+        }
+        
+        if (Schema::hasTable('job_applications')) {
+            $willDelete['job_applications'] = DB::table('job_applications')
                 ->whereNotIn('user_id', $preserveUserIds)
-                ->count(),
-            'messages' => DB::table('messages')
-                ->where(function($query) use ($preserveUserIds) {
-                    $query->whereNotIn('sender_id', $preserveUserIds)
-                          ->orWhereNotIn('recipient_id', $preserveUserIds);
-                })
-                ->count(),
-            'activity_logs' => DB::table('activity_logs')
+                ->count();
+        }
+        
+        if (Schema::hasTable('messages')) {
+            $willDelete['messages'] = DB::table('messages')
+                ->whereNotIn('sender_id', $preserveUserIds)
+                ->count();
+        }
+        
+        if (Schema::hasTable('activity_logs')) {
+            $willDelete['activity_logs'] = DB::table('activity_logs')
                 ->whereNotIn('user_id', $preserveUserIds)
-                ->count(),
-            'alumni_profiles' => DB::table('alumni_profiles')
+                ->count();
+        }
+        
+        if (Schema::hasTable('alumni_profiles')) {
+            $willDelete['alumni_profiles'] = DB::table('alumni_profiles')
                 ->whereNotIn('user_id', $preserveUserIds)
-                ->count(),
-            'users' => DB::table('users')
-                ->whereNotIn('id', $preserveUserIds)
-                ->where('role', 'alumni')
-                ->count(),
-        ];
+                ->count();
+        }
+        
+        $willDelete['users'] = DB::table('users')
+            ->whereNotIn('id', $preserveUserIds)
+            ->where('role', 'alumni')
+            ->count();
 
         echo "⚠️ DELETION PREVIEW:\n";
         foreach ($willDelete as $table => $count) {
@@ -95,42 +111,49 @@ class DeleteNonPreservedAlumniSeeder extends Seeder
         echo "🗑️ Starting cascading deletion...\n\n";
 
         // Step 1: Delete employment records
-        echo "⏳ [1/7] Deleting employment records...\n";
-        $deleted = DB::table('employments')
-            ->whereNotIn('alumni_id', $preserveAlumniIds)
-            ->delete();
-        echo "✅ Deleted {$deleted} employment records\n\n";
+        if (Schema::hasTable('employments')) {
+            echo "⏳ [1/7] Deleting employment records...\n";
+            $deleted = DB::table('employments')
+                ->whereNotIn('alumni_id', $preserveAlumniIds)
+                ->delete();
+            echo "✅ Deleted {$deleted} employment records\n\n";
+        }
 
         // Step 2: Delete survey responses
-        echo "⏳ [2/7] Deleting survey responses...\n";
-        $deleted = DB::table('survey_responses')
-            ->whereNotIn('user_id', $preserveUserIds)
-            ->delete();
-        echo "✅ Deleted {$deleted} survey responses\n\n";
+        if (Schema::hasTable('survey_responses')) {
+            echo "⏳ [2/7] Deleting survey responses...\n";
+            $deleted = DB::table('survey_responses')
+                ->whereNotIn('user_id', $preserveUserIds)
+                ->delete();
+            echo "✅ Deleted {$deleted} survey responses\n\n";
+        }
 
         // Step 3: Delete job applications
-        echo "⏳ [3/7] Deleting job applications...\n";
-        $deleted = DB::table('job_applications')
-            ->whereNotIn('user_id', $preserveUserIds)
-            ->delete();
-        echo "✅ Deleted {$deleted} job applications\n\n";
+        if (Schema::hasTable('job_applications')) {
+            echo "⏳ [3/7] Deleting job applications...\n";
+            $deleted = DB::table('job_applications')
+                ->whereNotIn('user_id', $preserveUserIds)
+                ->delete();
+            echo "✅ Deleted {$deleted} job applications\n\n";
+        }
 
         // Step 4: Delete messages
-        echo "⏳ [4/7] Deleting messages...\n";
-        $deleted = DB::table('messages')
-            ->where(function($query) use ($preserveUserIds) {
-                $query->whereNotIn('sender_id', $preserveUserIds)
-                      ->orWhereNotIn('recipient_id', $preserveUserIds);
-            })
-            ->delete();
-        echo "✅ Deleted {$deleted} messages\n\n";
+        if (Schema::hasTable('messages')) {
+            echo "⏳ [4/7] Deleting messages...\n";
+            $deleted = DB::table('messages')
+                ->whereNotIn('sender_id', $preserveUserIds)
+                ->delete();
+            echo "✅ Deleted {$deleted} messages\n\n";
+        }
 
         // Step 5: Delete activity logs
-        echo "⏳ [5/7] Deleting activity logs...\n";
-        $deleted = DB::table('activity_logs')
-            ->whereNotIn('user_id', $preserveUserIds)
-            ->delete();
-        echo "✅ Deleted {$deleted} activity logs\n\n";
+        if (Schema::hasTable('activity_logs')) {
+            echo "⏳ [5/7] Deleting activity logs...\n";
+            $deleted = DB::table('activity_logs')
+                ->whereNotIn('user_id', $preserveUserIds)
+                ->delete();
+            echo "✅ Deleted {$deleted} activity logs\n\n";
+        }
 
         // Step 6: Delete alumni profiles
         echo "⏳ [6/7] Deleting alumni profiles...\n";
@@ -152,13 +175,19 @@ class DeleteNonPreservedAlumniSeeder extends Seeder
         echo "║                  DELETION COMPLETE                           ║\n";
         echo "╚══════════════════════════════════════════════════════════════╝\n\n";
 
-        $remaining = [
-            'users' => DB::table('users')->where('role', 'alumni')->count(),
-            'alumni_profiles' => DB::table('alumni_profiles')->count(),
-            'employments' => DB::table('employments')->count(),
-            'survey_responses' => DB::table('survey_responses')->count(),
-            'job_applications' => DB::table('job_applications')->count(),
-        ];
+        $remaining = [];
+        $remaining['users'] = DB::table('users')->where('role', 'alumni')->count();
+        $remaining['alumni_profiles'] = DB::table('alumni_profiles')->count();
+        
+        if (Schema::hasTable('employments')) {
+            $remaining['employments'] = DB::table('employments')->count();
+        }
+        if (Schema::hasTable('survey_responses')) {
+            $remaining['survey_responses'] = DB::table('survey_responses')->count();
+        }
+        if (Schema::hasTable('job_applications')) {
+            $remaining['job_applications'] = DB::table('job_applications')->count();
+        }
 
         echo "Remaining Records:\n";
         foreach ($remaining as $table => $count) {

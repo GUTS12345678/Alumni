@@ -12,6 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         // Mentor profiles
+        if (!Schema::hasTable('mentor_profiles')) {
         Schema::create('mentor_profiles', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
@@ -28,8 +29,10 @@ return new class extends Migration
             $table->index(['user_id', 'status']);
             $table->index('is_available');
         });
+        }
 
         // Mentorship relationships
+        if (!Schema::hasTable('mentorships')) {
         Schema::create('mentorships', function (Blueprint $table) {
             $table->id();
             $table->foreignId('mentor_id')->constrained('users')->onDelete('cascade');
@@ -47,8 +50,10 @@ return new class extends Migration
             $table->index(['mentor_id', 'status']);
             $table->index(['mentee_id', 'status']);
         });
+        }
 
         // Mentorship sessions
+        if (!Schema::hasTable('mentorship_sessions')) {
         Schema::create('mentorship_sessions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('mentorship_id')->constrained()->onDelete('cascade');
@@ -62,6 +67,7 @@ return new class extends Migration
 
             $table->index(['mentorship_id', 'scheduled_at']);
         });
+        }
     }
 
     /**

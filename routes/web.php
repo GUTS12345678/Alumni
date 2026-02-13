@@ -10,17 +10,27 @@ Route::get('/', function () {
     // Calculate employment rate from alumni data
     $totalAlumni = \App\Models\AlumniProfile::count();
     $employedAlumni = \App\Models\AlumniProfile::whereIn('employment_status', [
-        'Employed Full-time', 
-        'Employed Part-time', 
-        'Self-employed'
+        'employed_full_time', 
+        'employed_part_time', 
+        'self_employed'
     ])->count();
     $employmentRate = $totalAlumni > 0 ? round(($employedAlumni / $totalAlumni) * 100) : 0;
+
+    // Count unique industries from career history
+    $industries = \App\Models\CareerHistory::whereNotNull('industry')
+        ->where('industry', '!=', '')
+        ->distinct('industry')
+        ->count('industry');
     
     $stats = [
         'totalAlumni' => \App\Models\User::where('role_id', 3)->count(),
         'employmentRate' => $employmentRate,
-        'activeJobs' => 0, // No Job model - show 0
-        'surveysCompleted' => \App\Models\Survey::count(),
+        'activeJobs' => \App\Models\JobPosting::where('status', 'published')->count(),
+        'surveysCompleted' => \App\Models\Survey::where('status', 'active')->count(),
+        'batchYears' => \App\Models\Batch::distinct('graduation_year')->count('graduation_year'),
+        'departments' => \App\Models\Department::count(),
+        'courses' => \App\Models\Course::count(),
+        'industries' => $industries,
     ];
     
     return Inertia::render('public/LandingPage', ['stats' => $stats]);
@@ -104,6 +114,14 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
     })->name('admin.permissions');
 
     // Role Management Routes
+    Route::get('/admin/roles', function () {
+        return Inertia::render('admin/RoleManagement', [
+            'auth' => [
+                'user' => Auth::user()
+            ]
+        ]);
+    })->name('admin.roles');
+
     Route::get('/admin/roles/create', function () {
         return Inertia::render('admin/RoleForm', [
             'user' => Auth::user(),
@@ -185,6 +203,13 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
     Route::get('/admin/messages', function () {
         return Inertia::render('admin/Messages');
     })->name('admin.messages');
+
+    // Archive
+    Route::get('/admin/archive', function () {
+        return Inertia::render('admin/Archive', [
+            'user' => Auth::user()
+        ]);
+    })->name('admin.archive');
 
     // Campus Management
     Route::get('/admin/campuses', function () {
@@ -291,6 +316,14 @@ Route::middleware(['web', 'auth', 'super_admin'])->prefix('super-admin')->group(
             ]
         ]);
     })->name('super-admin.settings-old');
+
+    // Career History Versions Management
+    Route::get('/career-versions', [\App\Http\Controllers\Admin\CareerVersionController::class, 'index'])
+        ->name('super-admin.career-versions');
+    Route::get('/career-versions/user/{userId}', [\App\Http\Controllers\Admin\CareerVersionController::class, 'show'])
+        ->name('super-admin.career-versions.user');
+    Route::get('/career-versions/career/{careerId}', [\App\Http\Controllers\Admin\CareerVersionController::class, 'versions'])
+        ->name('super-admin.career-versions.history');
 });
 
 // Super Admin API Routes (with CSRF protection via web middleware)
@@ -313,6 +346,13 @@ Route::middleware(['auth', 'super_admin'])->prefix('api/v1/admin/super-admin')->
     Route::post('/courses/{id}/reassign', [\App\Http\Controllers\Admin\CourseController::class, 'reassignAlumni']);
     Route::delete('/courses/{id}', [\App\Http\Controllers\Admin\CourseController::class, 'destroy']);
     Route::post('/courses/{id}/restore', [\App\Http\Controllers\Admin\CourseController::class, 'restore']);
+
+    // Career History Versions (Admin oversight)
+    Route::get('/career-versions', [\App\Http\Controllers\Admin\CareerVersionController::class, 'index']);
+    Route::get('/career-versions/user/{userId}', [\App\Http\Controllers\Admin\CareerVersionController::class, 'show']);
+    Route::get('/career-versions/career/{careerId}', [\App\Http\Controllers\Admin\CareerVersionController::class, 'versions']);
+    Route::post('/career-versions/career/{careerId}/restore', [\App\Http\Controllers\Admin\CareerVersionController::class, 'restore']);
+    Route::delete('/career-versions/career/{careerId}/force', [\App\Http\Controllers\Admin\CareerVersionController::class, 'forceDelete']);
 });
 
 // Alumni Dashboard Routes
@@ -379,12 +419,28 @@ Route::middleware(['web', 'auth', 'alumni'])->group(function () {
     // Career Routes
     Route::get('/alumni/career', [App\Http\Controllers\Alumni\CareerController::class, 'index'])
         ->name('alumni.career');
+    Route::get('/alumni/career/archived', [App\Http\Controllers\Alumni\CareerController::class, 'archived'])
+        ->name('alumni.career.archived');
     Route::post('/alumni/career', [App\Http\Controllers\Alumni\CareerController::class, 'store'])
         ->name('alumni.career.store');
     Route::put('/alumni/career/{id}', [App\Http\Controllers\Alumni\CareerController::class, 'update'])
         ->name('alumni.career.update');
     Route::delete('/alumni/career/{id}', [App\Http\Controllers\Alumni\CareerController::class, 'destroy'])
         ->name('alumni.career.destroy');
+    Route::post('/alumni/career/{id}/restore', [App\Http\Controllers\Alumni\CareerController::class, 'restore'])
+        ->name('alumni.career.restore');
+
+    // Support Tickets Routes
+    Route::get('/alumni/support', [App\Http\Controllers\Alumni\SupportController::class, 'index'])
+        ->name('alumni.support');
+    Route::get('/alumni/support/{ticketNumber}', [App\Http\Controllers\Alumni\SupportController::class, 'show'])
+        ->name('alumni.support.show');
+    Route::post('/alumni/support/ticket', [App\Http\Controllers\Alumni\SupportController::class, 'store'])
+        ->name('alumni.support.store');
+    Route::post('/alumni/support/{ticketNumber}/reply', [App\Http\Controllers\Alumni\SupportController::class, 'reply'])
+        ->name('alumni.support.reply');
+    Route::post('/alumni/support/{ticketNumber}/close', [App\Http\Controllers\Alumni\SupportController::class, 'close'])
+        ->name('alumni.support.close');
 
     // Job Board Routes
     Route::get('/alumni/jobs', [App\Http\Controllers\Alumni\JobController::class, 'index'])
@@ -422,6 +478,10 @@ Route::middleware(['web', 'auth', 'alumni'])->group(function () {
         ->name('alumni.connections');
     Route::get('/alumni/network/requests', [App\Http\Controllers\Alumni\NetworkController::class, 'requests'])
         ->name('alumni.network.requests');
+    Route::get('/alumni/network/connected', [App\Http\Controllers\Alumni\NetworkController::class, 'getConnectedAlumni'])
+        ->name('alumni.network.connected');
+    Route::get('/alumni/network/pending-count', [App\Http\Controllers\Alumni\NetworkController::class, 'getPendingRequestsCount'])
+        ->name('alumni.network.pending-count');
     Route::post('/alumni/network/connect', [App\Http\Controllers\Alumni\NetworkController::class, 'sendRequest'])
         ->name('alumni.network.connect');
     Route::put('/alumni/network/{id}/accept', [App\Http\Controllers\Alumni\NetworkController::class, 'acceptRequest'])

@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->string('google2fa_secret')->nullable()->after('password');
-        });
+        if (!Schema::hasColumn('users', 'google2fa_secret')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->string('google2fa_secret')->nullable()->after('password');
+            });
+        }
     }
 
     /**

@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('job_postings')) {
         Schema::create('job_postings', function (Blueprint $table) {
             $table->id();
             $table->foreignId('posted_by')->nullable()->constrained('users')->onDelete('cascade');
@@ -43,8 +44,10 @@ return new class extends Migration
             $table->index('posted_by');
             $table->index('created_at');
         });
+        }
 
         // Job Applications Table
+        if (!Schema::hasTable('job_applications')) {
         Schema::create('job_applications', function (Blueprint $table) {
             $table->id();
             $table->foreignId('job_posting_id')->constrained()->onDelete('cascade');
@@ -60,8 +63,10 @@ return new class extends Migration
             $table->index('user_id');
             $table->index('status');
         });
+        }
 
         // Saved Jobs Table
+        if (!Schema::hasTable('saved_jobs')) {
         Schema::create('saved_jobs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('job_posting_id')->constrained()->onDelete('cascade');
@@ -71,6 +76,7 @@ return new class extends Migration
             $table->unique(['job_posting_id', 'user_id']);
             $table->index('user_id');
         });
+        }
     }
 
     /**

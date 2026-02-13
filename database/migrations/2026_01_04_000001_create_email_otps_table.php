@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('email_otps')) {
         Schema::create('email_otps', function (Blueprint $table) {
             $table->id();
             $table->string('email')->index();
@@ -23,6 +24,7 @@ return new class extends Migration
             // Index for faster lookups
             $table->index(['email', 'otp', 'purpose']);
         });
+        }
     }
 
     /**

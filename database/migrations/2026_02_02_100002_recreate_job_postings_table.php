@@ -28,6 +28,7 @@ return new class extends Migration
         DB::statement('SET FOREIGN_KEY_CHECKS=1');
         
         // Create fresh job_postings table
+        if (!Schema::hasTable('job_postings')) {
         Schema::create('job_postings', function (Blueprint $table) {
             $table->id();
             
@@ -46,6 +47,7 @@ return new class extends Migration
             // Location
             $table->string('location');
             $table->boolean('is_remote')->default(false);
+            $table->enum('work_arrangement', ['onsite', 'remote', 'hybrid'])->default('onsite');
             
             // Contact Information
             $table->string('contact_person')->nullable();
@@ -57,10 +59,26 @@ return new class extends Migration
             $table->text('application_instructions')->nullable();
             
             // Additional Info
+            $table->decimal('salary_min', 12, 2)->nullable();
+            $table->decimal('salary_max', 12, 2)->nullable();
+            $table->string('salary_currency', 3)->default('PHP');
             $table->string('salary_range', 100)->nullable();
+            $table->enum('salary_period', ['hourly', 'monthly', 'yearly'])->nullable();
+            $table->boolean('is_salary_visible')->default(true);
             $table->text('benefits')->nullable();
             $table->text('requirements')->nullable();
             $table->text('qualifications')->nullable();
+            $table->json('skills_required')->nullable();
+            $table->string('external_url', 500)->nullable();
+            
+            // Images
+            $table->string('poster_image')->nullable();
+            $table->string('background_image')->nullable();
+            
+            // Pages/Content
+            $table->boolean('use_pages')->default(false);
+            $table->json('pages')->nullable();
+            $table->boolean('show_on_landing')->default(false);
             
             // Dates
             $table->date('application_deadline')->nullable();
@@ -71,6 +89,7 @@ return new class extends Migration
             $table->boolean('is_featured')->default(false);
             $table->date('featured_until')->nullable();
             $table->unsignedInteger('views')->default(0);
+            $table->unsignedInteger('views_count')->default(0);
             
             // Admin tracking
             $table->foreignId('created_by')->constrained('users')->onDelete('cascade');
@@ -90,6 +109,7 @@ return new class extends Migration
             $table->index('published_at');
             $table->index(['status', 'published_at']);
         });
+        }
     }
 
     /**

@@ -12,6 +12,8 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { MultiPageEditor } from '@/components/ui/multi-page-editor';
+import { PageCarousel, ContentPage } from '@/components/ui/page-carousel';
 import {
     Bell,
     Search,
@@ -19,13 +21,20 @@ import {
     Edit,
     Trash2,
     Eye,
-    MoreVertical,
     Loader2,
     Send,
     AlertCircle,
     AlertTriangle,
     Info,
-    Clock
+    Clock,
+    Calendar,
+    Globe,
+    Layers,
+    Upload,
+    ImageIcon,
+    XCircle,
+    ChevronRight,
+    Users,
 } from 'lucide-react';
 import {
     Dialog,
@@ -36,27 +45,12 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
@@ -69,11 +63,15 @@ interface Announcement {
     id: number;
     title: string;
     content: string;
+    pages?: ContentPage[];
+    use_pages?: boolean;
+    featured_image?: string;
     priority: 'low' | 'normal' | 'high' | 'urgent';
     target_type: 'all' | 'batch' | 'department';
     target_batch_years?: string[];
     target_department_ids?: number[];
     is_published: boolean;
+    show_on_landing: boolean;
     published_at?: string;
     created_at: string;
     created_by: {
@@ -99,24 +97,30 @@ export default function Announcements() {
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
+    const [viewingAnnouncement, setViewingAnnouncement] = useState<Announcement | null>(null);
     const [saving, setSaving] = useState(false);
     const [search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
 
     const [formData, setFormData] = useState({
         title: '',
         content: '',
+        pages: [] as ContentPage[],
+        use_pages: false,
+        featured_image: undefined as string | File | undefined,
         priority: 'normal' as 'low' | 'normal' | 'high' | 'urgent',
         target_type: 'all' as 'all' | 'batch' | 'department',
         target_batch_years: [] as string[],
         target_department_ids: [] as number[],
         publish_now: true,
+        show_on_landing: false,
     });
 
     const fetchAnnouncements = useCallback(async () => {
         try {
             const params = new URLSearchParams();
-            if (search) params.append('search', search);
+            if (debouncedSearch) params.append('search', debouncedSearch);
             if (statusFilter) params.append('is_published', statusFilter);
             if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
 
@@ -134,7 +138,7 @@ export default function Announcements() {
         } catch (error) {
             console.error('Failed to fetch announcements:', error);
         }
-    }, [search, statusFilter, selectedCampus?.id]);
+    }, [debouncedSearch, statusFilter, selectedCampus?.id]);
 
     const fetchBatchYears = async () => {
         try {
@@ -172,6 +176,14 @@ export default function Announcements() {
         }
     };
 
+    // Debounce search term
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearch(search);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [search]);
+
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
@@ -196,25 +208,54 @@ export default function Announcements() {
             setFormData({
                 title: announcement.title,
                 content: announcement.content,
+                pages: announcement.pages || [],
+                use_pages: announcement.use_pages || false,
+                featured_image: announcement.featured_image || undefined,
                 priority: announcement.priority,
                 target_type: announcement.target_type,
                 target_batch_years: announcement.target_batch_years || [],
                 target_department_ids: announcement.target_department_ids || [],
                 publish_now: announcement.is_published,
+                show_on_landing: announcement.show_on_landing || false,
             });
         } else {
             setEditingAnnouncement(null);
             setFormData({
                 title: '',
                 content: '',
+                pages: [],
+                use_pages: false,
+                featured_image: undefined,
                 priority: 'normal',
                 target_type: 'all',
                 target_batch_years: [],
                 target_department_ids: [],
                 publish_now: true,
+                show_on_landing: false,
             });
         }
         setShowForm(true);
+    };
+
+    const uploadImage = async (file: File): Promise<string | null> => {
+        const uploadData = new FormData();
+        uploadData.append('image', file);
+        uploadData.append('type', 'announcement');
+        const res = await fetch('/api/v1/upload/image', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': getCsrfToken(),
+            },
+            credentials: 'include',
+            body: uploadData,
+        });
+        if (res.ok) {
+            const data = await res.json();
+            return data.url || null;
+        }
+        return null;
     };
 
     const saveAnnouncement = async () => {
@@ -225,6 +266,17 @@ export default function Announcements() {
                 : '/api/v1/announcements/admin/create';
             const method = editingAnnouncement ? 'PUT' : 'POST';
 
+            // Build payload, uploading image file if needed
+            const payload: Record<string, unknown> = { ...formData };
+            if (formData.featured_image instanceof File) {
+                const imageUrl = await uploadImage(formData.featured_image);
+                payload.featured_image = imageUrl;
+            } else if (typeof formData.featured_image === 'string') {
+                payload.featured_image = formData.featured_image;
+            } else {
+                delete payload.featured_image;
+            }
+
             const response = await fetch(url, {
                 method,
                 headers: {
@@ -234,7 +286,7 @@ export default function Announcements() {
                     'X-CSRF-TOKEN': getCsrfToken(),
                 },
                 credentials: 'include',
-                body: JSON.stringify(formData),
+                body: JSON.stringify(payload),
             });
 
             if (response.ok) {
@@ -329,7 +381,7 @@ export default function Announcements() {
             case 'normal':
                 return <Info className="h-4 w-4 text-blue-500" />;
             default:
-                return <Bell className="h-4 w-4 text-gray-500" />;
+                return <Bell className="h-4 w-4 text-gray-500 dark:text-gray-400" />;
         }
     };
 
@@ -338,7 +390,7 @@ export default function Announcements() {
             urgent: 'bg-red-100 text-red-800',
             high: 'bg-orange-100 text-orange-800',
             normal: 'bg-blue-100 text-blue-800',
-            low: 'bg-gray-100 text-gray-800',
+            low: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200',
         };
         return (
             <Badge className={cn('capitalize', variants[priority] || variants.low)}>
@@ -439,109 +491,151 @@ export default function Announcements() {
                     </CardContent>
                 </Card>
 
-                {/* Announcements Table */}
-                <Card>
-                    <CardContent className="p-0">
-                        {loading ? (
-                            <div className="flex items-center justify-center h-64">
-                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                            </div>
-                        ) : announcements.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-                                <Bell className="h-12 w-12 mb-4" />
-                                <p>No announcements found</p>
-                                <Button variant="link" onClick={() => openForm()}>
-                                    Create your first announcement
-                                </Button>
-                            </div>
-                        ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Title</TableHead>
-                                        <TableHead>Priority</TableHead>
-                                        <TableHead>Target</TableHead>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Reads</TableHead>
-                                        <TableHead>Created</TableHead>
-                                        <TableHead className="text-right">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {announcements.map((announcement) => (
-                                        <TableRow key={announcement.id}>
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    {getPriorityIcon(announcement.priority)}
-                                                    <span className="font-medium">{announcement.title}</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>{getPriorityBadge(announcement.priority)}</TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline">
-                                                    {getTargetLabel(announcement)}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant={announcement.is_published ? 'default' : 'secondary'}>
-                                                    {announcement.is_published ? 'Published' : 'Draft'}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                <span className="flex items-center gap-1">
-                                                    <Eye className="h-4 w-4" />
-                                                    {announcement.reads_count || 0}
+                {/* Announcements Count */}
+                <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-maroon-800 dark:text-gray-200">
+                        {loading ? 'Loading...' : `${announcements.length} Announcements`}
+                    </h2>
+                </div>
+
+                {/* Announcements Grid */}
+                {loading ? (
+                    <div className="flex items-center justify-center h-64">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                ) : announcements.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-64 text-muted-foreground bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700">
+                        <Bell className="h-16 w-16 mb-4 text-gray-300" />
+                        <h3 className="text-lg font-medium">No announcements found</h3>
+                        <p className="text-sm">Create your first announcement to get started</p>
+                        <Button variant="link" onClick={() => openForm()} className="mt-2 text-maroon-600 dark:text-maroon-400">
+                            Create announcement
+                        </Button>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {announcements.map((announcement) => (
+                            <div
+                                key={announcement.id}
+                                onClick={() => setViewingAnnouncement(announcement)}
+                                className="group bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1 hover:border-maroon-300"
+                            >
+                                {/* Image Section */}
+                                {announcement.featured_image ? (
+                                    <div className="h-48 overflow-hidden relative">
+                                        <img
+                                            src={announcement.featured_image}
+                                            alt={announcement.title}
+                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                        />
+                                        <div className="absolute top-3 left-3">
+                                            {getPriorityBadge(announcement.priority)}
+                                        </div>
+                                        <div className="absolute top-3 right-3">
+                                            <Badge variant={announcement.is_published ? 'default' : 'secondary'} className="text-xs">
+                                                {announcement.is_published ? 'Published' : 'Draft'}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="h-48 bg-gradient-to-br from-maroon-50 to-maroon-100 dark:from-maroon-900/30 dark:to-maroon-800/30 flex items-center justify-center relative">
+                                        <Bell className="w-16 h-16 text-maroon-300" />
+                                        <div className="absolute top-3 left-3">
+                                            {getPriorityBadge(announcement.priority)}
+                                        </div>
+                                        <div className="absolute top-3 right-3">
+                                            <Badge variant={announcement.is_published ? 'default' : 'secondary'} className="text-xs">
+                                                {announcement.is_published ? 'Published' : 'Draft'}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Content Section */}
+                                <div className="p-5">
+                                    <h3 className="text-lg font-bold text-maroon-900 dark:text-gray-100 mb-1 group-hover:text-maroon-700 dark:group-hover:text-gray-300 transition-colors line-clamp-1">
+                                        {announcement.title}
+                                    </h3>
+                                    <p className="text-maroon-600 dark:text-gray-400 text-sm font-medium mb-2">
+                                        By {announcement.created_by?.name || 'Admin'}
+                                    </p>
+
+                                    {/* Target & Info */}
+                                    <div className="flex items-center text-gray-500 dark:text-gray-400 text-sm mb-3">
+                                        <Users className="w-4 h-4 mr-1" />
+                                        <span className="line-clamp-1">{getTargetLabel(announcement)}</span>
+                                    </div>
+
+                                    {/* Content Preview */}
+                                    <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2 mb-4">
+                                        {announcement.content || (announcement.pages?.[0]?.content ? announcement.pages[0].content.replace(/<[^>]*>/g, '') : 'No content')}
+                                    </p>
+
+                                    {/* Footer */}
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                                            <span className="flex items-center">
+                                                <Calendar className="w-3 h-3 mr-1" />
+                                                {formatDate(announcement.created_at).split(',')[0]}
+                                            </span>
+                                            <span className="flex items-center">
+                                                <Eye className="w-3 h-3 mr-1" />
+                                                {announcement.reads_count || 0}
+                                            </span>
+                                            {announcement.show_on_landing && (
+                                                <span className="flex items-center">
+                                                    <Globe className="w-3 h-3 mr-1" />
+                                                    Landing
                                                 </span>
-                                            </TableCell>
-                                            <TableCell>{formatDate(announcement.created_at)}</TableCell>
-                                            <TableCell className="text-right">
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" size="icon">
-                                                            <MoreVertical className="h-4 w-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem onClick={() => openForm(announcement)}>
-                                                            <Edit className="h-4 w-4 mr-2" />
-                                                            Edit
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => togglePublish(announcement)}>
-                                                            {announcement.is_published ? (
-                                                                <>
-                                                                    <Clock className="h-4 w-4 mr-2" />
-                                                                    Unpublish
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <Send className="h-4 w-4 mr-2" />
-                                                                    Publish
-                                                                </>
-                                                            )}
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuSeparator />
-                                                        <DropdownMenuItem
-                                                            className="text-destructive"
-                                                            onClick={() => deleteAnnouncement(announcement)}
-                                                        >
-                                                            <Trash2 className="h-4 w-4 mr-2" />
-                                                            Delete
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        )}
-                    </CardContent>
-                </Card>
+                                            )}
+                                        </div>
+                                        <span className="flex items-center text-maroon-600 dark:text-gray-400 text-sm font-medium group-hover:text-maroon-800 dark:group-hover:text-gray-200">
+                                            View
+                                            <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Quick Actions Bar */}
+                                <div className="border-t border-beige-200 dark:border-gray-700 px-5 py-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => { e.stopPropagation(); openForm(announcement); }}
+                                        className="h-7 text-xs"
+                                    >
+                                        <Edit className="h-3 w-3 mr-1" /> Edit
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => { e.stopPropagation(); togglePublish(announcement); }}
+                                        className="h-7 text-xs"
+                                    >
+                                        {announcement.is_published ? (
+                                            <><Clock className="h-3 w-3 mr-1" /> Unpublish</>
+                                        ) : (
+                                            <><Send className="h-3 w-3 mr-1" /> Publish</>
+                                        )}
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => { e.stopPropagation(); deleteAnnouncement(announcement); }}
+                                        className="h-7 text-xs text-destructive hover:text-destructive"
+                                    >
+                                        <Trash2 className="h-3 w-3 mr-1" /> Delete
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Announcement Form Dialog */}
             <Dialog open={showForm} onOpenChange={setShowForm}>
-                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>
                             {editingAnnouncement ? 'Edit Announcement' : 'Create Announcement'}
@@ -561,17 +655,106 @@ export default function Announcements() {
                             />
                         </div>
 
+                        {/* Featured Image */}
                         <div>
-                            <Label>Content *</Label>
-                            <Textarea
-                                value={formData.content}
-                                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                                placeholder="Write your announcement content..."
-                                rows={6}
-                            />
+                            <Label>Featured Image</Label>
+                            <div className="mt-2">
+                                {typeof formData.featured_image === 'string' && formData.featured_image ? (
+                                    <div className="relative w-full h-40 border-2 border-beige-300 dark:border-gray-600 rounded-lg overflow-hidden">
+                                        <img src={formData.featured_image} alt="Featured" className="w-full h-full object-cover" />
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, featured_image: undefined })}
+                                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                                        >
+                                            <XCircle className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-beige-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-maroon-400 hover:bg-maroon-50 dark:hover:bg-maroon-800/30 transition-colors">
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) setFormData({ ...formData, featured_image: file });
+                                            }}
+                                        />
+                                        {formData.featured_image instanceof File ? (
+                                            <div className="flex items-center space-x-2">
+                                                <ImageIcon className="h-5 w-5 text-maroon-600 dark:text-gray-400" />
+                                                <span className="text-sm text-maroon-700 dark:text-gray-300">{formData.featured_image.name}</span>
+                                            </div>
+                                        ) : (
+                                            <div className="flex flex-col items-center">
+                                                <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                                                <span className="text-sm text-gray-500 dark:text-gray-400">Upload featured image</span>
+                                                <span className="text-xs text-gray-400 mt-1">Recommended: 800x400px</span>
+                                            </div>
+                                        )}
+                                    </label>
+                                )}
+                            </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        {/* Content Type Toggle */}
+                        <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                            <div className="flex items-center gap-2">
+                                <Switch
+                                    checked={formData.use_pages}
+                                    onCheckedChange={(v) => setFormData({ ...formData, use_pages: v })}
+                                />
+                                <Label className="flex items-center gap-2 cursor-pointer">
+                                    <Layers className="h-4 w-4" />
+                                    Multi-Page Content
+                                </Label>
+                            </div>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                                {formData.use_pages
+                                    ? 'Create multiple pages with images and layouts'
+                                    : 'Simple text content'
+                                }
+                            </span>
+                        </div>
+
+                        {/* Content - Single or Multi-Page */}
+                        {formData.use_pages ? (
+                            <MultiPageEditor
+                                pages={formData.pages}
+                                onChange={(pages) => setFormData({ ...formData, pages })}
+                                onImageUpload={async (file) => {
+                                    const formDataUpload = new FormData();
+                                    formDataUpload.append('image', file);
+                                    formDataUpload.append('type', 'announcement');
+
+                                    const response = await fetch('/api/v1/admin/upload/image', {
+                                        method: 'POST',
+                                        headers: {
+                                            'X-CSRF-TOKEN': getCsrfToken(),
+                                        },
+                                        credentials: 'include',
+                                        body: formDataUpload,
+                                    });
+
+                                    if (!response.ok) throw new Error('Upload failed');
+                                    const data = await response.json();
+                                    return data.path;
+                                }}
+                            />
+                        ) : (
+                            <div>
+                                <Label>Content *</Label>
+                                <Textarea
+                                    value={formData.content}
+                                    onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                                    placeholder="Write your announcement content..."
+                                    rows={6}
+                                />
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <Label>Priority</Label>
                                 <Select
@@ -660,12 +843,24 @@ export default function Announcements() {
 
                         <Separator />
 
-                        <div className="flex items-center gap-2">
-                            <Switch
-                                checked={formData.publish_now}
-                                onCheckedChange={(v) => setFormData({ ...formData, publish_now: v })}
-                            />
-                            <Label>Publish immediately</Label>
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2">
+                                <Switch
+                                    checked={formData.publish_now}
+                                    onCheckedChange={(v) => setFormData({ ...formData, publish_now: v })}
+                                />
+                                <Label>Publish immediately</Label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Switch
+                                    checked={formData.show_on_landing}
+                                    onCheckedChange={(v) => setFormData({ ...formData, show_on_landing: v })}
+                                />
+                                <Label className="flex items-center gap-1">
+                                    <Globe className="h-4 w-4" />
+                                    Show on Landing Page
+                                </Label>
+                            </div>
                         </div>
                     </div>
 
@@ -685,6 +880,115 @@ export default function Announcements() {
                             )}
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* View Announcement Dialog */}
+            <Dialog open={!!viewingAnnouncement} onOpenChange={() => setViewingAnnouncement(null)}>
+                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+                    {viewingAnnouncement && (
+                        <>
+                            {/* Featured Image Banner */}
+                            {viewingAnnouncement.featured_image && (
+                                <div className="w-full h-48 -mt-6 -mx-6 mb-4 overflow-hidden rounded-t-lg" style={{ width: 'calc(100% + 3rem)' }}>
+                                    <img
+                                        src={viewingAnnouncement.featured_image}
+                                        alt={viewingAnnouncement.title}
+                                        className="w-full h-full object-cover"
+                                    />
+                                </div>
+                            )}
+                            <DialogHeader>
+                                <div className="flex items-start gap-4">
+                                    <div className="p-3 bg-primary/10 rounded-lg">
+                                        {getPriorityIcon(viewingAnnouncement.priority)}
+                                    </div>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <DialogTitle className="text-xl">{viewingAnnouncement.title}</DialogTitle>
+                                            {viewingAnnouncement.show_on_landing && (
+                                                <Badge variant="outline" className="text-xs">
+                                                    <Globe className="h-3 w-3 mr-1" />
+                                                    Landing Page
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <DialogDescription className="flex items-center gap-2">
+                                            <span>By {viewingAnnouncement.created_by?.name || 'Admin'}</span>
+                                        </DialogDescription>
+                                    </div>
+                                    <div className="flex-shrink-0 flex gap-2">
+                                        {getPriorityBadge(viewingAnnouncement.priority)}
+                                        <Badge variant={viewingAnnouncement.is_published ? 'default' : 'secondary'}>
+                                            {viewingAnnouncement.is_published ? 'Published' : 'Draft'}
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </DialogHeader>
+
+                            <div className="space-y-6 mt-4">
+                                {/* Meta Info */}
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div className="flex items-center gap-2">
+                                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                                        <span>Created: {formatDate(viewingAnnouncement.created_at)}</span>
+                                    </div>
+                                    {viewingAnnouncement.published_at && (
+                                        <div className="flex items-center gap-2">
+                                            <Send className="h-4 w-4 text-muted-foreground" />
+                                            <span>Published: {formatDate(viewingAnnouncement.published_at)}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center gap-2">
+                                        <Eye className="h-4 w-4 text-muted-foreground" />
+                                        <span>{viewingAnnouncement.reads_count || 0} reads</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline">
+                                            {getTargetLabel(viewingAnnouncement)}
+                                        </Badge>
+                                    </div>
+                                </div>
+
+                                <Separator />
+
+                                {/* Content */}
+                                <div>
+                                    <h4 className="font-semibold mb-2">Content</h4>
+                                    {viewingAnnouncement.use_pages && viewingAnnouncement.pages && viewingAnnouncement.pages.length > 0 ? (
+                                        <div className="bg-muted/50 rounded-lg overflow-hidden">
+                                            <PageCarousel
+                                                pages={viewingAnnouncement.pages}
+                                                className="min-h-[200px]"
+                                                showArrows={true}
+                                                showIndicators={true}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="text-sm text-muted-foreground bg-muted/50 p-4 rounded-lg">
+                                            <div
+                                                className="prose prose-sm max-w-none dark:prose-invert"
+                                                dangerouslySetInnerHTML={{ __html: viewingAnnouncement.content }}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <DialogFooter className="mt-6">
+                                <Button variant="outline" onClick={() => setViewingAnnouncement(null)}>
+                                    Close
+                                </Button>
+                                <Button onClick={() => {
+                                    setViewingAnnouncement(null);
+                                    openForm(viewingAnnouncement);
+                                }}>
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit Announcement
+                                </Button>
+                            </DialogFooter>
+                        </>
+                    )}
                 </DialogContent>
             </Dialog>
         </AdminBaseLayout>

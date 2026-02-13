@@ -58,7 +58,50 @@ class AnalyticsController extends Controller
     }
 
     /**
-     * Export analytics data
+     * Export comprehensive analytics data (ALL analytics)
+     */
+    public function exportComprehensiveAnalytics(Request $request)
+    {
+        $format = $request->get('format', 'csv');
+        
+        try {
+            $campusId = $request->get('campus_id');
+
+            // Gather all analytics data
+            $data = [
+                'time_to_job' => $this->getYearlyTimeToJobData(null, $campusId),
+                'enrollment_metrics' => $this->getEnrollmentMetrics($campusId),
+                'performance_indicator' => $this->getPerformanceIndicator($campusId),
+                'job_alignment' => $this->getJobAlignmentStats($campusId),
+                'attrition_rate' => $this->getAttritionRate($campusId),
+                'program_performance' => $this->getProgramWisePerformance($campusId),
+                'college_breakdown' => $this->getCollegeEnrollmentBreakdown($campusId),
+                'course_breakdown' => $this->getCourseEnrollmentBreakdown($campusId),
+                'employment_location' => $this->getEmploymentLocationStats($campusId),
+            ];
+
+            switch ($format) {
+                case 'csv':
+                    return $this->exportComprehensiveToCsv($data);
+                case 'excel':
+                    return $this->exportComprehensiveToExcel($data);
+                case 'pdf':
+                    return $this->exportComprehensiveToPdf($data);
+                default:
+                    return response()->json(['error' => 'Invalid format'], 400);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to export comprehensive analytics',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Export analytics data (legacy - time to job only)
      */
     public function exportTimeToJobAnalytics(Request $request)
     {
@@ -72,7 +115,7 @@ class AnalyticsController extends Controller
                 $yearFilter = explode(',', $years);
             }
 
-            $yearlyData = $this->getYearlyTimeToJobData($yearFilter);
+            $yearlyData = $this->getYearlyTimeToJobData($yearFilter, $request->get('campus_id'));
 
             switch ($format) {
                 case 'csv':
@@ -110,7 +153,7 @@ class AnalyticsController extends Controller
                 'graduation_year',
                 DB::raw('COUNT(id) as total_alumni'),
                 DB::raw('SUM(CASE WHEN employment_status IN ("employed_full_time", "employed_part_time", "self_employed") THEN 1 ELSE 0 END) as employed_alumni'),
-                DB::raw('AVG(CASE WHEN job_start_date IS NOT NULL AND employment_status IN ("employed_full_time", "employed_part_time", "self_employed") THEN DATEDIFF(job_start_date, CONCAT(graduation_year, "-06-01")) ELSE NULL END) as avg_days_from_profile')
+                DB::raw('AVG(CASE WHEN job_start_date IS NOT NULL AND employment_status IN ("employed_full_time", "employed_part_time", "self_employed") AND DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))) BETWEEN 0 AND 1825 THEN DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))) ELSE NULL END) as avg_days_from_profile')
             )
             ->whereNotNull('graduation_year')
             ->when($yearFilter, function ($q) use ($yearFilter) {
@@ -130,7 +173,7 @@ class AnalyticsController extends Controller
                 ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
                 ->select(
                     'ap.graduation_year',
-                    DB::raw('AVG(DATEDIFF(e.start_date, CONCAT(ap.graduation_year, "-06-01"))) as avg_days_to_job'),
+                    DB::raw('AVG(CASE WHEN DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) BETWEEN 0 AND 1825 THEN DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) ELSE NULL END) as avg_days_to_job'),
                     DB::raw('COUNT(DISTINCT ap.id) as total_alumni_with_jobs')
                 )
                 ->whereNotNull('ap.graduation_year')
@@ -188,21 +231,23 @@ class AnalyticsController extends Controller
         // First, check if we have data in employments table
         $hasEmploymentRecords = DB::table('employments')->exists();
         
-        // Get data from profiles directly using graduation_year field
-        $programsFromProfiles = DB::table('alumni_profiles')
+        // Get data from profiles using course relationship (COALESCE degree_program with courses.name)
+        // This ensures we get program names even when degree_program field is NULL
+        $programsFromProfiles = DB::table('alumni_profiles as ap')
+            ->leftJoin('courses as c', 'ap.course_id', '=', 'c.id')
             ->select(
-                'degree_program as program',
-                DB::raw('AVG(CASE WHEN job_start_date IS NOT NULL THEN DATEDIFF(job_start_date, CONCAT(graduation_year, "-06-01")) ELSE NULL END) as avg_days'),
-                DB::raw('COUNT(id) as alumni_count')
+                DB::raw('COALESCE(ap.degree_program, c.name) as program'),
+                DB::raw('AVG(CASE WHEN ap.job_start_date IS NOT NULL AND DATEDIFF(ap.job_start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) BETWEEN 0 AND 1825 THEN DATEDIFF(ap.job_start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) ELSE NULL END) as avg_days'),
+                DB::raw('COUNT(ap.id) as alumni_count')
             )
-            ->where('graduation_year', $year)
-            ->whereNotNull('degree_program')
-            ->where('degree_program', '!=', '')
-            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->where('ap.graduation_year', $year)
+            ->whereRaw('COALESCE(ap.degree_program, c.name) IS NOT NULL')
+            ->whereRaw("COALESCE(ap.degree_program, c.name) != ''")
+            ->whereIn('ap.employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->when($campusId, function ($q) use ($campusId) {
-                return $q->where('campus_id', $campusId);
+                return $q->where('ap.campus_id', $campusId);
             })
-            ->groupBy('degree_program')
+            ->groupBy(DB::raw('COALESCE(ap.degree_program, c.name)'))
             ->having('alumni_count', '>', 0)
             ->get();
         
@@ -211,19 +256,20 @@ class AnalyticsController extends Controller
         if ($hasEmploymentRecords) {
             $programsFromJobs = DB::table('alumni_profiles as ap')
                 ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
+                ->leftJoin('courses as c', 'ap.course_id', '=', 'c.id')
                 ->select(
-                    'ap.degree_program as program',
-                    DB::raw('AVG(DATEDIFF(e.start_date, CONCAT(ap.graduation_year, "-06-01"))) as avg_days'),
+                    DB::raw('COALESCE(ap.degree_program, c.name) as program'),
+                    DB::raw('AVG(CASE WHEN DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) BETWEEN 0 AND 1825 THEN DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) ELSE NULL END) as avg_days'),
                     DB::raw('COUNT(DISTINCT ap.id) as alumni_count')
                 )
                 ->where('ap.graduation_year', $year)
                 ->whereNotNull('e.start_date')
-                ->whereNotNull('ap.degree_program')
-                ->where('ap.degree_program', '!=', '')
+                ->whereRaw('COALESCE(ap.degree_program, c.name) IS NOT NULL')
+                ->whereRaw("COALESCE(ap.degree_program, c.name) != ''")
                 ->when($campusId, function ($q) use ($campusId) {
                     return $q->where('ap.campus_id', $campusId);
                 })
-                ->groupBy('ap.degree_program')
+                ->groupBy(DB::raw('COALESCE(ap.degree_program, c.name)'))
                 ->having('alumni_count', '>', 0)
                 ->get()
                 ->keyBy('program');
@@ -282,26 +328,28 @@ class AnalyticsController extends Controller
         // First, check if we have data in employments table
         $hasEmploymentRecords = DB::table('employments')->exists();
         
-        // Get days from profiles directly
+        // Get days from profiles directly (only positive days - job after graduation, capped at 5 years)
         $daysFromProfiles = DB::table('alumni_profiles')
-            ->select(DB::raw('DATEDIFF(job_start_date, CONCAT(graduation_year, "-06-01")) as days_to_job'))
+            ->select(DB::raw('DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))) as days_to_job'))
             ->where('graduation_year', $year)
             ->whereNotNull('job_start_date')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->whereRaw('DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))) BETWEEN 0 AND 1825')
             ->when($campusId, function ($q) use ($campusId) {
                 return $q->where('campus_id', $campusId);
             })
             ->pluck('days_to_job')
             ->toArray();
             
-        // Get days from employments table if available
+        // Get days from employments table if available (with >= 0 filter and 5-year cap)
         $daysFromJobs = [];
         if ($hasEmploymentRecords) {
             $daysFromJobs = DB::table('alumni_profiles as ap')
                 ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
-                ->select(DB::raw('DATEDIFF(e.start_date, CONCAT(ap.graduation_year, "-06-01")) as days_to_job'))
+                ->select(DB::raw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) as days_to_job'))
                 ->where('ap.graduation_year', $year)
                 ->whereNotNull('e.start_date')
+                ->whereRaw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) BETWEEN 0 AND 1825')
                 ->when($campusId, function ($q) use ($campusId) {
                     return $q->where('ap.campus_id', $campusId);
                 })
@@ -333,23 +381,26 @@ class AnalyticsController extends Controller
      */
     private function getKPIMetrics($yearFilter = null, $campusId = null): array
     {
-        // Overall average days from employments table
+        // Overall average days from employments table (only positive days, capped at 5 years)
+        // Use COALESCE to fall back to graduation_year-06-01 when graduation_date is NULL
         $overallFromJobs = DB::table('alumni_profiles as ap')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
-            ->whereNotNull('ap.graduation_date')
+            ->whereNotNull('ap.graduation_year')
             ->whereNotNull('e.start_date')
+            ->whereRaw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) BETWEEN 0 AND 1825')
             ->when($yearFilter, function ($q) use ($yearFilter) {
                 return $q->whereIn('ap.graduation_year', $yearFilter);
             })
             ->when($campusId, function ($q) use ($campusId) {
                 return $q->where('ap.campus_id', $campusId);
             })
-            ->avg(DB::raw('DATEDIFF(e.start_date, ap.graduation_date)'));
+            ->avg(DB::raw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01")))'));
             
-        // Overall average days from profiles (fallback)
+        // Overall average days from profiles (fallback, capped at 5 years)
         $overallFromProfiles = DB::table('alumni_profiles')
-            ->whereNotNull('graduation_date')
+            ->whereNotNull('graduation_year')
             ->whereNotNull('job_start_date')
+            ->whereRaw('DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))) BETWEEN 0 AND 1825')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotExists(function ($query) {
                 $query->select(DB::raw(1))
@@ -362,7 +413,7 @@ class AnalyticsController extends Controller
             ->when($campusId, function ($q) use ($campusId) {
                 return $q->where('campus_id', $campusId);
             })
-            ->avg(DB::raw('DATEDIFF(job_start_date, graduation_date)'));
+            ->avg(DB::raw('DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01")))'));
         
         // Weighted average
         $overallAvg = ($overallFromJobs ?? 0) ?: ($overallFromProfiles ?? 0);
@@ -372,21 +423,23 @@ class AnalyticsController extends Controller
         $currentYearFromJobs = DB::table('alumni_profiles as ap')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->where('ap.graduation_year', $currentYear)
-            ->whereNotNull('ap.graduation_date')
+            ->whereNotNull('ap.graduation_year')
             ->whereNotNull('e.start_date')
-            ->avg(DB::raw('DATEDIFF(e.start_date, ap.graduation_date)'));
+            ->whereRaw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) BETWEEN 0 AND 1825')
+            ->avg(DB::raw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01")))'));
             
         $currentYearFromProfiles = DB::table('alumni_profiles')
             ->where('graduation_year', $currentYear)
-            ->whereNotNull('graduation_date')
+            ->whereNotNull('graduation_year')
             ->whereNotNull('job_start_date')
+            ->whereRaw('DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))) BETWEEN 0 AND 1825')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotExists(function ($query) {
                 $query->select(DB::raw(1))
                       ->from('employments')
                       ->whereColumn('employments.alumni_id', 'alumni_profiles.id');
             })
-            ->avg(DB::raw('DATEDIFF(job_start_date, graduation_date)'));
+            ->avg(DB::raw('DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01")))'));
         
         $currentYearAvg = ($currentYearFromJobs ?? 0) ?: ($currentYearFromProfiles ?? 0);
 
@@ -395,21 +448,23 @@ class AnalyticsController extends Controller
         $previousYearFromJobs = DB::table('alumni_profiles as ap')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->where('ap.graduation_year', $previousYear)
-            ->whereNotNull('ap.graduation_date')
+            ->whereNotNull('ap.graduation_year')
             ->whereNotNull('e.start_date')
-            ->avg(DB::raw('DATEDIFF(e.start_date, ap.graduation_date)'));
+            ->whereRaw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) BETWEEN 0 AND 1825')
+            ->avg(DB::raw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01")))'));
             
         $previousYearFromProfiles = DB::table('alumni_profiles')
             ->where('graduation_year', $previousYear)
-            ->whereNotNull('graduation_date')
+            ->whereNotNull('graduation_year')
             ->whereNotNull('job_start_date')
+            ->whereRaw('DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))) BETWEEN 0 AND 1825')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotExists(function ($query) {
                 $query->select(DB::raw(1))
                       ->from('employments')
                       ->whereColumn('employments.alumni_id', 'alumni_profiles.id');
             })
-            ->avg(DB::raw('DATEDIFF(job_start_date, graduation_date)'));
+            ->avg(DB::raw('DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01")))'));
         
         $previousYearAvg = ($previousYearFromJobs ?? 0) ?: ($previousYearFromProfiles ?? 0);
 
@@ -424,10 +479,11 @@ class AnalyticsController extends Controller
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->select(
                 'ap.degree_program as name',
-                DB::raw('AVG(DATEDIFF(e.start_date, ap.graduation_date)) as avg_days')
+                DB::raw('AVG(DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01")))) as avg_days')
             )
-            ->whereNotNull('ap.graduation_date')
+            ->whereNotNull('ap.graduation_year')
             ->whereNotNull('e.start_date')
+            ->whereRaw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) BETWEEN 0 AND 1825')
             ->groupBy('ap.degree_program')
             ->orderBy('avg_days')
             ->first();
@@ -435,10 +491,11 @@ class AnalyticsController extends Controller
         $fastestFromProfiles = DB::table('alumni_profiles')
             ->select(
                 'degree_program as name',
-                DB::raw('AVG(DATEDIFF(job_start_date, graduation_date)) as avg_days')
+                DB::raw('AVG(DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01")))) as avg_days')
             )
-            ->whereNotNull('graduation_date')
+            ->whereNotNull('graduation_year')
             ->whereNotNull('job_start_date')
+            ->whereRaw('DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))) BETWEEN 0 AND 1825')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->groupBy('degree_program')
             ->orderBy('avg_days')
@@ -449,12 +506,12 @@ class AnalyticsController extends Controller
         // Total tracked alumni (from both sources)
         $totalFromJobs = DB::table('alumni_profiles as ap')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
-            ->whereNotNull('ap.graduation_date')
+            ->whereNotNull('ap.graduation_year')
             ->whereNotNull('e.start_date')
             ->count(DB::raw('DISTINCT ap.id'));
             
         $totalFromProfiles = DB::table('alumni_profiles')
-            ->whereNotNull('graduation_date')
+            ->whereNotNull('graduation_year')
             ->whereNotNull('job_start_date')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotExists(function ($query) {
@@ -546,6 +603,258 @@ class AnalyticsController extends Controller
             $content .= "  Employment Rate: {$row['employment_rate']}%\n";
             $content .= "  Median Days: {$row['median_days']}\n\n";
         }
+        
+        return response($content)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+    }
+
+    /**
+     * Export comprehensive analytics to CSV (ALL data)
+     */
+    private function exportComprehensiveToCsv($data)
+    {
+        $filename = 'comprehensive-analytics-' . date('Y-m-d') . '.csv';
+        
+        $handle = fopen('php://temp', 'w+');
+        
+        // SECTION 1: Time to Job Analytics
+        fputcsv($handle, ['=== TIME TO JOB ANALYTICS ===']);
+        fputcsv($handle, ['Graduation Year', 'Avg Days to Job', 'Total Alumni', 'Employed Alumni', 'Employment Rate (%)', 'Median Days']);
+        foreach ($data['time_to_job'] as $row) {
+            fputcsv($handle, [
+                $row['graduation_year'],
+                $row['avg_days_to_job'],
+                $row['total_alumni'],
+                $row['employed_alumni'],
+                $row['employment_rate'],
+                $row['median_days']
+            ]);
+        }
+        fputcsv($handle, []);
+        
+        // SECTION 2: Enrollment Metrics
+        fputcsv($handle, ['=== ENROLLMENT METRICS ===']);
+        fputcsv($handle, ['Summary']);
+        fputcsv($handle, ['Total Enrolled', $data['enrollment_metrics']['summary']['total_enrolled']]);
+        fputcsv($handle, ['Total Graduated', $data['enrollment_metrics']['summary']['total_graduated']]);
+        fputcsv($handle, ['Total Dropout', $data['enrollment_metrics']['summary']['total_dropout']]);
+        fputcsv($handle, ['Total Transferred', $data['enrollment_metrics']['summary']['total_transferred']]);
+        fputcsv($handle, ['Graduation Rate (%)', $data['enrollment_metrics']['summary']['overall_graduation_rate']]);
+        fputcsv($handle, []);
+        fputcsv($handle, ['Year', 'Enrolled', 'Graduated', 'Employed', 'Dropout', 'Transferred', 'Graduation Rate (%)']);
+        foreach ($data['enrollment_metrics']['yearly_breakdown'] as $row) {
+            fputcsv($handle, [
+                $row['year'],
+                $row['enrolled'],
+                $row['graduated'],
+                $row['employed'],
+                $row['dropout'],
+                $row['transferred'],
+                $row['graduation_rate']
+            ]);
+        }
+        fputcsv($handle, []);
+        
+        // SECTION 3: Performance Indicator
+        fputcsv($handle, ['=== PERFORMANCE INDICATOR (Employed Within 2 Years) ===']);
+        fputcsv($handle, ['Total Graduates', $data['performance_indicator']['total_graduates']]);
+        fputcsv($handle, ['Employed Within 2 Years', $data['performance_indicator']['employed_within_2_years']]);
+        fputcsv($handle, ['Performance Rate (%)', $data['performance_indicator']['performance_rate']]);
+        fputcsv($handle, []);
+        fputcsv($handle, ['Year', 'Total Graduates', 'Total Employed', 'Employed Within 2 Years', 'Performance Rate (%)']);
+        foreach ($data['performance_indicator']['yearly_breakdown'] as $row) {
+            fputcsv($handle, [
+                $row['year'],
+                $row['total_graduates'],
+                $row['total_employed'],
+                $row['employed_within_2_years'],
+                $row['performance_rate']
+            ]);
+        }
+        fputcsv($handle, []);
+        
+        // SECTION 4: Job Alignment
+        fputcsv($handle, ['=== JOB ALIGNMENT STATISTICS ===']);
+        fputcsv($handle, ['Total Employed', $data['job_alignment']['total_employed']]);
+        fputcsv($handle, ['Aligned', $data['job_alignment']['aligned']['count'] . ' (' . $data['job_alignment']['aligned']['percentage'] . '%)']);
+        fputcsv($handle, ['Overqualified', $data['job_alignment']['overqualified']['count'] . ' (' . $data['job_alignment']['overqualified']['percentage'] . '%)']);
+        fputcsv($handle, ['Underqualified', $data['job_alignment']['underqualified']['count'] . ' (' . $data['job_alignment']['underqualified']['percentage'] . '%)']);
+        fputcsv($handle, ['Unfit', $data['job_alignment']['unfit']['count'] . ' (' . $data['job_alignment']['unfit']['percentage'] . '%)']);
+        fputcsv($handle, ['Alignment Rate (%)', $data['job_alignment']['alignment_rate']]);
+        fputcsv($handle, []);
+        
+        // SECTION 5: Attrition Rate
+        fputcsv($handle, ['=== ATTRITION RATE ===']);
+        fputcsv($handle, ['Total Enrolled', $data['attrition_rate']['summary']['total_enrolled']]);
+        fputcsv($handle, ['Total Dropout', $data['attrition_rate']['summary']['total_dropout']]);
+        fputcsv($handle, ['Total Transferred', $data['attrition_rate']['summary']['total_transferred']]);
+        fputcsv($handle, ['Overall Attrition Rate (%)', $data['attrition_rate']['summary']['overall_attrition_rate']]);
+        if (isset($data['attrition_rate']['summary']['data_note'])) {
+            fputcsv($handle, ['Note', $data['attrition_rate']['summary']['data_note']]);
+        }
+        fputcsv($handle, []);
+        fputcsv($handle, ['Year', 'Enrolled', 'Dropout', 'Transferred', 'Attrition Rate (%)']);
+        foreach ($data['attrition_rate']['yearly_breakdown'] as $row) {
+            fputcsv($handle, [
+                $row['year'],
+                $row['enrolled'],
+                $row['dropout'],
+                $row['transferred'],
+                $row['attrition_rate']
+            ]);
+        }
+        fputcsv($handle, []);
+        
+        // SECTION 6: Program Performance
+        fputcsv($handle, ['=== PROGRAM-WISE PERFORMANCE ===']);
+        fputcsv($handle, ['Program', 'Total Alumni', 'Employed', 'Employment Rate (%)', 'Aligned', 'Alignment Rate (%)', 'Avg Days to Job']);
+        foreach ($data['program_performance'] as $row) {
+            fputcsv($handle, [
+                $row['program'],
+                $row['total_alumni'],
+                $row['employed'],
+                $row['employment_rate'],
+                $row['aligned'],
+                $row['alignment_rate'],
+                $row['avg_days_to_job']
+            ]);
+        }
+        fputcsv($handle, []);
+        
+        // SECTION 7: College Breakdown
+        fputcsv($handle, ['=== COLLEGE/DEPARTMENT BREAKDOWN ===']);
+        fputcsv($handle, ['College', 'Code', 'Total Alumni', 'Employed', 'Aligned', 'Employment Rate (%)', 'Alignment Rate (%)']);
+        foreach ($data['college_breakdown'] as $row) {
+            fputcsv($handle, [
+                $row['college'],
+                $row['college_code'],
+                $row['total_alumni'],
+                $row['employed'],
+                $row['aligned'],
+                $row['employment_rate'],
+                $row['alignment_rate']
+            ]);
+        }
+        fputcsv($handle, []);
+        
+        // SECTION 8: Course Breakdown
+        fputcsv($handle, ['=== COURSE BREAKDOWN ===']);
+        fputcsv($handle, ['Course', 'Code', 'College', 'Total Alumni', 'Employed', 'Aligned', 'Employment Rate (%)', 'Alignment Rate (%)']);
+        foreach ($data['course_breakdown'] as $row) {
+            fputcsv($handle, [
+                $row['course'],
+                $row['course_code'],
+                $row['college'],
+                $row['total_alumni'],
+                $row['employed'],
+                $row['aligned'],
+                $row['employment_rate'],
+                $row['alignment_rate']
+            ]);
+        }
+        fputcsv($handle, []);
+        
+        // SECTION 9: Employment Location
+        fputcsv($handle, ['=== EMPLOYMENT LOCATION STATISTICS ===']);
+        fputcsv($handle, ['Summary']);
+        fputcsv($handle, ['Total Employed', $data['employment_location']['summary']['total_employed']]);
+        fputcsv($handle, ['Local', $data['employment_location']['summary']['local'] . ' (' . $data['employment_location']['summary']['local_rate'] . '%)']);
+        fputcsv($handle, ['Foreign', $data['employment_location']['summary']['foreign'] . ' (' . $data['employment_location']['summary']['foreign_rate'] . '%)']);
+        fputcsv($handle, ['Remote', $data['employment_location']['summary']['remote'] . ' (' . $data['employment_location']['summary']['remote_rate'] . '%)']);
+        fputcsv($handle, []);
+        fputcsv($handle, ['Year', 'Local', 'Foreign', 'Remote', 'Total', 'Foreign Rate (%)']);
+        foreach ($data['employment_location']['yearly_trend'] as $row) {
+            fputcsv($handle, [
+                $row['year'],
+                $row['local'],
+                $row['foreign'],
+                $row['remote'],
+                $row['total'],
+                $row['foreign_rate']
+            ]);
+        }
+        fputcsv($handle, []);
+        fputcsv($handle, ['Department', 'Local', 'Foreign', 'Remote', 'Total']);
+        foreach ($data['employment_location']['department_breakdown'] as $row) {
+            fputcsv($handle, [
+                $row['department'],
+                $row['local'],
+                $row['foreign'],
+                $row['remote'],
+                $row['total']
+            ]);
+        }
+        
+        rewind($handle);
+        $content = stream_get_contents($handle);
+        fclose($handle);
+        
+        return response($content)
+            ->header('Content-Type', 'text/csv')
+            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+    }
+
+    /**
+     * Export comprehensive analytics to Excel
+     */
+    private function exportComprehensiveToExcel($data)
+    {
+        $filename = 'comprehensive-analytics-' . date('Y-m-d') . '.xlsx';
+        
+        return $this->exportComprehensiveToCsv($data)
+            ->header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+    }
+
+    /**
+     * Export comprehensive analytics to PDF
+     */
+    private function exportComprehensiveToPdf($data)
+    {
+        $filename = 'comprehensive-analytics-' . date('Y-m-d') . '.pdf';
+        
+        $content = "COMPREHENSIVE ANALYTICS REPORT\n";
+        $content .= "Generated on: " . date('Y-m-d H:i:s') . "\n";
+        $content .= str_repeat('=', 80) . "\n\n";
+        
+        // Time to Job
+        $content .= "TIME TO JOB ANALYTICS\n" . str_repeat('-', 80) . "\n";
+        foreach ($data['time_to_job'] as $row) {
+            $content .= "Year {$row['graduation_year']}: {$row['avg_days_to_job']} days avg, {$row['employed_alumni']}/{$row['total_alumni']} employed ({$row['employment_rate']}%)\n";
+        }
+        $content .= "\n";
+        
+        // Enrollment
+        $content .= "ENROLLMENT METRICS\n" . str_repeat('-', 80) . "\n";
+        $content .= "Total Enrolled: {$data['enrollment_metrics']['summary']['total_enrolled']}\n";
+        $content .= "Total Graduated: {$data['enrollment_metrics']['summary']['total_graduated']}\n";
+        $content .= "Graduation Rate: {$data['enrollment_metrics']['summary']['overall_graduation_rate']}%\n\n";
+        
+        // Performance
+        $content .= "PERFORMANCE INDICATOR\n" . str_repeat('-', 80) . "\n";
+        $content .= "Employed Within 2 Years: {$data['performance_indicator']['employed_within_2_years']}/{$data['performance_indicator']['total_graduates']}\n";
+        $content .= "Performance Rate: {$data['performance_indicator']['performance_rate']}%\n\n";
+        
+        // Job Alignment
+        $content .= "JOB ALIGNMENT\n" . str_repeat('-', 80) . "\n";
+        $content .= "Aligned: {$data['job_alignment']['aligned']['count']} ({$data['job_alignment']['aligned']['percentage']}%)\n";
+        $content .= "Overqualified: {$data['job_alignment']['overqualified']['count']} ({$data['job_alignment']['overqualified']['percentage']}%)\n";
+        $content .= "Underqualified: {$data['job_alignment']['underqualified']['count']} ({$data['job_alignment']['underqualified']['percentage']}%)\n";
+        $content .= "Unfit: {$data['job_alignment']['unfit']['count']} ({$data['job_alignment']['unfit']['percentage']}%)\n\n";
+        
+        // Program Performance
+        $content .= "PROGRAM-WISE PERFORMANCE (Top Programs)\n" . str_repeat('-', 80) . "\n";
+        foreach (array_slice($data['program_performance'], 0, 10) as $row) {
+            $content .= "{$row['program']}: {$row['employed']}/{$row['total_alumni']} employed ({$row['employment_rate']}%), {$row['avg_days_to_job']} days avg\n";
+        }
+        $content .= "\n";
+        
+        // Employment Location
+        $content .= "EMPLOYMENT LOCATION\n" . str_repeat('-', 80) . "\n";
+        $content .= "Local: {$data['employment_location']['summary']['local']} ({$data['employment_location']['summary']['local_rate']}%)\n";
+        $content .= "Foreign: {$data['employment_location']['summary']['foreign']} ({$data['employment_location']['summary']['foreign_rate']}%)\n";
+        $content .= "Remote: {$data['employment_location']['summary']['remote']} ({$data['employment_location']['summary']['remote_rate']}%)\n";
         
         return response($content)
             ->header('Content-Type', 'application/pdf')
@@ -1439,8 +1748,8 @@ class AnalyticsController extends Controller
             'unfit_percentage' => $mismatchBreakdown['unfit']['percentage'] ?? 0,
             'underqualified_count' => $mismatchBreakdown['underqualified']['count'] ?? 0,
             'underqualified_percentage' => $mismatchBreakdown['underqualified']['percentage'] ?? 0,
-            'good_match_count' => $mismatchBreakdown['none']['count'] ?? 0,
-            'good_match_percentage' => $mismatchBreakdown['none']['percentage'] ?? 0,
+            'good_match_count' => ($mismatchBreakdown['none']['count'] ?? 0) + ($mismatchBreakdown[null]['count'] ?? 0) + ($mismatchBreakdown['']['count'] ?? 0),
+            'good_match_percentage' => $totalEmployed > 0 ? round(((($mismatchBreakdown['none']['count'] ?? 0) + ($mismatchBreakdown[null]['count'] ?? 0) + ($mismatchBreakdown['']['count'] ?? 0)) / $totalEmployed) * 100, 1) : 0,
             'unemployment_reasons' => $unemploymentReasons,
             'avg_job_satisfaction' => round((float) $avgJobSatisfaction, 1),
             'job_related_to_degree' => [
@@ -1449,6 +1758,593 @@ class AnalyticsController extends Controller
                 'related_percentage' => $totalWithData > 0 ? round(($relatedCount / $totalWithData) * 100, 1) : 0,
                 'unrelated_percentage' => $totalWithData > 0 ? round(($unrelatedCount / $totalWithData) * 100, 1) : 0
             ]
+        ];
+    }
+
+    /**
+     * Get comprehensive analytics including new metrics
+     * - Enrollment vs Graduation
+     * - Attrition Rate
+     * - Job Alignment
+     * - Performance Indicator (employed within 2 years)
+     */
+    public function getComprehensiveAnalytics(Request $request): JsonResponse
+    {
+        try {
+            $campusId = $request->get('campus_id');
+
+            // Get enrollment metrics from batches
+            $enrollmentMetrics = $this->getEnrollmentMetrics($campusId);
+            
+            // Get performance indicator (employed within 2 years)
+            $performanceIndicator = $this->getPerformanceIndicator($campusId);
+            
+            // Get job alignment statistics (from job classifier)
+            $jobAlignmentStats = $this->getJobAlignmentStats($campusId);
+            
+            // Get attrition rate
+            $attritionRate = $this->getAttritionRate($campusId);
+            
+            // Get program-wise performance
+            $programPerformance = $this->getProgramWisePerformance($campusId);
+            
+            // Get college-level enrollment/attrition breakdown
+            $collegeBreakdown = $this->getCollegeEnrollmentBreakdown($campusId);
+            
+            // Get course-level enrollment/attrition breakdown
+            $courseBreakdown = $this->getCourseEnrollmentBreakdown($campusId);
+
+            // Get employment location breakdown (local/foreign/remote)
+            $employmentLocationStats = $this->getEmploymentLocationStats($campusId);
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'enrollment_metrics' => $enrollmentMetrics,
+                    'performance_indicator' => $performanceIndicator,
+                    'job_alignment' => $jobAlignmentStats,
+                    'attrition_rate' => $attritionRate,
+                    'program_performance' => $programPerformance,
+                    'college_breakdown' => $collegeBreakdown,
+                    'course_breakdown' => $courseBreakdown,
+                    'employment_location' => $employmentLocationStats,
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch comprehensive analytics',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get enrollment vs graduation metrics from batches
+     * Groups by year only (not by batch name) for chart display
+     * Derives graduated counts from alumni_profiles, uses batch enrollment data if available
+     */
+    private function getEnrollmentMetrics($campusId = null): array
+    {
+        // Get actual alumni counts by graduation year from alumni_profiles
+        $alumniByYear = DB::table('alumni_profiles')
+            ->select(
+                'graduation_year',
+                DB::raw('COUNT(*) as graduated'),
+                DB::raw('SUM(CASE WHEN employment_status IN ("employed_full_time", "employed_part_time", "self_employed") THEN 1 ELSE 0 END) as employed')
+            )
+            ->whereNotNull('graduation_year')
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
+            })
+            ->groupBy('graduation_year')
+            ->orderBy('graduation_year', 'desc')
+            ->limit(10)
+            ->get()
+            ->keyBy('graduation_year');
+
+        // Get batch enrollment data if available (manual entry)
+        $batchEnrollment = DB::table('batches')
+            ->select(
+                'graduation_year',
+                DB::raw('SUM(COALESCE(initial_enrollment, 0)) as enrolled'),
+                DB::raw('SUM(COALESCE(dropout_count, 0)) as dropout'),
+                DB::raw('SUM(COALESCE(transferred_count, 0)) as transferred')
+            )
+            ->where('status', 'active')
+            ->whereNotNull('graduation_year')
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
+            })
+            ->groupBy('graduation_year')
+            ->get()
+            ->keyBy('graduation_year');
+
+        // Merge: prefer batch enrollment if > 0, otherwise estimate from alumni count
+        $allYears = $alumniByYear->keys()->merge($batchEnrollment->keys())->unique()->sortDesc()->take(10);
+
+        $yearlyBreakdown = $allYears->map(function ($year) use ($alumniByYear, $batchEnrollment) {
+            $alumni = $alumniByYear->get($year);
+            $batch = $batchEnrollment->get($year);
+
+            $graduated = $alumni ? (int) $alumni->graduated : 0;
+            $employed = $alumni ? (int) $alumni->employed : 0;
+            $enrolled = ($batch && $batch->enrolled > 0) ? (int) $batch->enrolled : $graduated;
+            $dropout = ($batch && $batch->dropout > 0) ? (int) $batch->dropout : 0;
+            $transferred = ($batch && $batch->transferred > 0) ? (int) $batch->transferred : 0;
+
+            return [
+                'year' => $year,
+                'enrolled' => $enrolled,
+                'graduated' => $graduated,
+                'employed' => $employed,
+                'dropout' => $dropout,
+                'transferred' => $transferred,
+                'graduation_rate' => $enrolled > 0 ? round(($graduated / $enrolled) * 100, 1) : 0,
+            ];
+        })->values()->toArray();
+
+        // Summary totals
+        $totalGraduated = $alumniByYear->sum('graduated');
+        $totalEmployed = $alumniByYear->sum('employed');
+        $totalEnrolled = $batchEnrollment->sum('enrolled');
+        if ($totalEnrolled == 0) $totalEnrolled = $totalGraduated; // fallback
+        $totalDropout = $batchEnrollment->sum('dropout');
+        $totalTransferred = $batchEnrollment->sum('transferred');
+
+        return [
+            'yearly_breakdown' => $yearlyBreakdown,
+            'summary' => [
+                'total_enrolled' => (int) $totalEnrolled,
+                'total_graduated' => (int) $totalGraduated,
+                'total_dropout' => (int) $totalDropout,
+                'total_transferred' => (int) $totalTransferred,
+                'overall_graduation_rate' => $totalEnrolled > 0 ? round(($totalGraduated / $totalEnrolled) * 100, 1) : 0,
+            ]
+        ];
+    }
+
+    /**
+     * Get performance indicator - percentage employed within 2 years
+     */
+    private function getPerformanceIndicator($campusId = null): array
+    {
+        // Get alumni with graduation date and job start date — employed within 2 years
+        $employedWithin2Years = DB::table('alumni_profiles')
+            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->whereNotNull('job_start_date')
+            ->whereNotNull('graduation_year')
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
+            })
+            ->whereRaw('DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))) BETWEEN 0 AND 730') // 2 years = 730 days
+            ->count();
+
+        // Count all employed alumni who have graduation data
+        $totalEmployedWithGradData = DB::table('alumni_profiles')
+            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->whereNotNull('graduation_year')
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
+            })
+            ->count();
+
+        // Total graduates (all alumni profiles)
+        $totalGraduates = DB::table('alumni_profiles')
+            ->whereNotNull('graduation_year')
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
+            })
+            ->count();
+
+        // Calculate performance by year
+        $yearlyPerformance = DB::table('alumni_profiles')
+            ->select(
+                'graduation_year',
+                DB::raw('COUNT(*) as total_graduates'),
+                DB::raw('SUM(CASE WHEN employment_status IN ("employed_full_time", "employed_part_time", "self_employed") THEN 1 ELSE 0 END) as total_employed'),
+                DB::raw('SUM(CASE WHEN employment_status IN ("employed_full_time", "employed_part_time", "self_employed") AND job_start_date IS NOT NULL AND DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))) BETWEEN 0 AND 730 THEN 1 ELSE 0 END) as employed_within_2_years')
+            )
+            ->whereNotNull('graduation_year')
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
+            })
+            ->groupBy('graduation_year')
+            ->orderBy('graduation_year', 'desc')
+            ->limit(10)
+            ->get()
+            ->map(function ($item) {
+                $employed = (int) $item->total_employed;
+                return [
+                    'year' => $item->graduation_year,
+                    'total_graduates' => (int) $item->total_graduates,
+                    'total_employed' => $employed,
+                    'employed_within_2_years' => (int) $item->employed_within_2_years,
+                    'performance_rate' => $item->total_graduates > 0 
+                        ? round(($item->employed_within_2_years / $item->total_graduates) * 100, 1) 
+                        : 0,
+                ];
+            });
+
+        // Performance rate = % of ALL graduates who found jobs within 2 years
+        $performanceRate = $totalGraduates > 0 
+            ? round(($employedWithin2Years / $totalGraduates) * 100, 1) 
+            : 0;
+
+        return [
+            'employed_within_2_years' => (int) $employedWithin2Years,
+            'total_employed_with_data' => (int) $totalEmployedWithGradData,
+            'total_graduates' => (int) $totalGraduates,
+            'performance_rate' => $performanceRate,
+            'yearly_breakdown' => $yearlyPerformance->toArray(),
+        ];
+    }
+
+    /**
+     * Get job alignment statistics from job mismatch classifications
+     */
+    private function getJobAlignmentStats($campusId = null): array
+    {
+        $stats = DB::table('alumni_profiles')
+            ->select(
+                'job_mismatch_reason',
+                DB::raw('COUNT(*) as count')
+            )
+            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
+            })
+            ->groupBy('job_mismatch_reason')
+            ->get();
+
+        $total = $stats->sum('count');
+        // NULL or 'none' job_mismatch_reason means the job is a good match (aligned)
+        $nullCount = $stats->whereNull('job_mismatch_reason')->first()->count ?? 0;
+        $noneCount = $stats->where('job_mismatch_reason', 'none')->first()->count ?? 0;
+        $aligned = $nullCount + $noneCount;
+        $overqualified = $stats->where('job_mismatch_reason', 'overqualified')->first()->count ?? 0;
+        $underqualified = $stats->where('job_mismatch_reason', 'underqualified')->first()->count ?? 0;
+        $unfit = $stats->where('job_mismatch_reason', 'unfit')->first()->count ?? 0;
+
+        return [
+            'total_employed' => (int) $total,
+            'aligned' => [
+                'count' => (int) $aligned,
+                'percentage' => $total > 0 ? round(($aligned / $total) * 100, 1) : 0,
+            ],
+            'overqualified' => [
+                'count' => (int) $overqualified,
+                'percentage' => $total > 0 ? round(($overqualified / $total) * 100, 1) : 0,
+            ],
+            'underqualified' => [
+                'count' => (int) $underqualified,
+                'percentage' => $total > 0 ? round(($underqualified / $total) * 100, 1) : 0,
+            ],
+            'unfit' => [
+                'count' => (int) $unfit,
+                'percentage' => $total > 0 ? round(($unfit / $total) * 100, 1) : 0,
+            ],
+            'alignment_rate' => $total > 0 ? round(($aligned / $total) * 100, 1) : 0,
+        ];
+    }
+
+    /**
+     * Get attrition rate from batches, supplemented by alumni_profiles data
+     */
+    private function getAttritionRate($campusId = null): array
+    {
+        // Get alumni employment breakdown by graduation year
+        $alumniByYear = DB::table('alumni_profiles')
+            ->select(
+                'graduation_year',
+                DB::raw('COUNT(*) as total'),
+                DB::raw('SUM(CASE WHEN employment_status IN ("employed_full_time", "employed_part_time", "self_employed") THEN 1 ELSE 0 END) as employed'),
+                DB::raw('SUM(CASE WHEN employment_status IN ("unemployed_seeking", "unemployed_not_seeking") THEN 1 ELSE 0 END) as unemployed'),
+                DB::raw('SUM(CASE WHEN employment_status = "continuing_education" THEN 1 ELSE 0 END) as continuing_education')
+            )
+            ->whereNotNull('graduation_year')
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
+            })
+            ->groupBy('graduation_year')
+            ->orderBy('graduation_year', 'desc')
+            ->limit(10)
+            ->get()
+            ->keyBy('graduation_year');
+
+        // Also get batch data if manually entered
+        $batchData = DB::table('batches')
+            ->select(
+                'graduation_year',
+                DB::raw('SUM(COALESCE(initial_enrollment, 0)) as enrolled'),
+                DB::raw('SUM(COALESCE(dropout_count, 0)) as dropout'),
+                DB::raw('SUM(COALESCE(transferred_count, 0)) as transferred')
+            )
+            ->where('status', 'active')
+            ->whereNotNull('graduation_year')
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('campus_id', $campusId);
+            })
+            ->groupBy('graduation_year')
+            ->get()
+            ->keyBy('graduation_year');
+
+        $allYears = $alumniByYear->keys()->merge($batchData->keys())->unique()->sortDesc()->take(10);
+
+        $yearlyBreakdown = $allYears->map(function ($year) use ($alumniByYear, $batchData) {
+            $alumni = $alumniByYear->get($year);
+            $batch = $batchData->get($year);
+
+            $total = $alumni ? (int) $alumni->total : 0;
+            $unemployed = $alumni ? (int) $alumni->unemployed : 0;
+            $continuing = $alumni ? (int) $alumni->continuing_education : 0;
+            
+            // Use actual batch data if available; otherwise use employment-based proxies
+            // with honest labeling (these are NOT true dropout/transfer numbers)
+            $hasBatchData = ($batch && $batch->enrolled > 0);
+            $enrolled = $hasBatchData ? (int) $batch->enrolled : $total;
+            $dropout = $hasBatchData ? (int) $batch->dropout : $unemployed;
+            $transferred = $hasBatchData ? (int) $batch->transferred : $continuing;
+
+            $attrition = $enrolled > 0
+                ? round((($dropout + $transferred) / $enrolled) * 100, 1)
+                : 0;
+
+            return [
+                'year' => $year,
+                'enrolled' => $enrolled,
+                'dropout' => $dropout,
+                'transferred' => $transferred,
+                'attrition_rate' => $attrition,
+            ];
+        })->values()->toArray();
+
+        $totalEnrolled = collect($yearlyBreakdown)->sum('enrolled');
+        $totalDropout = collect($yearlyBreakdown)->sum('dropout');
+        $totalTransferred = collect($yearlyBreakdown)->sum('transferred');
+
+        $overallAttrition = $totalEnrolled > 0
+            ? round((($totalDropout + $totalTransferred) / $totalEnrolled) * 100, 1)
+            : 0;
+
+        // Check if any batch actually has enrollment data
+        $hasBatchData = DB::table('batches')
+            ->whereNotNull('initial_enrollment')
+            ->where('initial_enrollment', '>', 0)
+            ->exists();
+
+        return [
+            'yearly_breakdown' => $yearlyBreakdown,
+            'summary' => [
+                'total_enrolled' => (int) $totalEnrolled,
+                'total_dropout' => (int) $totalDropout,
+                'total_transferred' => (int) $totalTransferred,
+                'overall_attrition_rate' => $overallAttrition,
+                'has_batch_data' => $hasBatchData,
+                'data_note' => $hasBatchData 
+                    ? null 
+                    : 'No batch enrollment data available. Showing Unemployed as "Dropout" proxy and Continuing Education as "Transferred" proxy.',
+            ]
+        ];
+    }
+
+    /**
+     * Get program-wise performance data
+     */
+    private function getProgramWisePerformance($campusId = null): array
+    {
+        $programData = DB::table('alumni_profiles as ap')
+            ->leftJoin('courses as c', 'ap.course_id', '=', 'c.id')
+            ->select(
+                DB::raw('COALESCE(ap.degree_program, c.name) as program'),
+                DB::raw('COUNT(ap.id) as total_alumni'),
+                DB::raw('SUM(CASE WHEN ap.employment_status IN ("employed_full_time", "employed_part_time", "self_employed") THEN 1 ELSE 0 END) as employed'),
+                DB::raw('SUM(CASE WHEN ap.employment_status IN ("employed_full_time", "employed_part_time", "self_employed") AND (ap.job_mismatch_reason IS NULL OR ap.job_mismatch_reason = "none") THEN 1 ELSE 0 END) as aligned'),
+                DB::raw('AVG(CASE WHEN ap.employment_status IN ("employed_full_time", "employed_part_time", "self_employed") AND ap.job_start_date IS NOT NULL AND ap.graduation_year IS NOT NULL AND DATEDIFF(ap.job_start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) BETWEEN 0 AND 1825 THEN DATEDIFF(ap.job_start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) ELSE NULL END) as avg_days_to_job')
+            )
+            ->whereRaw('COALESCE(ap.degree_program, c.name) IS NOT NULL')
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('ap.campus_id', $campusId);
+            })
+            ->groupBy(DB::raw('COALESCE(ap.degree_program, c.name)'))
+            ->having('total_alumni', '>', 0)
+            ->orderBy('total_alumni', 'desc')
+            ->limit(20)
+            ->get();
+
+        return $programData->map(function ($item) {
+            $totalAlumni = $item->total_alumni ?? 0;
+            $employed = $item->employed ?? 0;
+            $aligned = $item->aligned ?? 0;
+            
+            return [
+                'program' => $item->program,
+                'total_alumni' => (int) $totalAlumni,
+                'employed' => (int) $employed,
+                'employment_rate' => $totalAlumni > 0 ? round(($employed / $totalAlumni) * 100, 1) : 0,
+                'aligned' => (int) $aligned,
+                'alignment_rate' => $employed > 0 ? round(($aligned / $employed) * 100, 1) : 0,
+                'avg_days_to_job' => round((float) ($item->avg_days_to_job ?? 0), 1),
+            ];
+        })->toArray();
+    }
+
+    /**
+     * Get enrollment/attrition breakdown by college (department)
+     * Uses alumni_profiles with course relationship since batches don't have department_id
+     */
+    private function getCollegeEnrollmentBreakdown($campusId = null): array
+    {
+        $collegeData = DB::table('alumni_profiles as ap')
+            ->join('courses as c', 'ap.course_id', '=', 'c.id')
+            ->join('departments as d', 'c.department_id', '=', 'd.id')
+            ->select(
+                'd.id as department_id',
+                'd.name as college',
+                'd.code as college_code',
+                DB::raw('COUNT(*) as total_alumni'),
+                DB::raw("SUM(CASE WHEN ap.employment_status IN ('employed_full_time', 'employed_part_time', 'self_employed') THEN 1 ELSE 0 END) as employed"),
+                DB::raw("SUM(CASE WHEN ap.employment_status IN ('employed_full_time', 'employed_part_time', 'self_employed') AND (ap.job_mismatch_reason IS NULL OR ap.job_mismatch_reason = 'none') THEN 1 ELSE 0 END) as aligned")
+            )
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('ap.campus_id', $campusId);
+            })
+            ->groupBy('d.id', 'd.name', 'd.code')
+            ->orderBy('total_alumni', 'desc')
+            ->get();
+
+        return $collegeData->map(function ($item) {
+            $total = $item->total_alumni ?? 0;
+            $employed = $item->employed ?? 0;
+            $aligned = $item->aligned ?? 0;
+            
+            return [
+                'college' => $item->college,
+                'college_code' => $item->college_code,
+                'total_alumni' => (int) $total,
+                'employed' => (int) $employed,
+                'aligned' => (int) $aligned,
+                'employment_rate' => $total > 0 ? round(($employed / $total) * 100, 1) : 0,
+                'alignment_rate' => $employed > 0 ? round(($aligned / $employed) * 100, 1) : 0,
+            ];
+        })->toArray();
+    }
+
+    /**
+     * Get enrollment/attrition breakdown by course
+     * Uses alumni_profiles for per-course statistics
+     */
+    private function getCourseEnrollmentBreakdown($campusId = null): array
+    {
+        $courseData = DB::table('alumni_profiles as ap')
+            ->join('courses as c', 'ap.course_id', '=', 'c.id')
+            ->join('departments as d', 'c.department_id', '=', 'd.id')
+            ->select(
+                'c.id as course_id',
+                'c.name as course',
+                'c.code as course_code',
+                'd.name as college',
+                'd.code as college_code',
+                DB::raw('COUNT(*) as total_alumni'),
+                DB::raw("SUM(CASE WHEN ap.employment_status IN ('employed_full_time', 'employed_part_time', 'self_employed') THEN 1 ELSE 0 END) as employed"),
+                DB::raw("SUM(CASE WHEN ap.employment_status IN ('employed_full_time', 'employed_part_time', 'self_employed') AND (ap.job_mismatch_reason IS NULL OR ap.job_mismatch_reason = 'none') THEN 1 ELSE 0 END) as aligned")
+            )
+            ->when($campusId, function ($q) use ($campusId) {
+                return $q->where('ap.campus_id', $campusId);
+            })
+            ->groupBy('c.id', 'c.name', 'c.code', 'd.name', 'd.code')
+            ->orderBy('total_alumni', 'desc')
+            ->limit(15)
+            ->get();
+
+        return $courseData->map(function ($item) {
+            $total = $item->total_alumni ?? 0;
+            $employed = $item->employed ?? 0;
+            $aligned = $item->aligned ?? 0;
+            
+            return [
+                'course' => $item->course,
+                'course_code' => $item->course_code,
+                'college' => $item->college,
+                'college_code' => $item->college_code,
+                'total_alumni' => (int) $total,
+                'employed' => (int) $employed,
+                'aligned' => (int) $aligned,
+                'employment_rate' => $total > 0 ? round(($employed / $total) * 100, 1) : 0,
+                'alignment_rate' => $employed > 0 ? round(($aligned / $employed) * 100, 1) : 0,
+            ];
+        })->toArray();
+    }
+
+    /**
+     * Get employment location breakdown (local vs foreign vs remote)
+     * Includes per-year trends and department breakdown
+     */
+    private function getEmploymentLocationStats($campusId = null): array
+    {
+        $baseQuery = AlumniProfile::whereIn('employment_status', [
+            'employed_full_time', 'employed_part_time', 'self_employed'
+        ])->when($campusId, fn($q) => $q->where('campus_id', $campusId));
+
+        $totalEmployed = (clone $baseQuery)->count();
+
+        // Overall counts
+        $locationCounts = DB::table('alumni_profiles')
+            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->whereNotNull('employment_location_type')
+            ->when($campusId, fn($q) => $q->where('campus_id', $campusId))
+            ->selectRaw('employment_location_type, COUNT(*) as count')
+            ->groupBy('employment_location_type')
+            ->pluck('count', 'employment_location_type')
+            ->toArray();
+
+        $local = $locationCounts['local'] ?? 0;
+        $foreign = $locationCounts['foreign'] ?? 0;
+        $remote = $locationCounts['remote'] ?? 0;
+
+        // Per-year trend
+        $yearlyTrend = DB::table('alumni_profiles')
+            ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->whereNotNull('employment_location_type')
+            ->whereNotNull('graduation_year')
+            ->when($campusId, fn($q) => $q->where('campus_id', $campusId))
+            ->selectRaw('graduation_year, employment_location_type, COUNT(*) as count')
+            ->groupBy('graduation_year', 'employment_location_type')
+            ->orderBy('graduation_year')
+            ->get()
+            ->groupBy('graduation_year')
+            ->map(function ($items, $year) {
+                $counts = $items->pluck('count', 'employment_location_type')->toArray();
+                $total = array_sum($counts);
+                return [
+                    'year' => (int) $year,
+                    'local' => (int) ($counts['local'] ?? 0),
+                    'foreign' => (int) ($counts['foreign'] ?? 0),
+                    'remote' => (int) ($counts['remote'] ?? 0),
+                    'total' => $total,
+                    'foreign_rate' => $total > 0 ? round((($counts['foreign'] ?? 0) + ($counts['remote'] ?? 0)) / $total * 100, 1) : 0,
+                ];
+            })
+            ->values()
+            ->toArray();
+
+        // Per-department breakdown
+        $departmentBreakdown = DB::table('alumni_profiles')
+            ->join('departments', 'alumni_profiles.department_id', '=', 'departments.id')
+            ->whereIn('alumni_profiles.employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
+            ->whereNotNull('alumni_profiles.employment_location_type')
+            ->when($campusId, fn($q) => $q->where('alumni_profiles.campus_id', $campusId))
+            ->selectRaw('departments.name as department, alumni_profiles.employment_location_type, COUNT(*) as count')
+            ->groupBy('departments.name', 'alumni_profiles.employment_location_type')
+            ->get()
+            ->groupBy('department')
+            ->map(function ($items, $dept) {
+                $counts = $items->pluck('count', 'employment_location_type')->toArray();
+                $total = array_sum($counts);
+                return [
+                    'department' => $dept,
+                    'local' => (int) ($counts['local'] ?? 0),
+                    'foreign' => (int) ($counts['foreign'] ?? 0),
+                    'remote' => (int) ($counts['remote'] ?? 0),
+                    'total' => $total,
+                ];
+            })
+            ->values()
+            ->toArray();
+
+        return [
+            'summary' => [
+                'total_employed' => $totalEmployed,
+                'local' => $local,
+                'foreign' => $foreign,
+                'remote' => $remote,
+                'local_rate' => $totalEmployed > 0 ? round($local / $totalEmployed * 100, 1) : 0,
+                'foreign_rate' => $totalEmployed > 0 ? round($foreign / $totalEmployed * 100, 1) : 0,
+                'remote_rate' => $totalEmployed > 0 ? round($remote / $totalEmployed * 100, 1) : 0,
+            ],
+            'yearly_trend' => $yearlyTrend,
+            'department_breakdown' => $departmentBreakdown,
         ];
     }
 }

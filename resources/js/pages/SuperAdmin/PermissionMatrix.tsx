@@ -280,7 +280,7 @@ export default function PermissionMatrix({ auth }: PageProps) {
                 <div className="flex items-center justify-center h-96">
                     <div className="text-center">
                         <div className="h-12 w-12 border-4 border-maroon-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                        <p className="text-gray-600">Loading permissions...</p>
+                        <p className="text-gray-600 dark:text-gray-400">Loading permissions...</p>
                     </div>
                 </div>
             </AdminBaseLayout>
@@ -294,7 +294,7 @@ export default function PermissionMatrix({ auth }: PageProps) {
             <div className="space-y-6 p-6">
                 {/* Header */}
                 <div className="bg-gradient-to-r from-maroon-600 to-maroon-700 rounded-xl shadow-lg p-6 text-white">
-                    <div className="flex items-start justify-between">
+                    <div className="flex flex-col sm:flex-row items-start justify-between gap-3">
                         <div>
                             <h1 className="text-3xl font-bold mb-2">Permission Matrix</h1>
                             <p className="text-maroon-100">
@@ -304,7 +304,7 @@ export default function PermissionMatrix({ auth }: PageProps) {
                         <button
                             onClick={handleSave}
                             disabled={saving}
-                            className="flex items-center space-x-2 bg-white text-maroon-600 px-6 py-3 rounded-lg hover:bg-maroon-50 transition-all shadow-lg hover:shadow-xl disabled:opacity-50"
+                            className="flex items-center space-x-2 bg-white dark:bg-gray-800 text-maroon-600 px-6 py-3 rounded-lg hover:bg-maroon-50 dark:hover:bg-maroon-800/30 transition-all shadow-lg hover:shadow-xl disabled:opacity-50"
                         >
                             <Save className="h-5 w-5" />
                             <span className="font-semibold">{saving ? 'Saving...' : 'Save Changes'}</span>
@@ -320,8 +320,8 @@ export default function PermissionMatrix({ auth }: PageProps) {
                 </div>
 
                 {/* Role Selector */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Select Role to Configure</h2>
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Select Role to Configure</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         {roles.map(role => {
                             const isSelected = selectedRole === role.id;
@@ -336,8 +336,8 @@ export default function PermissionMatrix({ auth }: PageProps) {
                                     className={`
                                         relative p-5 rounded-xl border-2 transition-all text-left
                                         ${isSelected
-                                            ? 'border-maroon-500 bg-maroon-50 shadow-lg scale-105'
-                                            : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
+                                            ? 'border-maroon-500 bg-maroon-50 dark:bg-maroon-900/30 shadow-lg scale-105'
+                                            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-md'
                                         }
                                         ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                                     `}
@@ -353,8 +353,8 @@ export default function PermissionMatrix({ auth }: PageProps) {
                                             <Lock className="h-5 w-5 text-gray-400" />
                                         )}
                                     </div>
-                                    <h3 className="font-bold text-gray-900 text-lg mb-1">{role.display_name}</h3>
-                                    <p className="text-sm text-gray-600">
+                                    <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg mb-1">{role.display_name}</h3>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">
                                         {isLocked ? 'Full access (locked)' : `${permCount} of ${permissions.length} permissions`}
                                     </p>
                                 </button>
@@ -373,16 +373,16 @@ export default function PermissionMatrix({ auth }: PageProps) {
                             const isLocked = selectedRoleObj?.is_system_role && selectedRoleObj.name === 'super_admin';
 
                             return (
-                                <div key={category} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                                <div key={category} className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                                     {/* Category Header */}
                                     <button
                                         onClick={() => toggleCategory(category)}
-                                        className="w-full px-6 py-4 bg-gray-50 hover:bg-gray-100 transition-colors flex items-center justify-between"
+                                        className="w-full px-6 py-4 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center justify-between"
                                     >
                                         <div className="flex items-center gap-3">
-                                            <Lock className="h-5 w-5 text-gray-600" />
-                                            <h3 className="text-lg font-bold text-gray-900">{category}</h3>
-                                            <span className="text-sm text-gray-500">
+                                            <Lock className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+                                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{category}</h3>
+                                            <span className="text-sm text-gray-500 dark:text-gray-400">
                                                 {stats.enabled} of {stats.total} enabled
                                             </span>
                                         </div>
@@ -408,7 +408,7 @@ export default function PermissionMatrix({ auth }: PageProps) {
                                                                 relative p-5 rounded-xl border-2 transition-all
                                                                 ${hasPermission
                                                                     ? 'border-green-300 bg-green-50/50'
-                                                                    : 'border-gray-200 bg-white'
+                                                                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
                                                                 }
                                                                 hover:shadow-md
                                                             `}
@@ -416,19 +416,19 @@ export default function PermissionMatrix({ auth }: PageProps) {
                                                             <div className="flex items-start justify-between mb-3">
                                                                 <div className="flex-1">
                                                                     <div className="flex items-center gap-2 mb-2">
-                                                                        <h4 className="font-semibold text-gray-900">
+                                                                        <h4 className="font-semibold text-gray-900 dark:text-gray-100">
                                                                             {permission.display_name}
                                                                         </h4>
                                                                         {hasPermission && (
                                                                             <CheckCircle className="h-4 w-4 text-green-600" />
                                                                         )}
                                                                     </div>
-                                                                    <p className="text-sm text-gray-600 mb-3">
+                                                                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
                                                                         {permission.description}
                                                                     </p>
                                                                     <div className="flex items-center gap-2">
                                                                         {getRiskBadge(riskLevel)}
-                                                                        <span className="text-xs text-gray-500">
+                                                                        <span className="text-xs text-gray-500 dark:text-gray-400">
                                                                             {permission.name}
                                                                         </span>
                                                                     </div>
@@ -494,14 +494,14 @@ export default function PermissionMatrix({ auth }: PageProps) {
             {/* Users with Permission Modal */}
             {showUsersModal && selectedPermission && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-                    <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden border border-gray-200">
-                        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden border border-gray-200 dark:border-gray-700">
+                        <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 dark:from-gray-800 to-white dark:to-gray-800">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <h3 className="text-xl font-bold text-gray-900">
+                                    <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">
                                         Users with "{selectedPermission.display_name}"
                                     </h3>
-                                    <p className="text-sm text-gray-600 mt-1">
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                                         {selectedPermission.description}
                                     </p>
                                 </div>
@@ -519,7 +519,7 @@ export default function PermissionMatrix({ auth }: PageProps) {
                                 <div className="flex items-center justify-center py-16">
                                     <div className="text-center">
                                         <div className="h-10 w-10 border-4 border-maroon-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                                        <p className="text-gray-600">Loading users...</p>
+                                        <p className="text-gray-600 dark:text-gray-400">Loading users...</p>
                                     </div>
                                 </div>
                             ) : usersWithPermission.length === 0 ? (
@@ -531,14 +531,14 @@ export default function PermissionMatrix({ auth }: PageProps) {
                             ) : (
                                 <div className="space-y-3">
                                     {usersWithPermission.map((user) => (
-                                        <div key={user.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors border border-gray-200">
+                                        <div key={user.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border border-gray-200 dark:border-gray-700">
                                             <div className="flex items-center gap-4">
                                                 <div className="h-12 w-12 bg-gradient-to-br from-maroon-600 to-maroon-700 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md">
                                                     {(user.name || user.email || 'U').charAt(0).toUpperCase()}
                                                 </div>
                                                 <div>
-                                                    <p className="font-semibold text-gray-900">{user.name || 'No Name'}</p>
-                                                    <p className="text-sm text-gray-600">{user.email}</p>
+                                                    <p className="font-semibold text-gray-900 dark:text-gray-100">{user.name || 'No Name'}</p>
+                                                    <p className="text-sm text-gray-600 dark:text-gray-400">{user.email}</p>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">
@@ -564,7 +564,7 @@ export default function PermissionMatrix({ auth }: PageProps) {
                             )}
                         </div>
 
-                        <div className="p-6 border-t border-gray-200 bg-gradient-to-b from-gray-50 to-white">
+                        <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-gradient-to-b from-gray-50 dark:from-gray-800 to-white dark:to-gray-800">
                             <button
                                 onClick={() => setShowUsersModal(false)}
                                 className="w-full px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"

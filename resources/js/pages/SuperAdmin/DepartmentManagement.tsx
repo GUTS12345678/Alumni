@@ -416,10 +416,10 @@ export default function DepartmentManagement({ auth }: PageProps) {
 
             <div className="space-y-6">
                 {/* Header */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900">Department Management</h1>
-                        <p className="mt-1 text-sm text-gray-500">
+                        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Department Management</h1>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                             Manage colleges and departments across the institution
                         </p>
                     </div>
@@ -435,11 +435,11 @@ export default function DepartmentManagement({ auth }: PageProps) {
                 {/* Statistics Cards */}
                 {stats && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="bg-white rounded-lg border border-gray-200 p-6">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600">Total Departments</p>
-                                    <p className="text-2xl font-bold text-gray-900 mt-1">{stats.total_departments}</p>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Departments</p>
+                                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">{stats.total_departments}</p>
                                 </div>
                                 <div className="p-3 bg-blue-100 rounded-lg">
                                     <Building className="h-6 w-6 text-blue-600" />
@@ -447,10 +447,10 @@ export default function DepartmentManagement({ auth }: PageProps) {
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-lg border border-gray-200 p-6">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600">Active Departments</p>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Departments</p>
                                     <p className="text-2xl font-bold text-green-600 mt-1">{stats.active_departments}</p>
                                 </div>
                                 <div className="p-3 bg-green-100 rounded-lg">
@@ -459,10 +459,10 @@ export default function DepartmentManagement({ auth }: PageProps) {
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-lg border border-gray-200 p-6">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600">Total Courses</p>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Courses</p>
                                     <p className="text-2xl font-bold text-purple-600 mt-1">{stats.total_courses}</p>
                                 </div>
                                 <div className="p-3 bg-purple-100 rounded-lg">
@@ -471,13 +471,13 @@ export default function DepartmentManagement({ auth }: PageProps) {
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-lg border border-gray-200 p-6">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600">Departments with Alumni</p>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Departments with Alumni</p>
                                     <p className="text-2xl font-bold text-maroon-600 mt-1">{stats.departments_with_alumni}</p>
                                 </div>
-                                <div className="p-3 bg-maroon-100 rounded-lg">
+                                <div className="p-3 bg-maroon-100 dark:bg-maroon-800/30 rounded-lg">
                                     <Users className="h-6 w-6 text-maroon-600" />
                                 </div>
                             </div>
@@ -486,7 +486,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                 )}
 
                 {/* Filters */}
-                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                     <div className="flex flex-col lg:flex-row gap-4">
                         {/* Search */}
                         <div className="flex-1">
@@ -497,7 +497,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                     placeholder="Search departments..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
+                                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
                                 />
                             </div>
                         </div>
@@ -508,7 +508,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
-                                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
+                                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
                             >
                                 <option value="all">All Status</option>
                                 <option value="active">Active</option>
@@ -524,7 +524,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                 onChange={(e) => setShowDeleted(e.target.checked)}
                                 className="h-4 w-4 text-maroon-600 rounded focus:ring-maroon-500"
                             />
-                            <span className="text-sm text-gray-700">Show Deleted</span>
+                            <span className="text-sm text-gray-700 dark:text-gray-300">Show Deleted</span>
                         </label>
                     </div>
                 </div>
@@ -535,19 +535,19 @@ export default function DepartmentManagement({ auth }: PageProps) {
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-maroon-600"></div>
                     </div>
                 ) : filteredDepartments.length === 0 ? (
-                    <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-12 text-center">
                         <Building className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-600 text-lg mb-2">No departments found</p>
-                        <p className="text-gray-500 text-sm">Get started by creating your first department</p>
+                        <p className="text-gray-600 dark:text-gray-400 text-lg mb-2">No departments found</p>
+                        <p className="text-gray-500 dark:text-gray-400 text-sm">Get started by creating your first department</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredDepartments.map((department) => (
                             <div
                                 key={department.id}
-                                className={`bg-white rounded-lg border-2 ${department.deleted_at
+                                className={`bg-white dark:bg-gray-800 rounded-lg border-2 ${department.deleted_at
                                     ? 'border-red-200 bg-red-50'
-                                    : 'border-gray-200 hover:border-maroon-300'
+                                    : 'border-gray-200 dark:border-gray-700 hover:border-maroon-300'
                                     } transition-all duration-200 overflow-hidden group`}
                             >
                                 {/* Card Header */}
@@ -597,7 +597,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                 {/* Card Body */}
                                 <div className="p-6">
                                     {department.description && (
-                                        <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
                                             {department.description}
                                         </p>
                                     )}
@@ -609,8 +609,8 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                                 <BookOpen className="h-4 w-4 text-blue-600" />
                                             </div>
                                             <div>
-                                                <p className="text-xs text-gray-500">Courses</p>
-                                                <p className="text-lg font-bold text-gray-900">{department.courses_count}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">Courses</p>
+                                                <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{department.courses_count}</p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
@@ -618,8 +618,8 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                                 <Users className="h-4 w-4 text-purple-600" />
                                             </div>
                                             <div>
-                                                <p className="text-xs text-gray-500">Alumni</p>
-                                                <p className="text-lg font-bold text-gray-900">{department.alumni_profiles_count}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">Alumni</p>
+                                                <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{department.alumni_profiles_count}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -629,7 +629,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                         <div className="flex gap-2 mb-2">
                                             <button
                                                 onClick={() => toggleAnalytics(department.id)}
-                                                className="flex-1 py-2 text-sm font-medium text-maroon-600 hover:bg-maroon-50 rounded-lg transition-colors flex items-center justify-center gap-2"
+                                                className="flex-1 py-2 text-sm font-medium text-maroon-600 dark:text-gray-400 hover:bg-maroon-50 dark:hover:bg-maroon-800/30 rounded-lg transition-colors flex items-center justify-center gap-2"
                                             >
                                                 <BarChart3 className="h-4 w-4" />
                                                 <span>View Analytics</span>
@@ -663,7 +663,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                                 animate={{ height: "auto", opacity: 1 }}
                                                 exit={{ height: 0, opacity: 0 }}
                                                 transition={{ duration: 0.3 }}
-                                                className="border-t border-gray-200 bg-gray-50 rounded-lg overflow-hidden mb-4"
+                                                className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden mb-4"
                                             >
                                                 {loadingAnalytics[department.id] ? (
                                                     <div className="p-6 flex justify-center">
@@ -672,24 +672,24 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                                 ) : analyticsData[department.id] ? (
                                                     <div className="p-4 space-y-4">
                                                         {/* Employment Stats */}
-                                                        <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                                        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                                                             <div className="flex items-center gap-2 mb-3">
                                                                 <div className="p-2 rounded-lg bg-green-100">
                                                                     <Briefcase className="h-4 w-4 text-green-600" />
                                                                 </div>
-                                                                <h4 className="text-sm font-semibold text-gray-900">Employment</h4>
+                                                                <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Employment</h4>
                                                             </div>
                                                             <div className="space-y-2">
                                                                 <div className="flex justify-between items-center">
-                                                                    <span className="text-xs text-gray-600">Employment Rate</span>
+                                                                    <span className="text-xs text-gray-600 dark:text-gray-400">Employment Rate</span>
                                                                     <span className="text-sm font-bold text-green-600">
                                                                         {analyticsData[department.id].employment.employment_rate}%
                                                                     </span>
                                                                 </div>
                                                                 {analyticsData[department.id].employment.avg_time_to_employment && (
                                                                     <div className="flex justify-between items-center">
-                                                                        <span className="text-xs text-gray-600">Avg. Time to Employment</span>
-                                                                        <span className="text-sm font-medium text-gray-700">
+                                                                        <span className="text-xs text-gray-600 dark:text-gray-400">Avg. Time to Employment</span>
+                                                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                                                             {analyticsData[department.id].employment.avg_time_to_employment} days
                                                                         </span>
                                                                     </div>
@@ -698,23 +698,23 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                                         </div>
 
                                                         {/* Survey Engagement */}
-                                                        <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                                        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                                                             <div className="flex items-center gap-2 mb-3">
                                                                 <div className="p-2 rounded-lg bg-blue-100">
                                                                     <Activity className="h-4 w-4 text-blue-600" />
                                                                 </div>
-                                                                <h4 className="text-sm font-semibold text-gray-900">Survey Engagement</h4>
+                                                                <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Survey Engagement</h4>
                                                             </div>
                                                             <div className="space-y-2">
                                                                 <div className="flex justify-between items-center">
-                                                                    <span className="text-xs text-gray-600">Response Rate</span>
+                                                                    <span className="text-xs text-gray-600 dark:text-gray-400">Response Rate</span>
                                                                     <span className="text-sm font-bold text-blue-600">
                                                                         {analyticsData[department.id].surveys.response_rate}%
                                                                     </span>
                                                                 </div>
                                                                 <div className="flex justify-between items-center">
-                                                                    <span className="text-xs text-gray-600">Completed Surveys</span>
-                                                                    <span className="text-sm font-medium text-gray-700">
+                                                                    <span className="text-xs text-gray-600 dark:text-gray-400">Completed Surveys</span>
+                                                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                                                         {analyticsData[department.id].surveys.total_completed}/{analyticsData[department.id].surveys.total_sent}
                                                                     </span>
                                                                 </div>
@@ -722,29 +722,29 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                                         </div>
 
                                                         {/* Alumni Activity */}
-                                                        <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                                        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                                                             <div className="flex items-center gap-2 mb-3">
                                                                 <div className="p-2 rounded-lg bg-purple-100">
                                                                     <UserCheck className="h-4 w-4 text-purple-600" />
                                                                 </div>
-                                                                <h4 className="text-sm font-semibold text-gray-900">Alumni Activity</h4>
+                                                                <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Alumni Activity</h4>
                                                             </div>
                                                             <div className="space-y-2">
                                                                 <div className="flex justify-between items-center">
-                                                                    <span className="text-xs text-gray-600">Active Alumni</span>
+                                                                    <span className="text-xs text-gray-600 dark:text-gray-400">Active Alumni</span>
                                                                     <span className="text-sm font-bold text-purple-600">
                                                                         {analyticsData[department.id].activity.active_percentage}%
                                                                     </span>
                                                                 </div>
                                                                 <div className="flex justify-between items-center">
-                                                                    <span className="text-xs text-gray-600">Recent Logins (30d)</span>
-                                                                    <span className="text-sm font-medium text-gray-700">
+                                                                    <span className="text-xs text-gray-600 dark:text-gray-400">Recent Logins (30d)</span>
+                                                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                                                         {analyticsData[department.id].activity.recent_logins_30d}
                                                                     </span>
                                                                 </div>
                                                                 <div className="flex justify-between items-center">
-                                                                    <span className="text-xs text-gray-600">Profile Completion</span>
-                                                                    <span className="text-sm font-medium text-gray-700">
+                                                                    <span className="text-xs text-gray-600 dark:text-gray-400">Profile Completion</span>
+                                                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                                                         {analyticsData[department.id].activity.profile_completion_avg}%
                                                                     </span>
                                                                 </div>
@@ -752,23 +752,23 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                                         </div>
 
                                                         {/* Growth Trends */}
-                                                        <div className="bg-white rounded-lg p-4 border border-gray-200">
+                                                        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                                                             <div className="flex items-center gap-2 mb-3">
                                                                 <div className="p-2 rounded-lg bg-orange-100">
                                                                     <Clock className="h-4 w-4 text-orange-600" />
                                                                 </div>
-                                                                <h4 className="text-sm font-semibold text-gray-900">Growth Trends</h4>
+                                                                <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Growth Trends</h4>
                                                             </div>
                                                             <div className="space-y-2">
                                                                 <div className="flex justify-between items-center">
-                                                                    <span className="text-xs text-gray-600">New Alumni (6 months)</span>
+                                                                    <span className="text-xs text-gray-600 dark:text-gray-400">New Alumni (6 months)</span>
                                                                     <span className="text-sm font-bold text-orange-600">
                                                                         {analyticsData[department.id].growth.new_alumni_6m}
                                                                     </span>
                                                                 </div>
                                                                 <div className="flex justify-between items-center">
-                                                                    <span className="text-xs text-gray-600">Total Batches</span>
-                                                                    <span className="text-sm font-medium text-gray-700">
+                                                                    <span className="text-xs text-gray-600 dark:text-gray-400">Total Batches</span>
+                                                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                                                         {analyticsData[department.id].growth.total_batches}
                                                                     </span>
                                                                 </div>
@@ -785,7 +785,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                     </AnimatePresence>
 
                                     {/* Actions */}
-                                    <div className="flex items-center gap-2 pt-4 border-t border-gray-200">
+                                    <div className="flex items-center gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
                                         {department.deleted_at ? (
                                             <button
                                                 onClick={() => handleRestore(department)}
@@ -837,21 +837,21 @@ export default function DepartmentManagement({ auth }: PageProps) {
             {/* Create Modal */}
             {showCreateModal && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-                        <div className="p-6 border-b border-gray-200">
-                            <h2 className="text-2xl font-bold text-gray-900">Add New Department</h2>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+                        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Add New Department</h2>
                         </div>
 
                         <form onSubmit={handleCreateSubmit} className="p-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Department Name *
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
                                     placeholder="e.g., College of Engineering"
                                     required
                                 />
@@ -861,14 +861,14 @@ export default function DepartmentManagement({ auth }: PageProps) {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Department Code *
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.code}
                                     onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
                                     placeholder="e.g., COE"
                                     required
                                 />
@@ -878,26 +878,26 @@ export default function DepartmentManagement({ auth }: PageProps) {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Description
                                 </label>
                                 <textarea
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
                                     rows={3}
                                     placeholder="Brief description of the department..."
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Status *
                                 </label>
                                 <select
                                     value={formData.status}
                                     onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
                                     required
                                 >
                                     <option value="active">Active</option>
@@ -909,7 +909,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                 <button
                                     type="button"
                                     onClick={() => setShowCreateModal(false)}
-                                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                                     disabled={submitting}
                                 >
                                     Cancel
@@ -930,21 +930,21 @@ export default function DepartmentManagement({ auth }: PageProps) {
             {/* Edit Modal */}
             {showEditModal && selectedDepartment && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-                        <div className="p-6 border-b border-gray-200">
-                            <h2 className="text-2xl font-bold text-gray-900">Edit Department</h2>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+                        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Edit Department</h2>
                         </div>
 
                         <form onSubmit={handleEditSubmit} className="p-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Department Name *
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
                                     required
                                 />
                                 {formErrors.name && (
@@ -953,14 +953,14 @@ export default function DepartmentManagement({ auth }: PageProps) {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Department Code *
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.code}
                                     onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
                                     required
                                 />
                                 {formErrors.code && (
@@ -969,25 +969,25 @@ export default function DepartmentManagement({ auth }: PageProps) {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Description
                                 </label>
                                 <textarea
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
                                     rows={3}
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Status *
                                 </label>
                                 <select
                                     value={formData.status}
                                     onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
                                     required
                                 >
                                     <option value="active">Active</option>
@@ -999,7 +999,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                 <button
                                     type="button"
                                     onClick={() => setShowEditModal(false)}
-                                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                                     disabled={submitting}
                                 >
                                     Cancel
@@ -1020,16 +1020,16 @@ export default function DepartmentManagement({ auth }: PageProps) {
             {/* Delete Confirmation Modal */}
             {showDeleteModal && selectedDepartment && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg max-w-md w-full shadow-2xl">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full shadow-2xl">
                         <div className="p-6">
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="p-3 bg-red-100 rounded-full">
                                     <AlertCircle className="h-6 w-6 text-red-600" />
                                 </div>
-                                <h2 className="text-xl font-bold text-gray-900">Delete Department</h2>
+                                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Delete Department</h2>
                             </div>
 
-                            <p className="text-gray-600 mb-4">
+                            <p className="text-gray-600 dark:text-gray-400 mb-4">
                                 Are you sure you want to delete <strong>{selectedDepartment.name}</strong>?
                             </p>
 
@@ -1054,7 +1054,7 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                 <button
                                     type="button"
                                     onClick={() => setShowDeleteModal(false)}
-                                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                                     disabled={submitting}
                                 >
                                     Cancel

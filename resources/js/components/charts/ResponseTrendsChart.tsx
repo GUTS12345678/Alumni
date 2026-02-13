@@ -9,7 +9,7 @@ import {
     ResponsiveContainer,
     Area,
     AreaChart
-} from 'recharts';
+} from '@/lib/recharts';
 
 interface ResponseData {
     date: string;

@@ -57,7 +57,7 @@ import {
     CartesianGrid,
     Tooltip,
     Legend
-} from 'recharts';
+} from '@/lib/recharts';
 
 interface Campus {
     id: number;
@@ -332,7 +332,7 @@ export default function CampusManagement({ user }: Props) {
 
             <div className="space-y-6">
                 {/* Header */}
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div>
                         <h1 className="text-2xl font-bold flex items-center gap-2">
                             <Building2 className="h-6 w-6" />
@@ -597,68 +597,127 @@ export default function CampusManagement({ user }: Props) {
                         <CardDescription>Detailed view of all campus data</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Campus</TableHead>
-                                    <TableHead>Code</TableHead>
-                                    <TableHead className="text-center">Alumni</TableHead>
-                                    <TableHead className="text-center">Departments</TableHead>
-                                    <TableHead className="text-center">Courses</TableHead>
-                                    <TableHead className="text-center">Batches</TableHead>
-                                    <TableHead className="text-center">Employment Rate</TableHead>
-                                    <TableHead className="text-center">Status</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {campuses.map((campus) => (
-                                    <TableRow key={campus.id}>
-                                        <TableCell className="font-medium">{campus.display_name}</TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline">{campus.code}</Badge>
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                            {campus.statistics?.total_alumni.toLocaleString() || 0}
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                            {campus.statistics?.total_departments || 0}
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                            {campus.statistics?.total_courses || 0}
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                            {campus.statistics?.total_batches || 0}
-                                        </TableCell>
-                                        <TableCell className="text-center">
-                                            <Badge variant={
-                                                (campus.statistics?.employment_rate || 0) >= 70 ? 'default' :
-                                                    (campus.statistics?.employment_rate || 0) >= 50 ? 'secondary' : 'destructive'
-                                            }>
-                                                {campus.statistics?.employment_rate.toFixed(1) || 0}%
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-center">
+                        {/* Mobile Card View */}
+                        <div className="md:hidden space-y-3">
+                            {campuses.map((campus) => (
+                                <div key={campus.id} className="border border-beige-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <div className="font-medium text-maroon-800 dark:text-gray-200">{campus.display_name}</div>
+                                            <Badge variant="outline" className="mt-1">{campus.code}</Badge>
+                                        </div>
+                                        <div className="flex items-center gap-2">
                                             {campus.is_active ? (
-                                                <CheckCircle className="h-5 w-5 text-green-500 mx-auto" />
+                                                <CheckCircle className="h-5 w-5 text-green-500" />
                                             ) : (
-                                                <XCircle className="h-5 w-5 text-red-500 mx-auto" />
+                                                <XCircle className="h-5 w-5 text-red-500" />
                                             )}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-1">
-                                                <Button variant="ghost" size="icon" onClick={() => handleViewCampus(campus)}>
+                                            <div className="flex gap-1">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleViewCampus(campus)}>
                                                     <Eye className="h-4 w-4" />
                                                 </Button>
-                                                <Button variant="ghost" size="icon" onClick={() => handleEditCampus(campus)}>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditCampus(campus)}>
                                                     <Edit className="h-4 w-4" />
                                                 </Button>
                                             </div>
-                                        </TableCell>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 text-sm">
+                                        <div className="bg-beige-50 dark:bg-gray-800 rounded p-2">
+                                            <span className="text-gray-500 dark:text-gray-400 text-xs">Alumni</span>
+                                            <p className="font-medium">{campus.statistics?.total_alumni.toLocaleString() || 0}</p>
+                                        </div>
+                                        <div className="bg-beige-50 dark:bg-gray-800 rounded p-2">
+                                            <span className="text-gray-500 dark:text-gray-400 text-xs">Departments</span>
+                                            <p className="font-medium">{campus.statistics?.total_departments || 0}</p>
+                                        </div>
+                                        <div className="bg-beige-50 dark:bg-gray-800 rounded p-2">
+                                            <span className="text-gray-500 dark:text-gray-400 text-xs">Courses</span>
+                                            <p className="font-medium">{campus.statistics?.total_courses || 0}</p>
+                                        </div>
+                                        <div className="bg-beige-50 dark:bg-gray-800 rounded p-2">
+                                            <span className="text-gray-500 dark:text-gray-400 text-xs">Batches</span>
+                                            <p className="font-medium">{campus.statistics?.total_batches || 0}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">Employment Rate</span>
+                                        <Badge variant={
+                                            (campus.statistics?.employment_rate || 0) >= 70 ? 'default' :
+                                                (campus.statistics?.employment_rate || 0) >= 50 ? 'secondary' : 'destructive'
+                                        }>
+                                            {campus.statistics?.employment_rate.toFixed(1) || 0}%
+                                        </Badge>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Campus</TableHead>
+                                        <TableHead>Code</TableHead>
+                                        <TableHead className="text-center">Alumni</TableHead>
+                                        <TableHead className="text-center">Departments</TableHead>
+                                        <TableHead className="text-center">Courses</TableHead>
+                                        <TableHead className="text-center">Batches</TableHead>
+                                        <TableHead className="text-center">Employment Rate</TableHead>
+                                        <TableHead className="text-center">Status</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {campuses.map((campus) => (
+                                        <TableRow key={campus.id}>
+                                            <TableCell className="font-medium">{campus.display_name}</TableCell>
+                                            <TableCell>
+                                                <Badge variant="outline">{campus.code}</Badge>
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                {campus.statistics?.total_alumni.toLocaleString() || 0}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                {campus.statistics?.total_departments || 0}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                {campus.statistics?.total_courses || 0}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                {campus.statistics?.total_batches || 0}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                <Badge variant={
+                                                    (campus.statistics?.employment_rate || 0) >= 70 ? 'default' :
+                                                        (campus.statistics?.employment_rate || 0) >= 50 ? 'secondary' : 'destructive'
+                                                }>
+                                                    {campus.statistics?.employment_rate.toFixed(1) || 0}%
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                {campus.is_active ? (
+                                                    <CheckCircle className="h-5 w-5 text-green-500 mx-auto" />
+                                                ) : (
+                                                    <XCircle className="h-5 w-5 text-red-500 mx-auto" />
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <div className="flex justify-end gap-1">
+                                                    <Button variant="ghost" size="icon" onClick={() => handleViewCampus(campus)}>
+                                                        <Eye className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => handleEditCampus(campus)}>
+                                                        <Edit className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
                     </CardContent>
                 </Card>
 

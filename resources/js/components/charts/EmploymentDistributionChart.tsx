@@ -11,7 +11,7 @@ import {
     XAxis,
     YAxis,
     CartesianGrid
-} from 'recharts';
+} from '@/lib/recharts';
 
 interface EmploymentData {
     status: string;

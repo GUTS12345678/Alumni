@@ -396,7 +396,7 @@ export default function SurveyAnalytics({ user }: Props) {
 
     const getStatusBadge = (status: string) => {
         const statusConfig = {
-            'draft': { color: 'bg-gray-100 text-gray-800', icon: Clock },
+            'draft': { color: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200', icon: Clock },
             'active': { color: 'bg-green-100 text-green-800', icon: CheckCircle },
             'closed': { color: 'bg-blue-100 text-blue-800', icon: Target },
             'archived': { color: 'bg-red-100 text-red-800', icon: AlertTriangle },
@@ -465,7 +465,7 @@ export default function SurveyAnalytics({ user }: Props) {
             'select': 'bg-cyan-100 text-cyan-800',
             'textarea': 'bg-teal-100 text-teal-800',
         };
-        return typeColors[type] || 'bg-gray-100 text-gray-800';
+        return typeColors[type] || 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200';
     };
 
     // Response Details Modal
@@ -474,7 +474,7 @@ export default function SurveyAnalytics({ user }: Props) {
 
         return (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
                     {/* Modal Header */}
                     <div className="bg-gradient-to-r from-maroon-700 to-maroon-800 text-white px-6 py-4">
                         <div className="flex items-center justify-between">
@@ -494,16 +494,16 @@ export default function SurveyAnalytics({ user }: Props) {
                     </div>
 
                     {/* Respondent Info */}
-                    <div className="bg-beige-50 px-6 py-4 border-b border-beige-200">
+                    <div className="bg-beige-50 dark:bg-gray-900 px-6 py-4 border-b border-beige-200 dark:border-gray-700">
                         <div className="flex items-center gap-6">
-                            <div className="bg-maroon-100 p-3 rounded-full">
-                                <User className="h-8 w-8 text-maroon-700" />
+                            <div className="bg-maroon-100 dark:bg-maroon-800/30 p-3 rounded-full">
+                                <User className="h-8 w-8 text-maroon-700 dark:text-maroon-300" />
                             </div>
                             <div className="flex-1">
-                                <h3 className="text-lg font-semibold text-maroon-800">
+                                <h3 className="text-lg font-semibold text-maroon-800 dark:text-gray-200">
                                     {selectedResponse.respondent_name}
                                 </h3>
-                                <div className="flex items-center gap-4 text-sm text-gray-600">
+                                <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                                     <span className="flex items-center gap-1">
                                         <Mail className="h-4 w-4" />
                                         {selectedResponse.respondent_email}
@@ -528,7 +528,7 @@ export default function SurveyAnalytics({ user }: Props) {
                                 return (
                                     <div
                                         key={question.id}
-                                        className={`p-4 rounded-lg border ${hasAnswer ? 'bg-white border-beige-200' : 'bg-gray-50 border-gray-200'
+                                        className={`p-4 rounded-lg border ${hasAnswer ? 'bg-white dark:bg-gray-800 border-beige-200 dark:border-gray-700' : 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700'
                                             }`}
                                     >
                                         <div className="flex items-start justify-between mb-2">
@@ -536,7 +536,7 @@ export default function SurveyAnalytics({ user }: Props) {
                                                 <span className="bg-maroon-700 text-white text-xs font-bold px-2 py-1 rounded">
                                                     Q{index + 1}
                                                 </span>
-                                                <h4 className="font-medium text-gray-800">
+                                                <h4 className="font-medium text-gray-800 dark:text-gray-200">
                                                     {question.question_text}
                                                 </h4>
                                             </div>
@@ -547,13 +547,13 @@ export default function SurveyAnalytics({ user }: Props) {
                                         <div className="ml-9">
                                             {hasAnswer ? (
                                                 <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                                                    <p className="text-gray-800">
+                                                    <p className="text-gray-800 dark:text-gray-200">
                                                         {answer.answer_text || JSON.stringify(answer.answer_json)}
                                                     </p>
                                                 </div>
                                             ) : (
-                                                <div className="bg-gray-100 border border-gray-200 rounded-lg p-3">
-                                                    <p className="text-gray-500 italic">No answer provided</p>
+                                                <div className="bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                                                    <p className="text-gray-500 dark:text-gray-400 italic">No answer provided</p>
                                                 </div>
                                             )}
                                         </div>
@@ -572,8 +572,8 @@ export default function SurveyAnalytics({ user }: Props) {
             <AdminBaseLayout title="Survey Analytics" user={user}>
                 <div className="flex items-center justify-center min-h-96">
                     <div className="flex items-center space-x-2">
-                        <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
-                        <span className="text-maroon-800 font-medium">Loading analytics...</span>
+                        <RefreshCw className="h-8 w-8 text-maroon-600 dark:text-maroon-400 animate-spin" />
+                        <span className="text-maroon-800 dark:text-gray-200 font-medium">Loading analytics...</span>
                     </div>
                 </div>
             </AdminBaseLayout>
@@ -613,19 +613,19 @@ export default function SurveyAnalytics({ user }: Props) {
                                     setAnalytics(null);
                                     setActiveTab('overview');
                                 }}
-                                className="flex items-center text-maroon-600 hover:text-maroon-800 mb-2"
+                                className="flex items-center text-maroon-600 dark:text-maroon-400 hover:text-maroon-800 dark:hover:text-maroon-300 mb-2"
                             >
                                 <ArrowLeft className="h-4 w-4 mr-1" />
                                 Back to all surveys
                             </button>
                         ) : null}
-                        <h2 className="text-2xl font-bold text-maroon-800">
+                        <h2 className="text-2xl font-bold text-maroon-800 dark:text-gray-200">
                             {selectedSurvey && analytics ? analytics.survey.title : 'Survey Analytics'}
                         </h2>
-                        <p className="text-maroon-600">
+                        <p className="text-maroon-600 dark:text-gray-400">
                             {selectedSurvey ? 'View detailed analytics and responses' : 'Detailed insights and response analytics'}
                         </p>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             Last updated: {lastUpdated.toLocaleTimeString()}
                             {autoRefresh && <span className="ml-2 text-green-600">● Live</span>}
                         </p>
@@ -638,9 +638,9 @@ export default function SurveyAnalytics({ user }: Props) {
                                 id="auto-refresh"
                                 checked={autoRefresh}
                                 onChange={(e) => setAutoRefresh(e.target.checked)}
-                                className="rounded border-maroon-300 text-maroon-600 focus:ring-maroon-200"
+                                className="rounded border-maroon-300 dark:border-gray-600 text-maroon-600 dark:text-maroon-400 focus:ring-maroon-200"
                             />
-                            <label htmlFor="auto-refresh" className="text-sm text-maroon-700">
+                            <label htmlFor="auto-refresh" className="text-sm text-maroon-700 dark:text-gray-300">
                                 Auto-refresh
                             </label>
                         </div>
@@ -661,7 +661,7 @@ export default function SurveyAnalytics({ user }: Props) {
                             onClick={() => selectedSurvey ? fetchSurveyAnalytics(selectedSurvey) : fetchSurveys()}
                             variant="outline"
                             size="sm"
-                            className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                             disabled={loading || analyticsLoading}
                         >
                             <RefreshCw className={`h-4 w-4 mr-2 ${(loading || analyticsLoading) ? 'animate-spin' : ''}`} />
@@ -673,47 +673,47 @@ export default function SurveyAnalytics({ user }: Props) {
                 {/* Overview Statistics - Show when no survey selected */}
                 {!selectedSurvey && stats && (
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-white to-beige-50">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-white to-beige-50 dark:from-gray-800 dark:to-gray-900">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-maroon-800">Total Surveys</CardTitle>
-                                <FileText className="h-5 w-5 text-maroon-600" />
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Surveys</CardTitle>
+                                <FileText className="h-5 w-5 text-maroon-600 dark:text-maroon-400" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold text-maroon-800">{stats.total_surveys ?? 0}</div>
-                                <p className="text-sm text-maroon-600 mt-1">{stats.active_surveys ?? 0} currently active</p>
+                                <div className="text-3xl font-bold text-maroon-800 dark:text-gray-200">{stats.total_surveys ?? 0}</div>
+                                <p className="text-sm text-maroon-600 dark:text-gray-400 mt-1">{stats.active_surveys ?? 0} currently active</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-white to-blue-50">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-white to-blue-50 dark:from-gray-800 dark:to-gray-900">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-maroon-800">Total Responses</CardTitle>
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Responses</CardTitle>
                                 <Users className="h-5 w-5 text-blue-600" />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-3xl font-bold text-blue-600">{(stats.total_responses ?? 0).toLocaleString()}</div>
-                                <p className="text-sm text-maroon-600 mt-1">Across all surveys</p>
+                                <p className="text-sm text-maroon-600 dark:text-gray-400 mt-1">Across all surveys</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-white to-green-50">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-white to-green-50 dark:from-gray-800 dark:to-gray-900">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-maroon-800">Avg Completion Rate</CardTitle>
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Avg Completion Rate</CardTitle>
                                 <Target className="h-5 w-5 text-green-600" />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-3xl font-bold text-green-600">{(stats.avg_completion_rate ?? 0).toFixed(1)}%</div>
-                                <p className="text-sm text-maroon-600 mt-1">Overall completion rate</p>
+                                <p className="text-sm text-maroon-600 dark:text-gray-400 mt-1">Overall completion rate</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-white to-purple-50">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-white to-purple-50 dark:from-gray-800 dark:to-gray-900">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-maroon-800">Most Popular</CardTitle>
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Most Popular</CardTitle>
                                 <TrendingUp className="h-5 w-5 text-purple-600" />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-lg font-bold text-purple-600 truncate">{stats.most_popular_survey || 'N/A'}</div>
-                                <p className="text-sm text-maroon-600 mt-1">Highest response rate</p>
+                                <p className="text-sm text-maroon-600 dark:text-gray-400 mt-1">Highest response rate</p>
                             </CardContent>
                         </Card>
                     </div>
@@ -721,10 +721,10 @@ export default function SurveyAnalytics({ user }: Props) {
 
                 {/* Survey Selection - Show when no survey selected */}
                 {!selectedSurvey && (
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader>
-                            <CardTitle className="text-xl text-maroon-800">Select Survey for Analysis</CardTitle>
-                            <CardDescription className="text-maroon-600">
+                            <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Select Survey for Analysis</CardTitle>
+                            <CardDescription className="text-maroon-600 dark:text-gray-400">
                                 Choose a survey to view detailed analytics and individual responses
                             </CardDescription>
                         </CardHeader>
@@ -736,14 +736,14 @@ export default function SurveyAnalytics({ user }: Props) {
                                         placeholder="Search surveys..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="pl-10 border-beige-300 focus:border-maroon-400 focus:ring-maroon-200"
+                                        className="pl-10 border-beige-300 dark:border-gray-600 focus:border-maroon-400 focus:ring-maroon-200 dark:bg-gray-700 dark:text-gray-100"
                                     />
                                 </div>
 
                                 <select
                                     value={dateRange}
                                     onChange={(e) => setDateRange(e.target.value)}
-                                    className="px-3 py-2 border border-beige-300 rounded-md focus:border-maroon-400 focus:ring-maroon-200"
+                                    className="px-3 py-2 border border-beige-300 dark:border-gray-600 rounded-md focus:border-maroon-400 focus:ring-maroon-200 dark:bg-gray-700 dark:text-gray-100"
                                 >
                                     <option value="all">All time</option>
                                     <option value="365">Last year</option>
@@ -756,8 +756,8 @@ export default function SurveyAnalytics({ user }: Props) {
                             {filteredSurveys.length === 0 ? (
                                 <div className="text-center py-12">
                                     <BarChart3 className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                                    <h3 className="text-lg font-medium text-gray-900 mb-2">No surveys found</h3>
-                                    <p className="text-gray-500">
+                                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No surveys found</h3>
+                                    <p className="text-gray-500 dark:text-gray-400">
                                         {searchTerm ? 'Try adjusting your search' : 'Create surveys to see analytics'}
                                     </p>
                                 </div>
@@ -767,18 +767,18 @@ export default function SurveyAnalytics({ user }: Props) {
                                         <Card
                                             key={survey.id}
                                             className={`cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1 border-2 ${selectedSurvey === survey.id
-                                                ? 'border-maroon-400 bg-maroon-50'
-                                                : 'border-beige-200 hover:border-maroon-300'
+                                                ? 'border-maroon-400 bg-maroon-50 dark:bg-maroon-900/30'
+                                                : 'border-beige-200 dark:border-gray-700 hover:border-maroon-300'
                                                 }`}
                                             onClick={() => setSelectedSurvey(survey.id)}
                                         >
                                             <CardContent className="p-5">
                                                 <div className="flex items-start justify-between mb-3">
-                                                    <h3 className="font-semibold text-maroon-800 line-clamp-2">{survey.title}</h3>
+                                                    <h3 className="font-semibold text-maroon-800 dark:text-gray-200 line-clamp-2">{survey.title}</h3>
                                                     {getStatusBadge(survey.status)}
                                                 </div>
 
-                                                <p className="text-sm text-gray-600 mb-4 line-clamp-2">{survey.description}</p>
+                                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">{survey.description}</p>
 
                                                 <div className="grid grid-cols-3 gap-2 text-center">
                                                     <div className="bg-blue-50 rounded-lg p-2">
@@ -795,7 +795,7 @@ export default function SurveyAnalytics({ user }: Props) {
                                                     </div>
                                                 </div>
 
-                                                <div className="text-xs text-gray-500 mt-3 pt-3 border-t border-beige-100">
+                                                <div className="text-xs text-gray-500 dark:text-gray-400 mt-3 pt-3 border-t border-beige-100 dark:border-gray-700">
                                                     Created {formatDate(survey.created_at)}
                                                 </div>
                                             </CardContent>
@@ -811,12 +811,12 @@ export default function SurveyAnalytics({ user }: Props) {
                 {selectedSurvey && analytics && (
                     <div className="space-y-6">
                         {/* Tabs */}
-                        <div className="bg-white rounded-xl shadow-sm border border-beige-200 p-1 inline-flex">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-beige-200 dark:border-gray-700 p-1 flex flex-wrap gap-1">
                             <button
                                 onClick={() => setActiveTab('overview')}
                                 className={`px-6 py-2.5 rounded-lg font-medium transition-all ${activeTab === 'overview'
                                     ? 'bg-maroon-700 text-white shadow-md'
-                                    : 'text-gray-600 hover:text-maroon-700 hover:bg-maroon-50'
+                                    : 'text-gray-600 dark:text-gray-400 hover:text-maroon-700 hover:bg-maroon-50 dark:hover:bg-maroon-800/30'
                                     }`}
                             >
                                 <BarChart3 className="h-4 w-4 inline mr-2" />
@@ -826,7 +826,7 @@ export default function SurveyAnalytics({ user }: Props) {
                                 onClick={() => setActiveTab('responses')}
                                 className={`px-6 py-2.5 rounded-lg font-medium transition-all ${activeTab === 'responses'
                                     ? 'bg-maroon-700 text-white shadow-md'
-                                    : 'text-gray-600 hover:text-maroon-700 hover:bg-maroon-50'
+                                    : 'text-gray-600 dark:text-gray-400 hover:text-maroon-700 hover:bg-maroon-50 dark:hover:bg-maroon-800/30'
                                     }`}
                             >
                                 <Users className="h-4 w-4 inline mr-2" />
@@ -836,7 +836,7 @@ export default function SurveyAnalytics({ user }: Props) {
                                 onClick={() => setActiveTab('questions')}
                                 className={`px-6 py-2.5 rounded-lg font-medium transition-all ${activeTab === 'questions'
                                     ? 'bg-maroon-700 text-white shadow-md'
-                                    : 'text-gray-600 hover:text-maroon-700 hover:bg-maroon-50'
+                                    : 'text-gray-600 dark:text-gray-400 hover:text-maroon-700 hover:bg-maroon-50 dark:hover:bg-maroon-800/30'
                                     }`}
                             >
                                 <ListChecks className="h-4 w-4 inline mr-2" />
@@ -849,7 +849,7 @@ export default function SurveyAnalytics({ user }: Props) {
                             <div className="space-y-6">
                                 {/* Key Metrics */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-blue-50 to-white">
+                                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900">
                                         <CardContent className="p-6 text-center">
                                             <Users className="h-10 w-10 text-blue-600 mx-auto mb-3" />
                                             <div className="text-4xl font-bold text-blue-800">{analytics.total_responses}</div>
@@ -857,7 +857,7 @@ export default function SurveyAnalytics({ user }: Props) {
                                         </CardContent>
                                     </Card>
 
-                                    <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-green-50 to-white">
+                                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-green-50 to-white dark:from-gray-800 dark:to-gray-900">
                                         <CardContent className="p-6 text-center">
                                             <Target className="h-10 w-10 text-green-600 mx-auto mb-3" />
                                             <div className="text-4xl font-bold text-green-800">{analytics.completion_rate}%</div>
@@ -865,7 +865,7 @@ export default function SurveyAnalytics({ user }: Props) {
                                         </CardContent>
                                     </Card>
 
-                                    <Card className="border-beige-200 shadow-lg bg-gradient-to-br from-purple-50 to-white">
+                                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-purple-50 to-white dark:from-gray-800 dark:to-gray-900">
                                         <CardContent className="p-6 text-center">
                                             <Clock className="h-10 w-10 text-purple-600 mx-auto mb-3" />
                                             <div className="text-4xl font-bold text-purple-800">{formatTime(analytics.avg_completion_time)}</div>
@@ -876,9 +876,9 @@ export default function SurveyAnalytics({ user }: Props) {
 
                                 {/* Response Trends Chart */}
                                 {analytics.response_rate_by_date.length > 0 && (
-                                    <Card className="border-beige-200 shadow-lg">
+                                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                                         <CardHeader>
-                                            <CardTitle className="text-xl text-maroon-800 flex items-center">
+                                            <CardTitle className="text-xl text-maroon-800 dark:text-gray-200 flex items-center">
                                                 <TrendingUp className="h-5 w-5 mr-2" />
                                                 Response Trends
                                             </CardTitle>
@@ -896,9 +896,9 @@ export default function SurveyAnalytics({ user }: Props) {
 
                                 {/* Employment Distribution */}
                                 {analytics.employment_status_distribution.length > 0 && (
-                                    <Card className="border-beige-200 shadow-lg">
+                                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                                         <CardHeader>
-                                            <CardTitle className="text-xl text-maroon-800 flex items-center">
+                                            <CardTitle className="text-xl text-maroon-800 dark:text-gray-200 flex items-center">
                                                 <PieChart className="h-5 w-5 mr-2" />
                                                 Employment Status Distribution
                                             </CardTitle>
@@ -917,12 +917,12 @@ export default function SurveyAnalytics({ user }: Props) {
 
                         {/* Individual Responses Tab */}
                         {activeTab === 'responses' && (
-                            <Card className="border-beige-200 shadow-lg">
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                                 <CardHeader>
                                     <div className="flex flex-col gap-4">
                                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                             <div>
-                                                <CardTitle className="text-xl text-maroon-800">Individual Responses</CardTitle>
+                                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Individual Responses</CardTitle>
                                                 <CardDescription>View each respondent's answers ({responsesTotal} matching)</CardDescription>
                                             </div>
                                             <div className="flex items-center gap-2">
@@ -933,30 +933,30 @@ export default function SurveyAnalytics({ user }: Props) {
                                                         value={responseSearch}
                                                         onChange={(e) => setResponseSearch(e.target.value)}
                                                         onKeyDown={(e) => e.key === 'Enter' && handleResponseSearch()}
-                                                        className="pl-10 w-64 border-beige-300"
+                                                        className="pl-10 w-full sm:w-64 border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                                                     />
                                                 </div>
                                                 <Button
                                                     onClick={handleResponseSearch}
                                                     variant="outline"
                                                     size="sm"
-                                                    className="border-maroon-300"
+                                                    className="border-maroon-300 dark:border-gray-600"
                                                 >
                                                     Search
                                                 </Button>
                                             </div>
                                         </div>
                                         {/* Filter Controls */}
-                                        <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-beige-200">
+                                        <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-beige-200 dark:border-gray-700">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-sm text-gray-600">Status:</span>
+                                                <span className="text-sm text-gray-600 dark:text-gray-400">Status:</span>
                                                 <select
                                                     value={statusFilter}
                                                     onChange={(e) => {
                                                         setStatusFilter(e.target.value as 'all' | 'completed' | 'in_progress');
                                                         setResponsesPage(1);
                                                     }}
-                                                    className="text-sm border border-beige-300 rounded-md px-2 py-1 focus:ring-maroon-500 focus:border-maroon-500"
+                                                    className="text-sm border border-beige-300 dark:border-gray-600 rounded-md px-2 py-1 focus:ring-maroon-500 focus:border-maroon-500 dark:bg-gray-700 dark:text-gray-100"
                                                 >
                                                     <option value="all">All</option>
                                                     <option value="completed">Completed</option>
@@ -973,10 +973,10 @@ export default function SurveyAnalytics({ user }: Props) {
                                                     }}
                                                     className="w-4 h-4 text-maroon-600 border-beige-300 rounded focus:ring-maroon-500"
                                                 />
-                                                <span className="text-sm text-gray-600">Show only responses with answers</span>
+                                                <span className="text-sm text-gray-600 dark:text-gray-400">Show only responses with answers</span>
                                             </label>
                                             {withAnswersOnly && (
-                                                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                                <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">
                                                     Hiding empty sessions
                                                 </span>
                                             )}
@@ -986,14 +986,14 @@ export default function SurveyAnalytics({ user }: Props) {
                                 <CardContent>
                                     {responsesLoading ? (
                                         <div className="flex items-center justify-center py-12">
-                                            <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
-                                            <span className="ml-2 text-maroon-700">Loading responses...</span>
+                                            <RefreshCw className="h-8 w-8 text-maroon-600 dark:text-maroon-400 animate-spin" />
+                                            <span className="ml-2 text-maroon-700 dark:text-gray-300">Loading responses...</span>
                                         </div>
                                     ) : responses.length === 0 ? (
                                         <div className="text-center py-12">
                                             <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                                            <h3 className="text-lg font-medium text-gray-900 mb-2">No responses found</h3>
-                                            <p className="text-gray-500">
+                                            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No responses found</h3>
+                                            <p className="text-gray-500 dark:text-gray-400">
                                                 {responseSearch
                                                     ? 'Try adjusting your search'
                                                     : withAnswersOnly
@@ -1007,36 +1007,36 @@ export default function SurveyAnalytics({ user }: Props) {
                                             <div className="overflow-x-auto">
                                                 <table className="w-full">
                                                     <thead>
-                                                        <tr className="bg-beige-50 border-b border-beige-200">
-                                                            <th className="text-left px-4 py-3 text-sm font-semibold text-maroon-800">Respondent</th>
-                                                            <th className="text-left px-4 py-3 text-sm font-semibold text-maroon-800">Email</th>
-                                                            <th className="text-center px-4 py-3 text-sm font-semibold text-maroon-800">Progress</th>
-                                                            <th className="text-center px-4 py-3 text-sm font-semibold text-maroon-800">Status</th>
-                                                            <th className="text-left px-4 py-3 text-sm font-semibold text-maroon-800">Submitted</th>
-                                                            <th className="text-center px-4 py-3 text-sm font-semibold text-maroon-800">Actions</th>
+                                                        <tr className="bg-beige-50 dark:bg-gray-800/50 border-b border-beige-200 dark:border-gray-700">
+                                                            <th className="text-left px-4 py-3 text-sm font-semibold text-maroon-800 dark:text-gray-200">Respondent</th>
+                                                            <th className="text-left px-4 py-3 text-sm font-semibold text-maroon-800 dark:text-gray-200">Email</th>
+                                                            <th className="text-center px-4 py-3 text-sm font-semibold text-maroon-800 dark:text-gray-200">Progress</th>
+                                                            <th className="text-center px-4 py-3 text-sm font-semibold text-maroon-800 dark:text-gray-200">Status</th>
+                                                            <th className="text-left px-4 py-3 text-sm font-semibold text-maroon-800 dark:text-gray-200">Submitted</th>
+                                                            <th className="text-center px-4 py-3 text-sm font-semibold text-maroon-800 dark:text-gray-200">Actions</th>
                                                         </tr>
                                                     </thead>
-                                                    <tbody className="divide-y divide-beige-100">
+                                                    <tbody className="divide-y divide-beige-100 dark:divide-gray-700">
                                                         {responses.map((response) => (
-                                                            <tr key={response.id} className="hover:bg-beige-50 transition-colors">
+                                                            <tr key={response.id} className="hover:bg-beige-50 dark:hover:bg-gray-800 transition-colors">
                                                                 <td className="px-4 py-4">
                                                                     <div className="flex items-center gap-3">
-                                                                        <div className="bg-maroon-100 p-2 rounded-full">
-                                                                            <User className="h-4 w-4 text-maroon-700" />
+                                                                        <div className="bg-maroon-100 dark:bg-maroon-800/30 p-2 rounded-full">
+                                                                            <User className="h-4 w-4 text-maroon-700 dark:text-maroon-300" />
                                                                         </div>
-                                                                        <span className="font-medium text-gray-800">{response.respondent_name}</span>
+                                                                        <span className="font-medium text-gray-800 dark:text-gray-200">{response.respondent_name}</span>
                                                                     </div>
                                                                 </td>
-                                                                <td className="px-4 py-4 text-gray-600">{response.respondent_email}</td>
+                                                                <td className="px-4 py-4 text-gray-600 dark:text-gray-400">{response.respondent_email}</td>
                                                                 <td className="px-4 py-4">
                                                                     <div className="flex items-center justify-center gap-2">
-                                                                        <div className="w-24 bg-gray-200 rounded-full h-2">
+                                                                        <div className="w-24 bg-gray-200 dark:bg-gray-600 rounded-full h-2">
                                                                             <div
                                                                                 className="bg-maroon-600 h-2 rounded-full transition-all"
                                                                                 style={{ width: `${(response.answered_count / response.total_questions) * 100}%` }}
                                                                             />
                                                                         </div>
-                                                                        <span className="text-sm text-gray-600">
+                                                                        <span className="text-sm text-gray-600 dark:text-gray-400">
                                                                             {response.answered_count}/{response.total_questions}
                                                                         </span>
                                                                     </div>
@@ -1044,7 +1044,7 @@ export default function SurveyAnalytics({ user }: Props) {
                                                                 <td className="px-4 py-4 text-center">
                                                                     {getStatusBadge(response.status)}
                                                                 </td>
-                                                                <td className="px-4 py-4 text-gray-600 text-sm">
+                                                                <td className="px-4 py-4 text-gray-600 dark:text-gray-400 text-sm">
                                                                     {formatDateTime(response.created_at)}
                                                                 </td>
                                                                 <td className="px-4 py-4 text-center">
@@ -1052,7 +1052,7 @@ export default function SurveyAnalytics({ user }: Props) {
                                                                         onClick={() => viewResponseDetails(response)}
                                                                         variant="outline"
                                                                         size="sm"
-                                                                        className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                                                     >
                                                                         <Eye className="h-4 w-4 mr-1" />
                                                                         View
@@ -1066,8 +1066,8 @@ export default function SurveyAnalytics({ user }: Props) {
 
                                             {/* Pagination */}
                                             {responsesTotalPages > 1 && (
-                                                <div className="flex items-center justify-between mt-6 pt-4 border-t border-beige-200">
-                                                    <p className="text-sm text-gray-600">
+                                                <div className="flex items-center justify-between mt-6 pt-4 border-t border-beige-200 dark:border-gray-700">
+                                                    <p className="text-sm text-gray-600 dark:text-gray-400">
                                                         Showing {((responsesPage - 1) * 15) + 1} - {Math.min(responsesPage * 15, responsesTotal)} of {responsesTotal} responses
                                                     </p>
                                                     <div className="flex items-center gap-2">
@@ -1076,12 +1076,12 @@ export default function SurveyAnalytics({ user }: Props) {
                                                             disabled={responsesPage === 1}
                                                             variant="outline"
                                                             size="sm"
-                                                            className="border-beige-300"
+                                                            className="border-beige-300 dark:border-gray-600"
                                                         >
                                                             <ChevronLeft className="h-4 w-4" />
                                                             Previous
                                                         </Button>
-                                                        <span className="px-3 py-1 bg-maroon-100 text-maroon-800 rounded-md font-medium">
+                                                        <span className="px-3 py-1 bg-maroon-100 dark:bg-maroon-800/30 text-maroon-800 dark:text-gray-200 rounded-md font-medium">
                                                             {responsesPage} / {responsesTotalPages}
                                                         </span>
                                                         <Button
@@ -1089,7 +1089,7 @@ export default function SurveyAnalytics({ user }: Props) {
                                                             disabled={responsesPage === responsesTotalPages}
                                                             variant="outline"
                                                             size="sm"
-                                                            className="border-beige-300"
+                                                            className="border-beige-300 dark:border-gray-600"
                                                         >
                                                             Next
                                                             <ChevronRight className="h-4 w-4" />
@@ -1105,37 +1105,37 @@ export default function SurveyAnalytics({ user }: Props) {
 
                         {/* Question Analysis Tab */}
                         {activeTab === 'questions' && (
-                            <Card className="border-beige-200 shadow-lg">
+                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                                 <CardHeader>
-                                    <CardTitle className="text-xl text-maroon-800">Question Performance</CardTitle>
+                                    <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Question Performance</CardTitle>
                                     <CardDescription>Response rates and statistics by question</CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     {analytics.question_analytics.length === 0 ? (
                                         <div className="text-center py-12">
                                             <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                                            <p className="text-gray-600">No question analytics available</p>
+                                            <p className="text-gray-600 dark:text-gray-400">No question analytics available</p>
                                         </div>
                                     ) : (
                                         <div className="space-y-4">
                                             {analytics.question_analytics.map((question, index) => (
                                                 <div
                                                     key={index}
-                                                    className="bg-white border border-beige-200 rounded-xl p-5 hover:shadow-md transition-shadow"
+                                                    className="bg-white dark:bg-gray-800 border border-beige-200 dark:border-gray-700 rounded-xl p-5 hover:shadow-md transition-shadow"
                                                 >
                                                     <div className="flex items-start justify-between mb-4">
                                                         <div className="flex items-start gap-3">
                                                             <span className="bg-maroon-700 text-white text-sm font-bold px-3 py-1 rounded-lg">
                                                                 Q{index + 1}
                                                             </span>
-                                                            <h4 className="font-medium text-gray-800 text-lg">{question.question_text}</h4>
+                                                            <h4 className="font-medium text-gray-800 dark:text-gray-200 text-lg">{question.question_text}</h4>
                                                         </div>
                                                         <Badge className={getQuestionTypeBadge(question.question_type)}>
                                                             {question.question_type}
                                                         </Badge>
                                                     </div>
 
-                                                    <div className="grid grid-cols-3 gap-4">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                                         <div className="bg-blue-50 rounded-lg p-4 text-center">
                                                             <div className="text-2xl font-bold text-blue-600">{question.total_responses ?? 0}</div>
                                                             <p className="text-sm text-blue-700">Responses</p>
@@ -1160,11 +1160,11 @@ export default function SurveyAnalytics({ user }: Props) {
                 )}
 
                 {analyticsLoading && !analytics && (
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardContent className="p-8">
                             <div className="flex items-center justify-center">
-                                <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin mr-3" />
-                                <span className="text-maroon-800 font-medium">Loading analytics...</span>
+                                <RefreshCw className="h-8 w-8 text-maroon-600 dark:text-maroon-400 animate-spin mr-3" />
+                                <span className="text-maroon-800 dark:text-gray-200 font-medium">Loading analytics...</span>
                             </div>
                         </CardContent>
                     </Card>

@@ -3,6 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useCampus } from '@/contexts/CampusContext';
 import {
     Plus,
     Save,
@@ -53,6 +55,8 @@ interface SurveyData {
     status: 'draft' | 'active' | 'inactive' | 'archived';
     start_date?: string;
     end_date?: string;
+    campus_id?: number | null;
+    is_multi_campus: boolean;
     target_batches?: string[];
     target_graduation_years?: string[];
     is_anonymous: boolean;
@@ -80,12 +84,16 @@ const questionTypes = [
 ];
 
 export default function CreateSurvey({ user }: Props) {
+    const { campuses } = useCampus();
+
     const [surveyData, setSurveyData] = useState<SurveyData>({
         title: '',
         description: '',
         instructions: '',
         type: 'custom',
         status: 'draft',
+        campus_id: null,
+        is_multi_campus: true,
         is_anonymous: false,
         allow_multiple_responses: false,
         require_authentication: true,
@@ -193,6 +201,8 @@ export default function CreateSurvey({ user }: Props) {
                 status: surveyData.status,
                 start_date: surveyData.start_date || null,
                 end_date: surveyData.end_date || null,
+                campus_id: surveyData.is_multi_campus ? null : surveyData.campus_id,
+                is_multi_campus: surveyData.is_multi_campus,
                 target_batches: surveyData.target_batches || [],
                 target_graduation_years: surveyData.target_graduation_years || [],
                 is_anonymous: surveyData.is_anonymous,
@@ -301,12 +311,12 @@ export default function CreateSurvey({ user }: Props) {
         const QuestionIcon = questionTypes.find(t => t.value === question.type)?.icon || Type;
 
         return (
-            <Card key={question.id} className="border-beige-200 shadow-sm">
+            <Card key={question.id} className="border-beige-200 dark:border-gray-700 shadow-sm">
                 <CardHeader>
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex items-center space-x-2 flex-wrap">
-                            <QuestionIcon className="h-5 w-5 text-maroon-600 flex-shrink-0" />
-                            <span className="text-sm text-gray-600">
+                            <QuestionIcon className="h-5 w-5 text-maroon-600 dark:text-gray-400 flex-shrink-0" />
+                            <span className="text-sm text-gray-600 dark:text-gray-400">
                                 {questionTypes.find(t => t.value === question.type)?.label}
                             </span>
                             <Badge variant="outline" className="text-xs">
@@ -319,7 +329,7 @@ export default function CreateSurvey({ user }: Props) {
                                 size="sm"
                                 onClick={() => moveQuestion(question.id, 'up')}
                                 disabled={question.order === 1}
-                                className="text-gray-600 hover:text-maroon-600 p-2"
+                                className="text-gray-600 dark:text-gray-400 hover:text-maroon-600 p-2"
                                 title="Move up"
                             >
                                 <ArrowUp className="h-4 w-4" />
@@ -329,7 +339,7 @@ export default function CreateSurvey({ user }: Props) {
                                 size="sm"
                                 onClick={() => moveQuestion(question.id, 'down')}
                                 disabled={question.order === surveyData.questions.length}
-                                className="text-gray-600 hover:text-maroon-600 p-2"
+                                className="text-gray-600 dark:text-gray-400 hover:text-maroon-600 p-2"
                                 title="Move down"
                             >
                                 <ArrowDown className="h-4 w-4" />
@@ -348,19 +358,19 @@ export default function CreateSurvey({ user }: Props) {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-maroon-800 mb-2">
+                        <label className="block text-sm font-medium text-maroon-800 dark:text-gray-200 mb-2">
                             Question Title *
                         </label>
                         <Input
                             value={question.title}
                             onChange={(e) => updateQuestion(question.id, { title: e.target.value })}
                             placeholder="Enter your question..."
-                            className="border-beige-300 focus:border-maroon-500 focus:ring-maroon-500"
+                            className="border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-maroon-500 focus:ring-maroon-500"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-maroon-800 mb-2">
+                        <label className="block text-sm font-medium text-maroon-800 dark:text-gray-200 mb-2">
                             Description (Optional)
                         </label>
                         <textarea
@@ -368,13 +378,13 @@ export default function CreateSurvey({ user }: Props) {
                             onChange={(e) => updateQuestion(question.id, { description: e.target.value })}
                             placeholder="Additional instructions or context..."
                             rows={2}
-                            className="w-full border border-beige-300 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
+                            className="w-full border border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
                         />
                     </div>
 
                     {question.options && (
                         <div>
-                            <label className="block text-sm font-medium text-maroon-800 mb-2">
+                            <label className="block text-sm font-medium text-maroon-800 dark:text-gray-200 mb-2">
                                 Options
                             </label>
                             <div className="space-y-2">
@@ -384,7 +394,7 @@ export default function CreateSurvey({ user }: Props) {
                                             value={option}
                                             onChange={(e) => updateOption(question.id, index, e.target.value)}
                                             placeholder={`Option ${index + 1}`}
-                                            className="flex-1 border-beige-300 focus:border-maroon-500 focus:ring-maroon-500"
+                                            className="flex-1 border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-maroon-500 focus:ring-maroon-500"
                                         />
                                         {question.options!.length > 2 && (
                                             <Button
@@ -403,7 +413,7 @@ export default function CreateSurvey({ user }: Props) {
                                     variant="outline"
                                     size="sm"
                                     onClick={() => addOption(question.id)}
-                                    className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                    className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                 >
                                     <Plus className="h-4 w-4 mr-2" />
                                     Add Option
@@ -412,17 +422,21 @@ export default function CreateSurvey({ user }: Props) {
                         </div>
                     )}
 
-                    <div className="flex items-center space-x-2">
+                    <label className={`flex items-center space-x-3 p-2 rounded-lg border-2 cursor-pointer transition-all ${question.required
+                        ? 'border-maroon-500 bg-maroon-50 dark:bg-maroon-900/30'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-maroon-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}>
                         <input
                             type="checkbox"
                             checked={question.required}
                             onChange={(e) => updateQuestion(question.id, { required: e.target.checked })}
-                            className="rounded border-beige-300 text-maroon-600 focus:border-maroon-500 focus:ring-maroon-500"
+                            className="rounded border-beige-300 text-maroon-600 focus:border-maroon-500 focus:ring-maroon-500 focus:ring-2 w-4 h-4 cursor-pointer"
                         />
-                        <label className="text-sm text-gray-700">
+                        <span className={`text-sm font-medium ${question.required ? 'text-maroon-800 dark:text-gray-200' : 'text-gray-700 dark:text-gray-300'
+                            }`}>
                             Required question
-                        </label>
-                    </div>
+                        </span>
+                    </label>
                 </CardContent>
             </Card>
         );
@@ -434,15 +448,15 @@ export default function CreateSurvey({ user }: Props) {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h2 className="text-2xl font-bold text-maroon-800">Create New Survey</h2>
-                        <p className="text-maroon-600">Design and build comprehensive alumni surveys</p>
+                        <h2 className="text-2xl font-bold text-maroon-800 dark:text-gray-200">Create New Survey</h2>
+                        <p className="text-maroon-600 dark:text-gray-400">Design and build comprehensive alumni surveys</p>
                     </div>
 
                     <div className="flex items-center space-x-2">
                         <Button
                             variant="outline"
                             onClick={() => window.location.href = '/admin/surveys'}
-                            className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                         >
                             Cancel
                         </Button>
@@ -474,10 +488,10 @@ export default function CreateSurvey({ user }: Props) {
                                 <button
                                     onClick={() => setCurrentStep(step.key as typeof currentStep)}
                                     className={`flex items-center space-x-1 sm:space-x-2 px-2 sm:px-4 py-2 rounded-lg transition-colors ${isActive
-                                        ? 'bg-maroon-100 text-maroon-800'
+                                        ? 'bg-maroon-100 dark:bg-maroon-800/30 text-maroon-800 dark:text-gray-200'
                                         : isCompleted
                                             ? 'bg-green-100 text-green-800'
-                                            : 'bg-gray-100 text-gray-600'
+                                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
                                         }`}
                                 >
                                     <StepIcon className="h-4 w-4 flex-shrink-0" />
@@ -485,7 +499,7 @@ export default function CreateSurvey({ user }: Props) {
                                     <span className="text-xs font-medium sm:hidden">{step.label.split(' ')[0]}</span>
                                 </button>
                                 {index < 3 && (
-                                    <div className="w-4 sm:w-8 h-px bg-gray-300 mx-1 sm:mx-2 hidden md:block"></div>
+                                    <div className="w-4 sm:w-8 h-px bg-gray-300 dark:bg-gray-600 mx-1 sm:mx-2 hidden md:block"></div>
                                 )}
                             </div>
                         );
@@ -494,28 +508,28 @@ export default function CreateSurvey({ user }: Props) {
 
                 {/* Basic Information Step */}
                 {currentStep === 'basic' && (
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader>
-                            <CardTitle className="text-xl text-maroon-800">Basic Survey Information</CardTitle>
-                            <CardDescription className="text-maroon-600">
+                            <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Basic Survey Information</CardTitle>
+                            <CardDescription className="text-maroon-600 dark:text-gray-400">
                                 Start by providing basic details about your survey
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
                             <div>
-                                <label className="block text-sm font-medium text-maroon-800 mb-2">
+                                <label className="block text-sm font-medium text-maroon-800 dark:text-gray-200 mb-2">
                                     Survey Title *
                                 </label>
                                 <Input
                                     value={surveyData.title}
                                     onChange={(e) => setSurveyData(prev => ({ ...prev, title: e.target.value }))}
                                     placeholder="e.g., Alumni Career Development Survey 2025"
-                                    className="border-beige-300 focus:border-maroon-500 focus:ring-maroon-500"
+                                    className="border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-maroon-500 focus:ring-maroon-500"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-maroon-800 mb-2">
+                                <label className="block text-sm font-medium text-maroon-800 dark:text-gray-200 mb-2">
                                     Survey Description
                                 </label>
                                 <textarea
@@ -523,32 +537,113 @@ export default function CreateSurvey({ user }: Props) {
                                     onChange={(e) => setSurveyData(prev => ({ ...prev, description: e.target.value }))}
                                     placeholder="Provide a brief description of the survey's purpose and what participants can expect..."
                                     rows={4}
-                                    className="w-full border border-beige-300 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
+                                    className="w-full border border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
                                 />
+                            </div>
+
+                            {/* Campus Selection */}
+                            <div className="border-t border-beige-200 dark:border-gray-700 pt-4">
+                                <label className="block text-sm font-medium text-maroon-800 dark:text-gray-200 mb-2">
+                                    Target Campus *
+                                </label>
+                                <div className="space-y-3">
+                                    <label
+                                        htmlFor="all-campuses"
+                                        className={`flex items-center space-x-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${surveyData.is_multi_campus
+                                            ? 'border-maroon-600 bg-maroon-50 dark:bg-maroon-900/30'
+                                            : 'border-gray-200 dark:border-gray-700 hover:border-maroon-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                            }`}
+                                    >
+                                        <input
+                                            type="radio"
+                                            id="all-campuses"
+                                            name="campus-selection"
+                                            checked={surveyData.is_multi_campus}
+                                            onChange={() => setSurveyData(prev => ({
+                                                ...prev,
+                                                is_multi_campus: true,
+                                                campus_id: null
+                                            }))}
+                                            className="w-4 h-4 text-maroon-600 focus:ring-maroon-500 focus:ring-2 cursor-pointer"
+                                        />
+                                        <span className={`text-sm font-medium ${surveyData.is_multi_campus ? 'text-maroon-800 dark:text-gray-200' : 'text-gray-700 dark:text-gray-300'
+                                            }`}>
+                                            All Campuses (Survey visible to all alumni)
+                                        </span>
+                                    </label>
+                                    <label
+                                        htmlFor="specific-campus"
+                                        className={`flex items-start space-x-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${!surveyData.is_multi_campus
+                                            ? 'border-maroon-600 bg-maroon-50 dark:bg-maroon-900/30'
+                                            : 'border-gray-200 dark:border-gray-700 hover:border-maroon-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                            }`}
+                                    >
+                                        <input
+                                            type="radio"
+                                            id="specific-campus"
+                                            name="campus-selection"
+                                            checked={!surveyData.is_multi_campus}
+                                            onChange={() => setSurveyData(prev => ({
+                                                ...prev,
+                                                is_multi_campus: false
+                                            }))}
+                                            className="w-4 h-4 mt-0.5 text-maroon-600 focus:ring-maroon-500 focus:ring-2 cursor-pointer flex-shrink-0"
+                                        />
+                                        <div className="flex-1">
+                                            <span className={`text-sm font-medium block mb-2 ${!surveyData.is_multi_campus ? 'text-maroon-800 dark:text-gray-200' : 'text-gray-700 dark:text-gray-300'
+                                                }`}>
+                                                Specific Campus Only
+                                            </span>
+                                            {!surveyData.is_multi_campus && (
+                                                <Select
+                                                    value={surveyData.campus_id?.toString() || ''}
+                                                    onValueChange={(value) => setSurveyData(prev => ({
+                                                        ...prev,
+                                                        campus_id: parseInt(value)
+                                                    }))}
+                                                >
+                                                    <SelectTrigger className="w-full border-beige-300">
+                                                        <SelectValue placeholder="Select campus" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {campuses.map((campus) => (
+                                                            <SelectItem key={campus.id} value={campus.id.toString()}>
+                                                                {campus.display_name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            )}
+                                        </div>
+                                    </label>
+                                </div>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-2">
+                                    Choose whether this survey should be available to all campuses or restricted to a specific campus.
+                                </p>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-maroon-800 mb-2">
+                                    <label className="block text-sm font-medium text-maroon-800 dark:text-gray-200 mb-2">
                                         Start Date (Optional)
                                     </label>
                                     <Input
                                         type="date"
                                         value={surveyData.start_date || ''}
                                         onChange={(e) => setSurveyData(prev => ({ ...prev, start_date: e.target.value }))}
-                                        className="border-beige-300 focus:border-maroon-500 focus:ring-maroon-500"
+                                        className="border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-maroon-500 focus:ring-maroon-500"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-maroon-800 mb-2">
+                                    <label className="block text-sm font-medium text-maroon-800 dark:text-gray-200 mb-2">
                                         End Date (Optional)
                                     </label>
                                     <Input
                                         type="date"
                                         value={surveyData.end_date || ''}
                                         onChange={(e) => setSurveyData(prev => ({ ...prev, end_date: e.target.value }))}
-                                        className="border-beige-300 focus:border-maroon-500 focus:ring-maroon-500"
+                                        className="border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-maroon-500 focus:ring-maroon-500"
                                     />
                                 </div>
                             </div>
@@ -573,11 +668,11 @@ export default function CreateSurvey({ user }: Props) {
                         {/* Question Templates */}
                         <Card className="border-blue-200 shadow-lg">
                             <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800 flex items-center">
+                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200 flex items-center">
                                     <Star className="h-5 w-5 mr-2 text-yellow-600" />
                                     Quick Templates
                                 </CardTitle>
-                                <CardDescription className="text-maroon-600">
+                                <CardDescription className="text-maroon-600 dark:text-gray-400">
                                     Common alumni survey questions to get you started quickly
                                 </CardDescription>
                             </CardHeader>
@@ -611,7 +706,7 @@ export default function CreateSurvey({ user }: Props) {
                                                     questions: [...prev.questions, newQuestion]
                                                 }));
                                             }}
-                                            className="justify-start text-left h-auto p-3 border-blue-300 text-maroon-700 hover:bg-blue-50"
+                                            className="justify-start text-left h-auto p-3 border-blue-300 text-maroon-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700"
                                         >
                                             <Plus className="h-4 w-4 mr-2 flex-shrink-0" />
                                             <span className="truncate">{template.title}</span>
@@ -622,10 +717,10 @@ export default function CreateSurvey({ user }: Props) {
                         </Card>
 
                         {/* Custom Question Types */}
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800">Custom Questions</CardTitle>
-                                <CardDescription className="text-maroon-600">
+                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Custom Questions</CardTitle>
+                                <CardDescription className="text-maroon-600 dark:text-gray-400">
                                     Build your own questions using different input types
                                 </CardDescription>
                             </CardHeader>
@@ -638,10 +733,10 @@ export default function CreateSurvey({ user }: Props) {
                                                 key={type.value}
                                                 variant="outline"
                                                 onClick={() => addQuestion(type.value as Question['type'])}
-                                                className="flex flex-col items-center p-3 sm:p-4 h-auto min-h-[80px] sm:min-h-[100px] border-beige-300 text-maroon-700 hover:bg-maroon-50 transition-colors"
+                                                className="flex flex-col items-center p-3 sm:p-4 h-auto min-h-[80px] sm:min-h-[100px] border-2 border-beige-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30 hover:border-maroon-500 active:bg-maroon-100 dark:active:bg-maroon-800/50 transition-all duration-200"
                                             >
                                                 <Icon className="h-5 w-5 sm:h-6 sm:w-6 mb-1 sm:mb-2 flex-shrink-0" />
-                                                <span className="text-xs sm:text-sm text-center leading-tight">{type.label}</span>
+                                                <span className="text-xs sm:text-sm text-center leading-tight font-medium">{type.label}</span>
                                             </Button>
                                         );
                                     })}
@@ -655,11 +750,11 @@ export default function CreateSurvey({ user }: Props) {
                         </div>
 
                         {surveyData.questions.length === 0 && (
-                            <Card className="border-dashed border-2 border-beige-300">
+                            <Card className="border-dashed border-2 border-beige-300 dark:border-gray-600">
                                 <CardContent className="p-8 text-center">
                                     <List className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                                    <h3 className="text-lg font-medium text-gray-900 mb-2">No questions added yet</h3>
-                                    <p className="text-gray-500 mb-4">
+                                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No questions added yet</h3>
+                                    <p className="text-gray-500 dark:text-gray-400 mb-4">
                                         Start building your survey by adding questions above
                                     </p>
                                 </CardContent>
@@ -670,7 +765,7 @@ export default function CreateSurvey({ user }: Props) {
                             <Button
                                 variant="outline"
                                 onClick={() => setCurrentStep('basic')}
-                                className="border-maroon-300 text-maroon-700 hover:bg-maroon-50 w-full sm:w-auto"
+                                className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30 w-full sm:w-auto"
                             >
                                 <span className="hidden sm:inline">Previous: Basic Info</span>
                                 <span className="sm:hidden">← Basic Info</span>
@@ -689,23 +784,23 @@ export default function CreateSurvey({ user }: Props) {
 
                 {/* Settings Step */}
                 {currentStep === 'settings' && (
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader>
-                            <CardTitle className="text-xl text-maroon-800">Survey Settings</CardTitle>
-                            <CardDescription className="text-maroon-600">
+                            <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Survey Settings</CardTitle>
+                            <CardDescription className="text-maroon-600 dark:text-gray-400">
                                 Configure targeting and privacy settings for your survey
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-maroon-800 mb-2">
+                                    <label className="block text-sm font-medium text-maroon-800 dark:text-gray-200 mb-2">
                                         Survey Type
                                     </label>
                                     <select
                                         value={surveyData.type}
                                         onChange={(e) => setSurveyData(prev => ({ ...prev, type: e.target.value as SurveyData['type'] }))}
-                                        className="w-full border border-beige-300 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
+                                        className="w-full border-2 border-beige-300 dark:border-gray-600 rounded-lg px-3 py-2.5 text-sm font-medium focus:border-maroon-500 focus:ring-2 focus:ring-maroon-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-100 cursor-pointer hover:border-maroon-400 transition-colors"
                                     >
                                         <option value="custom">Custom Survey</option>
                                         <option value="registration">Registration Survey</option>
@@ -715,13 +810,13 @@ export default function CreateSurvey({ user }: Props) {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-maroon-800 mb-2">
+                                    <label className="block text-sm font-medium text-maroon-800 dark:text-gray-200 mb-2">
                                         Initial Status
                                     </label>
                                     <select
                                         value={surveyData.status}
                                         onChange={(e) => setSurveyData(prev => ({ ...prev, status: e.target.value as SurveyData['status'] }))}
-                                        className="w-full border border-beige-300 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
+                                        className="w-full border-2 border-beige-300 dark:border-gray-600 rounded-lg px-3 py-2.5 text-sm font-medium focus:border-maroon-500 focus:ring-2 focus:ring-maroon-500 focus:outline-none bg-white dark:bg-gray-700 dark:text-gray-100 cursor-pointer hover:border-maroon-400 transition-colors"
                                     >
                                         <option value="draft">Draft</option>
                                         <option value="active">Active</option>
@@ -732,7 +827,7 @@ export default function CreateSurvey({ user }: Props) {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-maroon-800 mb-2">
+                                <label className="block text-sm font-medium text-maroon-800 dark:text-gray-200 mb-2">
                                     Target Graduation Years (Optional)
                                 </label>
                                 <Input
@@ -742,57 +837,73 @@ export default function CreateSurvey({ user }: Props) {
                                         target_graduation_years: e.target.value.split(',').map(year => year.trim()).filter(year => year)
                                     }))}
                                     placeholder="e.g., 2023, 2024, 2025 (leave empty for all years)"
-                                    className="border-beige-300 focus:border-maroon-500 focus:ring-maroon-500"
+                                    className="border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-maroon-500 focus:ring-maroon-500"
                                 />
                             </div>
 
                             <div className="space-y-4">
-                                <h4 className="text-sm font-medium text-maroon-800">Survey Settings</h4>
+                                <h4 className="text-sm font-medium text-maroon-800 dark:text-gray-200">Survey Settings</h4>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                    <label className="flex items-start space-x-2 p-2 rounded hover:bg-gray-50">
+                                    <label className={`flex items-start space-x-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${surveyData.is_anonymous
+                                        ? 'border-maroon-500 bg-maroon-50 dark:bg-maroon-900/30'
+                                        : 'border-gray-200 dark:border-gray-700 hover:border-maroon-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                        }`}>
                                         <input
                                             type="checkbox"
                                             checked={surveyData.is_anonymous}
                                             onChange={(e) => setSurveyData(prev => ({ ...prev, is_anonymous: e.target.checked }))}
-                                            className="rounded border-beige-300 text-maroon-600 focus:border-maroon-500 focus:ring-maroon-500 mt-0.5 flex-shrink-0"
+                                            className="rounded border-beige-300 text-maroon-600 focus:border-maroon-500 focus:ring-maroon-500 focus:ring-2 mt-0.5 flex-shrink-0 w-4 h-4 cursor-pointer"
                                         />
-                                        <span className="text-sm text-gray-700">Anonymous Survey</span>
+                                        <span className={`text-sm font-medium ${surveyData.is_anonymous ? 'text-maroon-800 dark:text-gray-200' : 'text-gray-700 dark:text-gray-300'
+                                            }`}>Anonymous Survey</span>
                                     </label>
 
-                                    <label className="flex items-start space-x-2 p-2 rounded hover:bg-gray-50">
+                                    <label className={`flex items-start space-x-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${surveyData.allow_multiple_responses
+                                        ? 'border-maroon-500 bg-maroon-50 dark:bg-maroon-900/30'
+                                        : 'border-gray-200 dark:border-gray-700 hover:border-maroon-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                        }`}>
                                         <input
                                             type="checkbox"
                                             checked={surveyData.allow_multiple_responses}
                                             onChange={(e) => setSurveyData(prev => ({ ...prev, allow_multiple_responses: e.target.checked }))}
-                                            className="rounded border-beige-300 text-maroon-600 focus:border-maroon-500 focus:ring-maroon-500 mt-0.5 flex-shrink-0"
+                                            className="rounded border-beige-300 text-maroon-600 focus:border-maroon-500 focus:ring-maroon-500 focus:ring-2 mt-0.5 flex-shrink-0 w-4 h-4 cursor-pointer"
                                         />
-                                        <span className="text-sm text-gray-700">Allow Multiple Responses</span>
+                                        <span className={`text-sm font-medium ${surveyData.allow_multiple_responses ? 'text-maroon-800 dark:text-gray-200' : 'text-gray-700 dark:text-gray-300'
+                                            }`}>Allow Multiple Responses</span>
                                     </label>
 
-                                    <label className="flex items-start space-x-2 p-2 rounded hover:bg-gray-50">
+                                    <label className={`flex items-start space-x-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${surveyData.require_authentication
+                                        ? 'border-maroon-500 bg-maroon-50 dark:bg-maroon-900/30'
+                                        : 'border-gray-200 dark:border-gray-700 hover:border-maroon-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                        }`}>
                                         <input
                                             type="checkbox"
                                             checked={surveyData.require_authentication}
                                             onChange={(e) => setSurveyData(prev => ({ ...prev, require_authentication: e.target.checked }))}
-                                            className="rounded border-beige-300 text-maroon-600 focus:border-maroon-500 focus:ring-maroon-500 mt-0.5 flex-shrink-0"
+                                            className="rounded border-beige-300 text-maroon-600 focus:border-maroon-500 focus:ring-maroon-500 focus:ring-2 mt-0.5 flex-shrink-0 w-4 h-4 cursor-pointer"
                                         />
-                                        <span className="text-sm text-gray-700">Require Authentication</span>
+                                        <span className={`text-sm font-medium ${surveyData.require_authentication ? 'text-maroon-800 dark:text-gray-200' : 'text-gray-700 dark:text-gray-300'
+                                            }`}>Require Authentication</span>
                                     </label>
 
-                                    <label className="flex items-start space-x-2 p-2 rounded hover:bg-gray-50">
+                                    <label className={`flex items-start space-x-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${surveyData.send_reminder_emails
+                                        ? 'border-maroon-500 bg-maroon-50 dark:bg-maroon-900/30'
+                                        : 'border-gray-200 dark:border-gray-700 hover:border-maroon-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                        }`}>
                                         <input
                                             type="checkbox"
                                             checked={surveyData.send_reminder_emails}
                                             onChange={(e) => setSurveyData(prev => ({ ...prev, send_reminder_emails: e.target.checked }))}
-                                            className="rounded border-beige-300 text-maroon-600 focus:border-maroon-500 focus:ring-maroon-500 mt-0.5 flex-shrink-0"
+                                            className="rounded border-beige-300 text-maroon-600 focus:border-maroon-500 focus:ring-maroon-500 focus:ring-2 mt-0.5 flex-shrink-0 w-4 h-4 cursor-pointer"
                                         />
-                                        <span className="text-sm text-gray-700">Send Reminder Emails</span>
+                                        <span className={`text-sm font-medium ${surveyData.send_reminder_emails ? 'text-maroon-800 dark:text-gray-200' : 'text-gray-700 dark:text-gray-300'
+                                            }`}>Send Reminder Emails</span>
                                     </label>
                                 </div>
 
                                 {surveyData.send_reminder_emails && (
                                     <div>
-                                        <label className="block text-sm font-medium text-maroon-800 mb-2">
+                                        <label className="block text-sm font-medium text-maroon-800 dark:text-gray-200 mb-2">
                                             Reminder Interval (Days)
                                         </label>
                                         <Input
@@ -802,7 +913,7 @@ export default function CreateSurvey({ user }: Props) {
                                             value={surveyData.reminder_interval_days || ''}
                                             onChange={(e) => setSurveyData(prev => ({ ...prev, reminder_interval_days: parseInt(e.target.value) || undefined }))}
                                             placeholder="7"
-                                            className="w-32 border-beige-300 focus:border-maroon-500 focus:ring-maroon-500"
+                                            className="w-32 border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-maroon-500 focus:ring-maroon-500"
                                         />
                                     </div>
                                 )}
@@ -812,7 +923,7 @@ export default function CreateSurvey({ user }: Props) {
                                 <Button
                                     variant="outline"
                                     onClick={() => setCurrentStep('questions')}
-                                    className="border-maroon-300 text-maroon-700 hover:bg-maroon-50 w-full sm:w-auto"
+                                    className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30 w-full sm:w-auto"
                                 >
                                     <span className="hidden sm:inline">Previous: Questions</span>
                                     <span className="sm:hidden">← Questions</span>
@@ -832,31 +943,31 @@ export default function CreateSurvey({ user }: Props) {
                 {/* Review Step */}
                 {currentStep === 'review' && (
                     <div className="space-y-6">
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800">Review Survey</CardTitle>
-                                <CardDescription className="text-maroon-600">
+                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Review Survey</CardTitle>
+                                <CardDescription className="text-maroon-600 dark:text-gray-400">
                                     Review your survey before saving
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-6">
                                 <div>
-                                    <h3 className="font-medium text-maroon-800 mb-2">Survey Title</h3>
-                                    <p className="text-gray-700">{surveyData.title}</p>
+                                    <h3 className="font-medium text-maroon-800 dark:text-gray-200 mb-2">Survey Title</h3>
+                                    <p className="text-gray-700 dark:text-gray-300">{surveyData.title}</p>
                                 </div>
 
                                 <div>
-                                    <h3 className="font-medium text-maroon-800 mb-2">Description</h3>
-                                    <p className="text-gray-700">{surveyData.description}</p>
+                                    <h3 className="font-medium text-maroon-800 dark:text-gray-200 mb-2">Description</h3>
+                                    <p className="text-gray-700 dark:text-gray-300">{surveyData.description}</p>
                                 </div>
 
                                 <div>
-                                    <h3 className="font-medium text-maroon-800 mb-2">Questions ({surveyData.questions.length})</h3>
+                                    <h3 className="font-medium text-maroon-800 dark:text-gray-200 mb-2">Questions ({surveyData.questions.length})</h3>
                                     <div className="space-y-2">
                                         {surveyData.questions.map((question, index) => (
                                             <div key={question.id} className="flex items-center space-x-2 text-sm">
                                                 <Badge variant="outline">{index + 1}</Badge>
-                                                <span className="text-gray-700">{question.title}</span>
+                                                <span className="text-gray-700 dark:text-gray-300">{question.title}</span>
                                                 {question.required && (
                                                     <Badge className="bg-red-100 text-red-800">Required</Badge>
                                                 )}
@@ -867,25 +978,25 @@ export default function CreateSurvey({ user }: Props) {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
-                                        <h3 className="font-medium text-maroon-800 mb-2">Survey Type</h3>
-                                        <p className="text-gray-700 capitalize">{surveyData.type.replace('_', ' ')}</p>
+                                        <h3 className="font-medium text-maroon-800 dark:text-gray-200 mb-2">Survey Type</h3>
+                                        <p className="text-gray-700 dark:text-gray-300 capitalize">{surveyData.type.replace('_', ' ')}</p>
                                     </div>
                                     <div>
-                                        <h3 className="font-medium text-maroon-800 mb-2">Status</h3>
-                                        <p className="text-gray-700 capitalize">{surveyData.status}</p>
+                                        <h3 className="font-medium text-maroon-800 dark:text-gray-200 mb-2">Status</h3>
+                                        <p className="text-gray-700 dark:text-gray-300 capitalize">{surveyData.status}</p>
                                     </div>
                                 </div>
 
                                 {surveyData.target_graduation_years && surveyData.target_graduation_years.length > 0 && (
                                     <div>
-                                        <h3 className="font-medium text-maroon-800 mb-2">Target Graduation Years</h3>
-                                        <p className="text-gray-700">{surveyData.target_graduation_years.join(', ')}</p>
+                                        <h3 className="font-medium text-maroon-800 dark:text-gray-200 mb-2">Target Graduation Years</h3>
+                                        <p className="text-gray-700 dark:text-gray-300">{surveyData.target_graduation_years.join(', ')}</p>
                                     </div>
                                 )}
 
                                 <div>
-                                    <h3 className="font-medium text-maroon-800 mb-2">Settings</h3>
-                                    <div className="text-sm text-gray-700 space-y-1">
+                                    <h3 className="font-medium text-maroon-800 dark:text-gray-200 mb-2">Settings</h3>
+                                    <div className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
                                         {surveyData.is_anonymous && <p>• Anonymous survey</p>}
                                         {surveyData.allow_multiple_responses && <p>• Allows multiple responses</p>}
                                         {surveyData.require_authentication && <p>• Requires authentication</p>}
@@ -897,7 +1008,7 @@ export default function CreateSurvey({ user }: Props) {
                                     <Button
                                         variant="outline"
                                         onClick={() => setCurrentStep('settings')}
-                                        className="border-maroon-300 text-maroon-700 hover:bg-maroon-50 w-full sm:w-auto"
+                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30 w-full sm:w-auto"
                                     >
                                         <span className="hidden sm:inline">Previous: Settings</span>
                                         <span className="sm:hidden">← Settings</span>

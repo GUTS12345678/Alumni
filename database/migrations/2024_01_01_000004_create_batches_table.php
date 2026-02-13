@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('batches')) {
         Schema::create('batches', function (Blueprint $table) {
             $table->id();
             $table->string('name'); // e.g., "Batch 2020", "Class of 2019"
@@ -19,6 +20,7 @@ return new class extends Migration
             $table->enum('status', ['active', 'inactive'])->default('active');
             $table->timestamps();
         });
+        }
     }
 
     /**

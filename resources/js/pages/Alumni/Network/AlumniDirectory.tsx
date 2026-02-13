@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Users, Search, Filter, MapPin, Briefcase, GraduationCap, Mail, UserPlus, UserCheck, UserX } from 'lucide-react';
+import { Users, Search, Filter, MapPin, Briefcase, GraduationCap, Mail, UserPlus, UserCheck, UserX, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -57,6 +57,29 @@ export default function AlumniDirectory({ alumni, filters }: Props) {
         });
     };
 
+    const handleStartConversation = async (userId: number) => {
+        try {
+            const response = await fetch('/api/conversations', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                },
+                body: JSON.stringify({
+                    type: 'direct',
+                    participant_ids: [userId],
+                }),
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                router.visit('/alumni/messages');
+            }
+        } catch (error) {
+            console.error('Failed to start conversation:', error);
+        }
+    };
+
     const getConnectionButton = (user: User) => {
         switch (user.connection_status) {
             case 'pending':
@@ -68,10 +91,18 @@ export default function AlumniDirectory({ alumni, filters }: Props) {
                 );
             case 'accepted':
                 return (
-                    <Button disabled variant="outline" className="border-green-300 text-green-700">
-                        <UserCheck className="h-4 w-4 mr-2" />
-                        Connected
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button
+                            onClick={() => handleStartConversation(user.id)}
+                            className="bg-maroon-700 hover:bg-maroon-800 text-white"
+                        >
+                            <MessageCircle className="h-4 w-4 mr-2" />
+                            Message
+                        </Button>
+                        <Button variant="outline" className="border-green-300 text-green-700" disabled>
+                            <UserCheck className="h-4 w-4" />
+                        </Button>
+                    </div>
                 );
             case 'received':
                 return (

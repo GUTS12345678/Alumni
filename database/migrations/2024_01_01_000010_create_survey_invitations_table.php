@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('survey_invitations')) {
         Schema::create('survey_invitations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('survey_id')->constrained()->onDelete('cascade');
@@ -46,6 +47,7 @@ return new class extends Migration
             $table->index(['email', 'survey_id']);
             $table->index('invitation_token');
         });
+        }
     }
 
     /**

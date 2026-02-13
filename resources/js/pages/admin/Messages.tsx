@@ -44,6 +44,30 @@ const getCsrfToken = (): string => {
     return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 };
 
+// Helper function to get user display name
+const getDisplayName = (user: { name?: string; display_name?: string; email?: string; alumniProfile?: { first_name?: string; last_name?: string } } | null | undefined): string => {
+    if (!user) return 'Unknown';
+
+    // Use display_name if available (from Laravel accessor)
+    if (user.display_name) return user.display_name;
+
+    // Use name if available
+    if (user.name) return user.name;
+
+    // Try alumni profile
+    if (user.alumniProfile) {
+        const firstName = user.alumniProfile.first_name || '';
+        const lastName = user.alumniProfile.last_name || '';
+        const fullName = `${firstName} ${lastName}`.trim();
+        if (fullName) return fullName;
+    }
+
+    // Fall back to email username
+    if (user.email) return user.email.split('@')[0];
+
+    return 'Unknown';
+};
+
 interface PageProps extends InertiaPageProps {
     auth: {
         user: {
@@ -62,6 +86,7 @@ export default function Messages() {
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
     const [userSearchQuery, setUserSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<UserSearchResult[]>([]);
     const [loading, setLoading] = useState(true);
@@ -74,6 +99,14 @@ export default function Messages() {
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const lastMessageIdRef = useRef<number | null>(null);
+
+    // Debounce conversation search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
 
     // Fetch conversations on mount
     useEffect(() => {
@@ -420,7 +453,7 @@ export default function Messages() {
         const otherParticipant = conversation.participants?.find(
             p => p.user_id !== auth.user.id
         );
-        return otherParticipant?.user?.name || 'Unknown';
+        return getDisplayName(otherParticipant?.user);
     };
 
     const getConversationAvatar = (conversation: Conversation): string | undefined => {
@@ -452,7 +485,7 @@ export default function Messages() {
 
     const filteredConversations = conversations.filter(conversation => {
         const name = getConversationName(conversation).toLowerCase();
-        return name.includes(searchQuery.toLowerCase());
+        return name.includes(debouncedSearchQuery.toLowerCase());
     });
 
     return (
@@ -642,7 +675,7 @@ export default function Messages() {
                                             >
                                                 {message.sender_id !== auth.user.id && selectedConversation.type === 'group' && (
                                                     <p className="text-xs font-medium mb-1 opacity-70">
-                                                        {message.sender?.name}
+                                                        {getDisplayName(message.sender)}
                                                     </p>
                                                 )}
                                                 <p className="text-sm whitespace-pre-wrap">{message.content}</p>

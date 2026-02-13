@@ -29,7 +29,8 @@ import {
     Palette,
     Briefcase,
     Bell,
-    MessageCircle
+    MessageCircle,
+    Archive
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -92,6 +93,7 @@ const adminNavigation = [
         section: "User Management",
         items: [
             { name: "Admin Users", href: "/admin/users", icon: Shield },
+            { name: "Role Management", href: "/admin/roles", icon: Key },
             { name: "Activity Logs", href: "/admin/activity", icon: Activity }
         ]
     },
@@ -102,7 +104,6 @@ const adminNavigation = [
             { name: "Department Settings", href: "/super-admin/department-settings", icon: Palette },
             { name: "Course Management", href: "/super-admin/courses", icon: BookOpen },
             { name: "Permission Matrix", href: "/super-admin/permissions", icon: Lock },
-            { name: "System Metrics", href: "/super-admin/metrics", icon: Server },
             { name: "System Settings", href: "/super-admin/settings", icon: Settings }
         ],
         requiredRole: 'super_admin' // Only show to super admins
@@ -111,6 +112,7 @@ const adminNavigation = [
         section: "System",
         items: [
             { name: "Email Templates", href: "/admin/email-templates", icon: Mail },
+            { name: "Archive", href: "/admin/archive", icon: Archive },
             { name: "Backup & Export", href: "/admin/backup", icon: Download }
         ]
     }
@@ -542,7 +544,7 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
         <>
             <Head title={title} />
 
-            <div className="md:flex bg-beige-50 dark:bg-gray-950 h-screen w-full overflow-hidden">
+            <div className="md:flex bg-beige-50 dark:bg-gray-950 min-h-screen md:h-screen w-full overflow-x-hidden md:overflow-hidden">
                 {/* Desktop Sidebar - Fixed Position */}
                 <div className={cn(
                     "hidden md:flex md:flex-col bg-white dark:bg-gray-900 border-r border-beige-200 dark:border-gray-800 transition-all duration-300 fixed left-0 top-0 bottom-0 z-20",
@@ -614,7 +616,7 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
 
                 {/* Main Content - Add margin to account for fixed sidebar */}
                 <div className={cn(
-                    "flex-1 min-w-0 flex flex-col h-screen transition-all duration-300",
+                    "flex-1 min-w-0 flex flex-col transition-all duration-300",
                     sidebarCollapsed ? "md:ml-16" : "md:ml-64"
                 )}>
                     {/* Header - Fixed at top */}

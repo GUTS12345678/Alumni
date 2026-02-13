@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\JobPosting;
 use App\Models\JobCategory;
 use App\Models\JobView;
+use App\Services\EmailNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -22,8 +23,8 @@ class JobBoardController extends Controller
     {
         $query = JobPosting::where('status', 'published')
             ->where(function ($q) {
-                $q->whereNull('expires_at')
-                  ->orWhere('expires_at', '>', now());
+                $q->whereNull('application_deadline')
+                  ->orWhere('application_deadline', '>', now());
             })
             ->with(['category:id,name,slug', 'createdBy:id,name'])
             ->withCount('views');
@@ -44,8 +45,8 @@ class JobBoardController extends Controller
         }
 
         // Filter by employment type
-        if ($request->has('employment_type')) {
-            $query->where('employment_type', $request->employment_type);
+        if ($request->has('job_type')) {
+            $query->where('job_type', $request->job_type);
         }
 
         // Filter by work arrangement
@@ -119,7 +120,7 @@ class JobBoardController extends Controller
         }
 
         // Check if expired
-        if ($jobPosting->expires_at && $jobPosting->expires_at < now() &&
+        if ($jobPosting->application_deadline && $jobPosting->application_deadline < now() &&
             (!$user || !in_array($user->role, ['admin', 'super_admin']))) {
             return response()->json([
                 'success' => false,
@@ -150,8 +151,8 @@ class JobBoardController extends Controller
             ->withCount(['jobs' => function ($query) {
                 $query->where('status', 'published')
                       ->where(function ($q) {
-                          $q->whereNull('expires_at')
-                            ->orWhere('expires_at', '>', now());
+                          $q->whereNull('application_deadline')
+                            ->orWhere('application_deadline', '>', now());
                       });
             }])
             ->orderBy('name')
@@ -171,8 +172,8 @@ class JobBoardController extends Controller
         $jobs = JobPosting::where('status', 'published')
             ->where('is_featured', true)
             ->where(function ($q) {
-                $q->whereNull('expires_at')
-                  ->orWhere('expires_at', '>', now());
+                $q->whereNull('application_deadline')
+                  ->orWhere('application_deadline', '>', now());
             })
             ->with(['category:id,name,slug'])
             ->limit(6)
@@ -194,8 +195,8 @@ class JobBoardController extends Controller
 
         $jobs = JobPosting::where('status', 'published')
             ->where(function ($q) {
-                $q->whereNull('expires_at')
-                  ->orWhere('expires_at', '>', now());
+                $q->whereNull('application_deadline')
+                  ->orWhere('application_deadline', '>', now());
             })
             ->with(['category:id,name,slug'])
             ->orderBy('created_at', 'desc')
@@ -283,12 +284,20 @@ class JobBoardController extends Controller
             'title' => 'required|string|max:255',
             'company_name' => 'required|string|max:255',
             'company_logo' => 'nullable|string|max:500',
+            'poster_image' => 'nullable|string|max:500',
+            'background_image' => 'nullable|string|max:500',
             'company_website' => 'nullable|url|max:500',
             'category_id' => 'required|exists:job_categories,id',
-            'description' => 'required|string|max:10000',
+            'description' => 'nullable|string|max:10000',
+            'pages' => 'nullable|array',
+            'pages.*.title' => 'nullable|string|max:255',
+            'pages.*.content' => 'required|string',
+            'pages.*.image' => 'nullable|string',
+            'pages.*.layout' => 'required|in:text-only,image-left,image-right,image-top,image-full',
+            'use_pages' => 'nullable|boolean',
             'requirements' => 'nullable|string|max:5000',
             'benefits' => 'nullable|string|max:5000',
-            'employment_type' => ['required', Rule::in(['full_time', 'part_time', 'contract', 'internship', 'freelance'])],
+            'job_type' => ['required', Rule::in(['full_time', 'part_time', 'contract', 'internship', 'freelance'])],
             'work_arrangement' => ['required', Rule::in(['onsite', 'remote', 'hybrid'])],
             'location' => 'nullable|string|max:255',
             'salary_min' => 'nullable|numeric|min:0',
@@ -300,7 +309,7 @@ class JobBoardController extends Controller
             'contact_phone' => 'nullable|string|max:50',
             'external_url' => 'nullable|url|max:500',
             'is_featured' => 'nullable|boolean',
-            'expires_at' => 'nullable|date|after:today',
+            'application_deadline' => 'nullable|date|after:today',
             'status' => ['nullable', Rule::in(['draft', 'published', 'closed', 'expired'])],
         ]);
 
@@ -315,10 +324,25 @@ class JobBoardController extends Controller
         $jobPosting = JobPosting::create($validated);
         $jobPosting->load(['category', 'createdBy:id,name']);
 
+        // Send email notifications if job is published
+        $emailInfo = '';
+        if ($jobPosting->status === 'published') {
+            try {
+                $emailService = app(EmailNotificationService::class);
+                $emailResult = $emailService->sendJobPostingNotification($jobPosting);
+                
+                $emailInfo = $emailResult['success'] 
+                    ? " Email notifications queued for {$emailResult['total_recipients']} alumni."
+                    : '';
+            } catch (\Exception $e) {
+                \Log::error('Failed to send job posting emails: ' . $e->getMessage());
+            }
+        }
+
         return response()->json([
             'success' => true,
             'data' => $jobPosting,
-            'message' => 'Job posting created successfully.',
+            'message' => 'Job posting created successfully.' . $emailInfo,
         ], 201);
     }
 
@@ -340,12 +364,20 @@ class JobBoardController extends Controller
             'title' => 'sometimes|string|max:255',
             'company_name' => 'sometimes|string|max:255',
             'company_logo' => 'nullable|string|max:500',
+            'poster_image' => 'nullable|string|max:500',
+            'background_image' => 'nullable|string|max:500',
             'company_website' => 'nullable|url|max:500',
             'category_id' => 'sometimes|exists:job_categories,id',
-            'description' => 'sometimes|string|max:10000',
+            'description' => 'nullable|string|max:10000',
+            'pages' => 'nullable|array',
+            'pages.*.title' => 'nullable|string|max:255',
+            'pages.*.content' => 'required|string',
+            'pages.*.image' => 'nullable|string',
+            'pages.*.layout' => 'required|in:text-only,image-left,image-right,image-top,image-full',
+            'use_pages' => 'nullable|boolean',
             'requirements' => 'nullable|string|max:5000',
             'benefits' => 'nullable|string|max:5000',
-            'employment_type' => ['sometimes', Rule::in(['full_time', 'part_time', 'contract', 'internship', 'freelance'])],
+            'job_type' => ['sometimes', Rule::in(['full_time', 'part_time', 'contract', 'internship', 'freelance'])],
             'work_arrangement' => ['sometimes', Rule::in(['onsite', 'remote', 'hybrid'])],
             'location' => 'nullable|string|max:255',
             'salary_min' => 'nullable|numeric|min:0',
@@ -357,7 +389,7 @@ class JobBoardController extends Controller
             'contact_phone' => 'nullable|string|max:50',
             'external_url' => 'nullable|url|max:500',
             'is_featured' => 'nullable|boolean',
-            'expires_at' => 'nullable|date',
+            'application_deadline' => 'nullable|date',
             'status' => ['sometimes', Rule::in(['draft', 'published', 'closed', 'expired'])],
         ]);
 
@@ -375,10 +407,25 @@ class JobBoardController extends Controller
         $jobPosting->update($validated);
         $jobPosting->load(['category', 'createdBy:id,name']);
 
+        // Send email notifications if job was just published
+        $emailInfo = '';
+        if ($wasNotPublished && $jobPosting->status === 'published') {
+            try {
+                $emailService = app(EmailNotificationService::class);
+                $emailResult = $emailService->sendJobPostingNotification($jobPosting);
+                
+                $emailInfo = $emailResult['success'] 
+                    ? " Email notifications queued for {$emailResult['total_recipients']} alumni."
+                    : '';
+            } catch (\Exception $e) {
+                \Log::error('Failed to send job posting emails: ' . $e->getMessage());
+            }
+        }
+
         return response()->json([
             'success' => true,
             'data' => $jobPosting,
-            'message' => 'Job posting updated successfully.',
+            'message' => 'Job posting updated successfully.' . $emailInfo,
         ]);
     }
 
@@ -458,17 +505,17 @@ class JobBoardController extends Controller
             'draft_jobs' => JobPosting::where('status', 'draft')->count(),
             'expired_jobs' => JobPosting::where('status', 'expired')
                 ->orWhere(function ($q) {
-                    $q->whereNotNull('expires_at')
-                      ->where('expires_at', '<', now());
+                    $q->whereNotNull('application_deadline')
+                      ->where('application_deadline', '<', now());
                 })->count(),
             'total_views' => JobView::count(),
             'jobs_by_category' => JobCategory::withCount(['jobPostings' => function ($q) {
                 $q->where('status', 'published');
             }])->get()->pluck('job_postings_count', 'name'),
             'jobs_by_type' => JobPosting::where('status', 'published')
-                ->select('employment_type', DB::raw('count(*) as count'))
-                ->groupBy('employment_type')
-                ->pluck('count', 'employment_type'),
+                ->select('job_type', DB::raw('count(*) as count'))
+                ->groupBy('job_type')
+                ->pluck('count', 'job_type'),
             'recent_views' => JobView::where('viewed_at', '>=', now()->subDays(30))->count(),
         ];
 

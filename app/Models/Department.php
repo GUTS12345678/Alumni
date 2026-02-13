@@ -89,11 +89,13 @@ class Department extends Model
     /**
      * Get average time to employment in days.
      * Calculates from graduation date to first job start date.
+     * Uses graduation_date with fallback to graduation_year-06-01.
+     * Caps at 5 years (1825 days) to filter outliers.
      */
     public function getAverageTimeToEmployment(): ?float
     {
         $alumni = $this->alumniProfiles()
-            ->whereNotNull('graduation_date')
+            ->whereNotNull('graduation_year')
             ->whereNotNull('job_start_date')
             ->whereIn('employment_status', [
                 'employed_full_time',
@@ -110,10 +112,20 @@ class Department extends Model
         $count = 0;
 
         foreach ($alumni as $profile) {
-            if ($profile->graduation_date && $profile->job_start_date) {
-                $days = $profile->graduation_date->diffInDays($profile->job_start_date);
-                $totalDays += $days;
-                $count++;
+            // Use graduation_date if available, fall back to graduation_year-06-01
+            $graduationDate = $profile->graduation_date 
+                ? \Carbon\Carbon::parse($profile->graduation_date)
+                : \Carbon\Carbon::parse($profile->graduation_year . '-06-01');
+            $jobStartDate = \Carbon\Carbon::parse($profile->job_start_date);
+            
+            // Only count if job started after graduation
+            if ($jobStartDate->greaterThanOrEqualTo($graduationDate)) {
+                $days = $graduationDate->diffInDays($jobStartDate);
+                // Cap at 5 years (1825 days) to filter outliers
+                if ($days <= 1825) {
+                    $totalDays += $days;
+                    $count++;
+                }
             }
         }
 

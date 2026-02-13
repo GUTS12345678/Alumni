@@ -11,10 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('courses', function (Blueprint $table) {
-            // Drop the unique constraint on department_id + name
-            $table->dropUnique('unique_course_per_dept');
-        });
+        try {
+            Schema::table('courses', function (Blueprint $table) {
+                $table->dropUnique('unique_course_per_dept');
+            });
+        } catch (\Exception $e) {
+            // Unique constraint may not exist
+        }
     }
 
     /**

@@ -16,7 +16,7 @@ class UserTyping implements ShouldBroadcast
 
     public int $conversationId;
     public int $userId;
-    public string $userName;
+    public ?string $userName;
     public bool $isTyping;
 
     /**
@@ -26,7 +26,7 @@ class UserTyping implements ShouldBroadcast
     {
         $this->conversationId = $conversationId;
         $this->userId = $user->id;
-        $this->userName = $user->name;
+        $this->userName = $user->name ?? 'Unknown User';
         $this->isTyping = $isTyping;
     }
 

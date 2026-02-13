@@ -433,7 +433,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                     <div className="flex items-center space-x-4">
                         <Link
                             href="/super-admin/departments"
-                            className="flex items-center text-gray-600 hover:text-maroon-600"
+                            className="flex items-center text-gray-600 dark:text-gray-400 hover:text-maroon-600"
                         >
                             <ArrowLeft className="h-5 w-5 mr-1" />
                             Back to Departments
@@ -442,8 +442,8 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                 </div>
 
                 {/* Department Header */}
-                <div className="bg-gradient-to-r from-maroon-600 to-maroon-800 rounded-lg shadow-lg p-8 text-white">
-                    <div className="flex items-start justify-between">
+                <div className="bg-gradient-to-r from-maroon-600 to-maroon-800 rounded-lg shadow-lg p-4 md:p-8 text-white">
+                    <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3">
                         <div>
                             <div className="flex items-center space-x-3 mb-2">
                                 <Building className="h-10 w-10" />
@@ -465,20 +465,20 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
 
                 {/* Statistics Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-beige-200 dark:border-gray-700 p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-sm font-medium text-gray-600">Total Courses</p>
+                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Courses</p>
                                 <p className="text-3xl font-bold text-blue-600 mt-2">{courses.length}</p>
                             </div>
                             <BookOpen className="h-12 w-12 text-blue-600 opacity-20" />
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-beige-200 dark:border-gray-700 p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-sm font-medium text-gray-600">Active Courses</p>
+                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Courses</p>
                                 <p className="text-3xl font-bold text-green-600 mt-2">
                                     {courses.filter(c => c.status === 'active' && !c.deleted_at).length}
                                 </p>
@@ -487,10 +487,10 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-beige-200 dark:border-gray-700 p-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <p className="text-sm font-medium text-gray-600">Total Alumni</p>
+                                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Alumni</p>
                                 <p className="text-3xl font-bold text-purple-600 mt-2">{alumni.length}</p>
                             </div>
                             <GraduationCap className="h-12 w-12 text-purple-600 opacity-20" />
@@ -502,11 +502,11 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                 {analytics && analytics.department && analytics.department.total_alumni > 0 && (
                     <div className="space-y-6">
                         {/* Analytics Header with Export */}
-                        <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
-                            <div className="flex items-center justify-between">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-beige-200 dark:border-gray-700 p-6">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                                 <div>
-                                    <h2 className="text-xl font-bold text-gray-900">Department Analytics</h2>
-                                    <p className="text-sm text-gray-600 mt-1">Comprehensive insights for {department?.name}</p>
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Department Analytics</h2>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Comprehensive insights for {department?.name}</p>
                                 </div>
                                 <button
                                     onClick={() => {
@@ -527,8 +527,8 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                             </div>
                         </div>
                         {/* Employment Metrics */}
-                        <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
-                            <h3 className="text-lg font-bold text-gray-900 mb-4">Employment Metrics</h3>
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-beige-200 dark:border-gray-700 p-6">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Employment Metrics</h3>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div className="bg-green-50 rounded-lg p-4 border border-green-200">
                                     <p className="text-sm font-medium text-green-800">Employment Rate</p>
@@ -566,18 +566,18 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
 
                         {/* Top Employers */}
                         {analytics.employment?.top_employers && analytics.employment.top_employers.length > 0 && (
-                            <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
-                                <h3 className="text-lg font-bold text-gray-900 mb-4">Top Employers</h3>
+                            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-beige-200 dark:border-gray-700 p-6">
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Top Employers</h3>
                                 <div className="space-y-3">
                                     {analytics.employment.top_employers.map((employer, index) => (
-                                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
                                             <div className="flex items-center space-x-3">
                                                 <div className="w-8 h-8 bg-maroon-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
                                                     {index + 1}
                                                 </div>
-                                                <span className="font-medium text-gray-900">{employer.name}</span>
+                                                <span className="font-medium text-gray-900 dark:text-gray-100">{employer.name}</span>
                                             </div>
-                                            <span className="text-sm text-gray-600">{employer.count} alumni</span>
+                                            <span className="text-sm text-gray-600 dark:text-gray-400">{employer.count} alumni</span>
                                         </div>
                                     ))}
                                 </div>
@@ -586,8 +586,8 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
 
                         {/* Salary Distribution */}
                         {analytics.compensation?.salary_distribution?.some(s => s.count > 0) && (
-                            <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
-                                <h3 className="text-lg font-bold text-gray-900 mb-4">Salary Distribution (Monthly)</h3>
+                            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-beige-200 dark:border-gray-700 p-6">
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Salary Distribution (Monthly)</h3>
                                 <div className="space-y-2">
                                     {analytics.compensation.salary_distribution
                                         .filter(salary => salary.count > 0)
@@ -597,8 +597,8 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                                             return (
                                                 <div key={index}>
                                                     <div className="flex items-center justify-between mb-1">
-                                                        <span className="text-sm text-gray-700">{salary.range}</span>
-                                                        <span className="text-sm font-medium text-gray-900">{salary.count} alumni</span>
+                                                        <span className="text-sm text-gray-700 dark:text-gray-300">{salary.range}</span>
+                                                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{salary.count} alumni</span>
                                                     </div>
                                                     <div className="w-full bg-gray-200 rounded-full h-2">
                                                         <div
@@ -615,12 +615,12 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
 
                         {/* Career Fields */}
                         {analytics.career_fields?.distribution && analytics.career_fields.distribution.length > 0 && (
-                            <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
-                                <h3 className="text-lg font-bold text-gray-900 mb-4">Career Field Distribution</h3>
+                            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-beige-200 dark:border-gray-700 p-6">
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Career Field Distribution</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     {analytics.career_fields.distribution.map((field, index) => (
-                                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                            <span className="text-sm font-medium text-gray-700">{field.field}</span>
+                                        <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{field.field}</span>
                                             <span className="text-sm text-maroon-600 font-bold">{field.count}</span>
                                         </div>
                                     ))}
@@ -631,9 +631,9 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                 )}
 
                 {/* Courses Section */}
-                <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-beige-200 dark:border-gray-700 p-6">
                     <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-xl font-bold text-gray-900 flex items-center">
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
                             <BookOpen className="h-6 w-6 mr-2 text-maroon-600" />
                             Courses
                         </h2>
@@ -653,7 +653,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                     ) : courses.length === 0 ? (
                         <div className="text-center py-12">
                             <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                            <p className="text-gray-600">No courses found in this department</p>
+                            <p className="text-gray-600 dark:text-gray-400">No courses found in this department</p>
                             <button
                                 onClick={openCreateCourseModal}
                                 className="mt-4 text-maroon-600 hover:text-maroon-700 font-medium"
@@ -663,33 +663,33 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
+                            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                <thead className="bg-gray-50 dark:bg-gray-800/50">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                             Course
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                             Duration
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                             Alumni
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                             Status
                                         </th>
-                                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                             Actions
                                         </th>
                                     </tr>
                                 </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
+                                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                                     {courses.map((course) => (
-                                        <tr key={course.id} className="hover:bg-gray-50">
+                                        <tr key={course.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                                             <td className="px-6 py-4">
                                                 <div>
-                                                    <p className="text-sm font-medium text-gray-900">{course.name}</p>
-                                                    <p className="text-sm text-gray-500">Code: {course.code}</p>
+                                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{course.name}</p>
+                                                    <p className="text-sm text-gray-500 dark:text-gray-400">Code: {course.code}</p>
                                                     {course.description && (
                                                         <p className="text-xs text-gray-400 mt-1 line-clamp-1">{course.description}</p>
                                                     )}
@@ -698,13 +698,13 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center space-x-2">
                                                     <Clock className="h-4 w-4 text-gray-400" />
-                                                    <span className="text-sm text-gray-900">{course.duration_years} years</span>
+                                                    <span className="text-sm text-gray-900 dark:text-gray-100">{course.duration_years} years</span>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center space-x-2">
                                                     <Users className="h-4 w-4 text-gray-400" />
-                                                    <span className="text-sm text-gray-900">{course.alumni_profiles_count}</span>
+                                                    <span className="text-sm text-gray-900 dark:text-gray-100">{course.alumni_profiles_count}</span>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
@@ -747,9 +747,9 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                 </div>
 
                 {/* Alumni Section */}
-                <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-beige-200 dark:border-gray-700 p-6">
                     <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-xl font-bold text-gray-900 flex items-center">
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center">
                             <GraduationCap className="h-6 w-6 mr-2 text-maroon-600" />
                             Alumni ({alumni.length})
                         </h2>
@@ -760,7 +760,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                                 placeholder="Search alumni..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
+                                className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
                             />
                         </div>
                     </div>
@@ -768,52 +768,52 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                     {filteredAlumni.length === 0 ? (
                         <div className="text-center py-12">
                             <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                            <p className="text-gray-600">
+                            <p className="text-gray-600 dark:text-gray-400">
                                 {searchTerm ? 'No alumni found matching your search' : 'No alumni in this department yet'}
                             </p>
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
+                            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                <thead className="bg-gray-50 dark:bg-gray-800/50">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                             Student
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                             Course
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                             Graduation Year
                                         </th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                             Employment Status
                                         </th>
                                     </tr>
                                 </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
+                                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
                                     {filteredAlumni.map((alum) => (
-                                        <tr key={alum.id} className="hover:bg-gray-50">
+                                        <tr key={alum.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                                             <td className="px-6 py-4">
                                                 <div>
-                                                    <p className="text-sm font-medium text-gray-900">
+                                                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                                                         {alum.first_name} {alum.last_name}
                                                     </p>
-                                                    <p className="text-sm text-gray-500">{alum.student_id}</p>
+                                                    <p className="text-sm text-gray-500 dark:text-gray-400">{alum.student_id}</p>
                                                     <p className="text-xs text-gray-400">{alum.email}</p>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div>
-                                                    <p className="text-sm text-gray-900">{alum.course?.name || 'N/A'}</p>
-                                                    <p className="text-xs text-gray-500">{alum.course?.code || ''}</p>
+                                                    <p className="text-sm text-gray-900 dark:text-gray-100">{alum.course?.name || 'N/A'}</p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400">{alum.course?.code || ''}</p>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className="text-sm text-gray-900">{alum.graduation_year}</span>
+                                                <span className="text-sm text-gray-900 dark:text-gray-100">{alum.graduation_year}</span>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <span className="text-sm text-gray-900 capitalize">
+                                                <span className="text-sm text-gray-900 dark:text-gray-100 capitalize">
                                                     {alum.employment_status?.replace(/_/g, ' ') || 'Not specified'}
                                                 </span>
                                             </td>
@@ -829,9 +829,9 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
             {/* Create Course Modal */}
             {showCourseModal && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6 shadow-2xl">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-bold text-gray-900">Add New Course</h2>
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Add New Course</h2>
                             <button
                                 onClick={() => setShowCourseModal(false)}
                                 className="text-gray-400 hover:text-gray-600"
@@ -842,14 +842,14 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
 
                         <form onSubmit={handleCreateCourse} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Course Name <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="text"
                                     value={courseFormData.name}
                                     onChange={(e) => setCourseFormData({ ...courseFormData, name: e.target.value })}
-                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                         }`}
                                     placeholder="e.g., BS Computer Science"
                                     required
@@ -860,14 +860,14 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Course Code <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="text"
                                     value={courseFormData.code}
                                     onChange={(e) => setCourseFormData({ ...courseFormData, code: e.target.value.toUpperCase() })}
-                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.code ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.code ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                         }`}
                                     placeholder="e.g., BSCS"
                                     required
@@ -895,7 +895,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Duration (Years) <span className="text-red-500">*</span>
                                 </label>
                                 <input
@@ -904,7 +904,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                                     max="10"
                                     value={courseFormData.duration_years}
                                     onChange={(e) => setCourseFormData({ ...courseFormData, duration_years: Number(e.target.value) })}
-                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.duration_years ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.duration_years ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                         }`}
                                     required
                                 />
@@ -914,24 +914,24 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Description
                                 </label>
                                 <textarea
                                     value={courseFormData.description}
                                     onChange={(e) => setCourseFormData({ ...courseFormData, description: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500"
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
                                     rows={3}
                                     placeholder="Course description..."
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
                                 <select
                                     value={courseFormData.status}
                                     onChange={(e) => setCourseFormData({ ...courseFormData, status: e.target.value as 'active' | 'inactive' })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500"
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
                                 >
                                     <option value="active">Active</option>
                                     <option value="inactive">Inactive</option>
@@ -942,7 +942,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                                 <button
                                     type="button"
                                     onClick={() => setShowCourseModal(false)}
-                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                                     disabled={submitting}
                                 >
                                     Cancel
@@ -963,9 +963,9 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
             {/* Edit Course Modal */}
             {showEditCourseModal && selectedCourse && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6 shadow-2xl">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-bold text-gray-900">Edit Course</h2>
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Edit Course</h2>
                             <button
                                 onClick={() => setShowEditCourseModal(false)}
                                 className="text-gray-400 hover:text-gray-600"
@@ -976,14 +976,14 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
 
                         <form onSubmit={handleEditCourse} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Course Name <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="text"
                                     value={courseFormData.name}
                                     onChange={(e) => setCourseFormData({ ...courseFormData, name: e.target.value })}
-                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                         }`}
                                     required
                                 />
@@ -993,14 +993,14 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Course Code <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="text"
                                     value={courseFormData.code}
                                     onChange={(e) => setCourseFormData({ ...courseFormData, code: e.target.value.toUpperCase() })}
-                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.code ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.code ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                         }`}
                                     required
                                 />
@@ -1010,24 +1010,24 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Major/Specialization
                                 </label>
                                 <textarea
                                     value={courseFormData.majors}
                                     onChange={(e) => setCourseFormData({ ...courseFormData, majors: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500"
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
                                     rows={2}
                                     placeholder="e.g., Computer Science, Information Technology, Software Engineering (comma-separated)"
                                 />
-                                <p className="text-xs text-gray-500 mt-1">Optional: List available majors or specializations for this course</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Optional: List available majors or specializations for this course</p>
                                 {formErrors.majors && (
                                     <p className="text-red-500 text-xs mt-1">{formErrors.majors}</p>
                                 )}
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Duration (Years) <span className="text-red-500">*</span>
                                 </label>
                                 <input
@@ -1036,7 +1036,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                                     max="10"
                                     value={courseFormData.duration_years}
                                     onChange={(e) => setCourseFormData({ ...courseFormData, duration_years: Number(e.target.value) })}
-                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.duration_years ? 'border-red-500' : 'border-gray-300'
+                                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.duration_years ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                         }`}
                                     required
                                 />
@@ -1046,23 +1046,23 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Description
                                 </label>
                                 <textarea
                                     value={courseFormData.description}
                                     onChange={(e) => setCourseFormData({ ...courseFormData, description: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500"
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
                                     rows={3}
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
                                 <select
                                     value={courseFormData.status}
                                     onChange={(e) => setCourseFormData({ ...courseFormData, status: e.target.value as 'active' | 'inactive' })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500"
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
                                 >
                                     <option value="active">Active</option>
                                     <option value="inactive">Inactive</option>
@@ -1073,7 +1073,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                                 <button
                                     type="button"
                                     onClick={() => setShowEditCourseModal(false)}
-                                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                                     disabled={submitting}
                                 >
                                     Cancel
@@ -1094,9 +1094,9 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
             {/* Delete Course Modal */}
             {showDeleteCourseModal && selectedCourse && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-2xl">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6 shadow-2xl">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-bold text-gray-900">Delete Course</h2>
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Delete Course</h2>
                             <button
                                 onClick={() => setShowDeleteCourseModal(false)}
                                 className="text-gray-400 hover:text-gray-600"

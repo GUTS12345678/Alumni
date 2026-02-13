@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('activity_logs')) {
         Schema::create('activity_logs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->nullable()->constrained()->onDelete('set null');
@@ -28,6 +29,7 @@ return new class extends Migration
             $table->index(['entity_type', 'entity_id']);
             $table->index('created_at');
         });
+        }
     }
 
     /**

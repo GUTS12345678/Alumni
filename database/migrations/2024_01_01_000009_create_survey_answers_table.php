@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('survey_answers')) {
         Schema::create('survey_answers', function (Blueprint $table) {
             $table->id();
             $table->foreignId('survey_response_id')->constrained()->onDelete('cascade');
@@ -45,6 +46,7 @@ return new class extends Migration
             // Ensure one answer per question per response
             $table->unique(['survey_response_id', 'survey_question_id']);
         });
+        }
     }
 
     /**

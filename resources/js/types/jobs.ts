@@ -24,6 +24,14 @@ export type WorkArrangement = 'onsite' | 'remote' | 'hybrid';
 export type EmploymentType = 'full_time' | 'part_time' | 'contract' | 'freelance' | 'internship';
 export type SalaryPeriod = 'hourly' | 'monthly' | 'yearly';
 
+// Content Page interface for multi-page content
+export interface ContentPage {
+    title?: string;
+    content: string;
+    image?: string | null;
+    layout: 'text-only' | 'image-left' | 'image-right' | 'image-top' | 'image-full';
+}
+
 export interface JobPosting {
     id: number;
 
@@ -33,7 +41,11 @@ export interface JobPosting {
     company_name: string;
     company_logo?: string;
     company_website?: string;
+    poster_image?: string;
+    background_image?: string;
     description: string;
+    pages?: ContentPage[];
+    use_pages?: boolean;
 
     // Category & Type
     category_id?: number;
@@ -104,6 +116,8 @@ export interface JobFormData {
     company_logo?: string;
     company_website?: string;
     description: string;
+    pages?: ContentPage[];
+    use_pages?: boolean;
     category_id?: number | string;
     job_type?: JobType;
     employment_type?: EmploymentType;
@@ -131,6 +145,10 @@ export interface JobFormData {
     expires_at?: string;
     status?: JobStatus;
     is_featured?: boolean;
+    campus_id?: number | null;
+    is_multi_campus?: boolean;
+    poster_image?: string | File;
+    background_image?: string | File;
 }
 
 export interface CreateJobForm {

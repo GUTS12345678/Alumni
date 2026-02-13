@@ -165,7 +165,7 @@ export default function SystemMetrics({ auth }: Props) {
         return (
             <AdminBaseLayout title="System Metrics" user={user}>
                 <div className="text-center py-12">
-                    <p className="text-gray-500">Failed to load system metrics</p>
+                    <p className="text-gray-500 dark:text-gray-400">Failed to load system metrics</p>
                 </div>
             </AdminBaseLayout>
         );
@@ -180,9 +180,9 @@ export default function SystemMetrics({ auth }: Props) {
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h2 className="text-2xl font-bold text-maroon-800">System Resource Metrics</h2>
-                        <p className="text-maroon-600">Monitor server and application performance</p>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <h2 className="text-2xl font-bold text-maroon-800 dark:text-gray-200">System Resource Metrics</h2>
+                        <p className="text-maroon-600 dark:text-gray-400">Monitor server and application performance</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             Last updated: {lastUpdated.toLocaleTimeString()}
                             {autoRefresh && <span className="ml-2 text-green-600">● Live (5s)</span>}
                         </p>
@@ -195,9 +195,9 @@ export default function SystemMetrics({ auth }: Props) {
                                 id="auto-refresh"
                                 checked={autoRefresh}
                                 onChange={(e) => setAutoRefresh(e.target.checked)}
-                                className="rounded border-maroon-300 text-maroon-600 focus:ring-maroon-200"
+                                className="rounded border-maroon-300 dark:border-gray-600 text-maroon-600 focus:ring-maroon-200"
                             />
-                            <label htmlFor="auto-refresh" className="text-sm text-maroon-700">
+                            <label htmlFor="auto-refresh" className="text-sm text-maroon-700 dark:text-gray-300">
                                 Auto-refresh (5s)
                             </label>
                         </div>
@@ -206,7 +206,7 @@ export default function SystemMetrics({ auth }: Props) {
                             onClick={fetchMetrics}
                             variant="outline"
                             size="sm"
-                            className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                         >
                             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                             Refresh
@@ -217,16 +217,16 @@ export default function SystemMetrics({ auth }: Props) {
                 {/* Server Resources */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     {/* Memory Usage */}
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
-                            <Server className="h-4 w-4 text-maroon-600" />
+                            <Server className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-maroon-800">
+                            <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">
                                 {metrics.server.memory.usage_percentage}%
                             </div>
-                            <p className="text-xs text-gray-600 mt-1">
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                                 {metrics.server.memory.current_formatted} / {metrics.server.memory.limit_formatted}
                             </p>
                             <div className="mt-2">
@@ -246,39 +246,39 @@ export default function SystemMetrics({ auth }: Props) {
                     </Card>
 
                     {/* CPU Load */}
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">CPU Load</CardTitle>
-                            <Cpu className="h-4 w-4 text-maroon-600" />
+                            <Cpu className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-maroon-800">
+                            <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">
                                 {metrics.server.cpu.load_1min}
                             </div>
-                            <p className="text-xs text-gray-600 mt-1">
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                                 1min / {metrics.server.cpu.cores} cores
                             </p>
-                            <div className="mt-2 space-y-1 text-xs text-gray-600">
+                            <div className="mt-2 space-y-1 text-xs text-gray-600 dark:text-gray-400">
                                 <div>5min: {metrics.server.cpu.load_5min}</div>
                                 <div>15min: {metrics.server.cpu.load_15min}</div>
                             </div>
                             {metrics.server.cpu.note && (
-                                <p className="text-xs text-gray-500 mt-2">{metrics.server.cpu.note}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">{metrics.server.cpu.note}</p>
                             )}
                         </CardContent>
                     </Card>
 
                     {/* Disk Usage */}
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Disk Usage</CardTitle>
-                            <HardDrive className="h-4 w-4 text-maroon-600" />
+                            <HardDrive className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-maroon-800">
+                            <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">
                                 {metrics.storage.disk.usage_percentage}%
                             </div>
-                            <p className="text-xs text-gray-600 mt-1">
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                                 {metrics.storage.disk.used_formatted} / {metrics.storage.disk.total_formatted}
                             </p>
                             <div className="mt-2">
@@ -298,19 +298,19 @@ export default function SystemMetrics({ auth }: Props) {
                     </Card>
 
                     {/* Database Size */}
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Database Size</CardTitle>
-                            <Database className="h-4 w-4 text-maroon-600" />
+                            <Database className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-maroon-800">
+                            <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">
                                 {metrics.database.total_size_mb} MB
                             </div>
-                            <p className="text-xs text-gray-600 mt-1">
+                            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                                 {metrics.database.database_name}
                             </p>
-                            <div className="mt-2 text-xs text-gray-600">
+                            <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
                                 <div>Connections: {metrics.database.connections.current} / {metrics.database.connections.max_connections}</div>
                             </div>
                         </CardContent>
@@ -320,62 +320,62 @@ export default function SystemMetrics({ auth }: Props) {
                 {/* Application Metrics */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {/* Record Counts */}
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader>
                             <CardTitle className="flex items-center">
-                                <Users className="h-5 w-5 mr-2 text-maroon-600" />
+                                <Users className="h-5 w-5 mr-2 text-maroon-600 dark:text-gray-400" />
                                 Database Records
                             </CardTitle>
                             <CardDescription>Total records in database</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-2">
                             <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">Users:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Users:</span>
                                 <span className="font-semibold">{metrics.application.records.users.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">Alumni:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Alumni:</span>
                                 <span className="font-semibold">{metrics.application.records.alumni.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">Surveys:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Surveys:</span>
                                 <span className="font-semibold">{metrics.application.records.surveys.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">Survey Responses:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Survey Responses:</span>
                                 <span className="font-semibold">{metrics.application.records.survey_responses.toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">Jobs:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Jobs:</span>
                                 <span className="font-semibold">{metrics.application.records.jobs.toLocaleString()}</span>
                             </div>
                         </CardContent>
                     </Card>
 
                     {/* 24h Activity */}
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader>
                             <CardTitle className="flex items-center">
-                                <Activity className="h-5 w-5 mr-2 text-maroon-600" />
+                                <Activity className="h-5 w-5 mr-2 text-maroon-600 dark:text-gray-400" />
                                 24h Activity
                             </CardTitle>
                             <CardDescription>Recent system activity</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-2">
                             <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">New Users:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">New Users:</span>
                                 <Badge variant="outline" className="bg-blue-50 text-blue-700">
                                     +{metrics.application.activity_24h.new_users}
                                 </Badge>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">Survey Responses:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Survey Responses:</span>
                                 <Badge variant="outline" className="bg-green-50 text-green-700">
                                     +{metrics.application.activity_24h.survey_responses}
                                 </Badge>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">Job Applications:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Job Applications:</span>
                                 <Badge variant="outline" className="bg-purple-50 text-purple-700">
                                     +{metrics.application.activity_24h.job_applications}
                                 </Badge>
@@ -384,33 +384,33 @@ export default function SystemMetrics({ auth }: Props) {
                     </Card>
 
                     {/* PHP Configuration */}
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader>
                             <CardTitle className="flex items-center">
-                                <Server className="h-5 w-5 mr-2 text-maroon-600" />
+                                <Server className="h-5 w-5 mr-2 text-maroon-600 dark:text-gray-400" />
                                 PHP Configuration
                             </CardTitle>
                             <CardDescription>Server configuration</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-2">
                             <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">Version:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Version:</span>
                                 <span className="font-semibold">{metrics.server.php.version}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">Max Execution:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Max Execution:</span>
                                 <span className="font-semibold">{metrics.server.php.max_execution_time}s</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">Upload Max:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Upload Max:</span>
                                 <span className="font-semibold">{metrics.server.php.upload_max_filesize}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">Post Max:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">Post Max:</span>
                                 <span className="font-semibold">{metrics.server.php.post_max_size}</span>
                             </div>
                             <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">OPcache:</span>
+                                <span className="text-sm text-gray-600 dark:text-gray-400">OPcache:</span>
                                 {metrics.server.php.opcache_enabled ? (
                                     <CheckCircle className="h-4 w-4 text-green-600" />
                                 ) : (
@@ -422,10 +422,10 @@ export default function SystemMetrics({ auth }: Props) {
                 </div>
 
                 {/* Database Tables */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center">
-                            <Database className="h-5 w-5 mr-2 text-maroon-600" />
+                            <Database className="h-5 w-5 mr-2 text-maroon-600 dark:text-gray-400" />
                             Top 10 Database Tables
                         </CardTitle>
                         <CardDescription>Largest tables by size</CardDescription>
@@ -434,15 +434,15 @@ export default function SystemMetrics({ auth }: Props) {
                         <div className="overflow-x-auto">
                             <table className="w-full">
                                 <thead>
-                                    <tr className="border-b">
-                                        <th className="text-left py-2 px-4 text-sm font-medium text-gray-600">Table Name</th>
-                                        <th className="text-right py-2 px-4 text-sm font-medium text-gray-600">Size (MB)</th>
-                                        <th className="text-right py-2 px-4 text-sm font-medium text-gray-600">Rows</th>
+                                    <tr className="border-b dark:border-gray-700">
+                                        <th className="text-left py-2 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Table Name</th>
+                                        <th className="text-right py-2 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Size (MB)</th>
+                                        <th className="text-right py-2 px-4 text-sm font-medium text-gray-600 dark:text-gray-400">Rows</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {metrics.database.top_tables.map((table, index) => (
-                                        <tr key={index} className="border-b hover:bg-gray-50">
+                                        <tr key={index} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
                                             <td className="py-2 px-4 text-sm">{table.name}</td>
                                             <td className="py-2 px-4 text-sm text-right">{table.size_mb}</td>
                                             <td className="py-2 px-4 text-sm text-right">{table.rows.toLocaleString()}</td>
@@ -455,31 +455,31 @@ export default function SystemMetrics({ auth }: Props) {
                 </Card>
 
                 {/* Storage Folders */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
                         <CardTitle className="flex items-center">
-                            <HardDrive className="h-5 w-5 mr-2 text-maroon-600" />
+                            <HardDrive className="h-5 w-5 mr-2 text-maroon-600 dark:text-gray-400" />
                             Storage Folders
                         </CardTitle>
                         <CardDescription>Application storage usage</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="p-4 bg-gray-50 rounded-lg">
-                                <div className="text-sm text-gray-600">Logs</div>
-                                <div className="text-lg font-semibold text-maroon-800 mt-1">
+                            <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">Logs</div>
+                                <div className="text-lg font-semibold text-maroon-800 dark:text-gray-200 mt-1">
                                     {metrics.storage.storage_folders.logs.size_formatted}
                                 </div>
                             </div>
-                            <div className="p-4 bg-gray-50 rounded-lg">
-                                <div className="text-sm text-gray-600">Framework</div>
-                                <div className="text-lg font-semibold text-maroon-800 mt-1">
+                            <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">Framework</div>
+                                <div className="text-lg font-semibold text-maroon-800 dark:text-gray-200 mt-1">
                                     {metrics.storage.storage_folders.framework.size_formatted}
                                 </div>
                             </div>
-                            <div className="p-4 bg-gray-50 rounded-lg">
-                                <div className="text-sm text-gray-600">App</div>
-                                <div className="text-lg font-semibold text-maroon-800 mt-1">
+                            <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                                <div className="text-sm text-gray-600 dark:text-gray-400">App</div>
+                                <div className="text-lg font-semibold text-maroon-800 dark:text-gray-200 mt-1">
                                     {metrics.storage.storage_folders.app.size_formatted}
                                 </div>
                             </div>

@@ -244,7 +244,7 @@ export default function EmailTemplatesManagement({ user }: Props) {
     const getStatusBadge = (status: string) => {
         const statusConfig = {
             'active': { color: 'bg-green-100 text-green-800', icon: CheckCircle },
-            'inactive': { color: 'bg-gray-100 text-gray-800', icon: Clock },
+            'inactive': { color: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200', icon: Clock },
             'draft': { color: 'bg-yellow-100 text-yellow-800', icon: AlertTriangle },
         };
 
@@ -262,7 +262,7 @@ export default function EmailTemplatesManagement({ user }: Props) {
     const getTypeBadge = (type: string) => {
         const typeInfo = templateTypes.find(t => t.value === type);
         return (
-            <Badge className={typeInfo?.color || 'bg-gray-100 text-gray-800'}>
+            <Badge className={typeInfo?.color || 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'}>
                 {typeInfo?.label || type}
             </Badge>
         );
@@ -304,8 +304,8 @@ export default function EmailTemplatesManagement({ user }: Props) {
             <AdminBaseLayout title="Email Templates" user={user}>
                 <div className="flex items-center justify-center min-h-96">
                     <div className="flex items-center space-x-2">
-                        <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
-                        <span className="text-maroon-800 font-medium">Loading email templates...</span>
+                        <RefreshCw className="h-8 w-8 text-maroon-600 dark:text-gray-400 animate-spin" />
+                        <span className="text-maroon-800 dark:text-gray-200 font-medium">Loading email templates...</span>
                     </div>
                 </div>
             </AdminBaseLayout>
@@ -338,8 +338,8 @@ export default function EmailTemplatesManagement({ user }: Props) {
                 {/* Header with Actions */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h2 className="text-2xl font-bold text-maroon-800">Email Templates</h2>
-                        <p className="text-maroon-600">Manage system email templates and communications</p>
+                        <h2 className="text-2xl font-bold text-maroon-800 dark:text-gray-200">Email Templates</h2>
+                        <p className="text-maroon-600 dark:text-gray-400">Manage system email templates and communications</p>
                     </div>
 
                     <div className="flex items-center space-x-2">
@@ -347,7 +347,7 @@ export default function EmailTemplatesManagement({ user }: Props) {
                             onClick={exportTemplates}
                             variant="outline"
                             size="sm"
-                            className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                         >
                             <Download className="h-4 w-4 mr-2" />
                             Export
@@ -366,54 +366,54 @@ export default function EmailTemplatesManagement({ user }: Props) {
                 {/* Statistics Cards */}
                 {stats && (
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-maroon-800">Total Templates</CardTitle>
-                                <Mail className="h-4 w-4 text-maroon-600" />
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Templates</CardTitle>
+                                <Mail className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-maroon-800">{stats.total_templates}</div>
-                                <p className="text-xs text-maroon-600 mt-1">{stats.active_templates} active</p>
+                                <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">{stats.total_templates}</div>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">{stats.active_templates} active</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-maroon-800">Total Sent</CardTitle>
-                                <Send className="h-4 w-4 text-maroon-600" />
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Sent</CardTitle>
+                                <Send className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-bold text-blue-600">{stats.total_sent.toLocaleString()}</div>
-                                <p className="text-xs text-maroon-600 mt-1">Emails sent</p>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Emails sent</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-maroon-800">Categories</CardTitle>
-                                <FileText className="h-4 w-4 text-maroon-600" />
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Categories</CardTitle>
+                                <FileText className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-bold text-green-600">{categories.length}</div>
-                                <p className="text-xs text-maroon-600 mt-1">Template categories</p>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Template categories</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-maroon-800">Most Used</CardTitle>
-                                <Users className="h-4 w-4 text-maroon-600" />
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Most Used</CardTitle>
+                                <Users className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-lg font-bold text-purple-600 truncate">{stats.most_used_template}</div>
-                                <p className="text-xs text-maroon-600 mt-1">Popular template</p>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Popular template</p>
                             </CardContent>
                         </Card>
                     </div>
                 )}
 
                 {/* Filters */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardContent className="p-4">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div className="relative">
@@ -422,14 +422,14 @@ export default function EmailTemplatesManagement({ user }: Props) {
                                     placeholder="Search templates..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-10 border-beige-300 focus:border-maroon-400 focus:ring-maroon-200"
+                                    className="pl-10 border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-maroon-400 focus:ring-maroon-200"
                                 />
                             </div>
 
                             <select
                                 value={selectedCategory}
                                 onChange={(e) => setSelectedCategory(e.target.value)}
-                                className="px-3 py-2 border border-beige-300 rounded-md focus:border-maroon-400 focus:ring-maroon-200"
+                                className="px-3 py-2 border border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md focus:border-maroon-400 focus:ring-maroon-200"
                             >
                                 <option value="">All Categories</option>
                                 {categories.map((category) => (
@@ -442,7 +442,7 @@ export default function EmailTemplatesManagement({ user }: Props) {
                             <select
                                 value={selectedType}
                                 onChange={(e) => setSelectedType(e.target.value)}
-                                className="px-3 py-2 border border-beige-300 rounded-md focus:border-maroon-400 focus:ring-maroon-200"
+                                className="px-3 py-2 border border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md focus:border-maroon-400 focus:ring-maroon-200"
                             >
                                 <option value="">All Types</option>
                                 {templateTypes.map((type) => (
@@ -455,7 +455,7 @@ export default function EmailTemplatesManagement({ user }: Props) {
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="px-3 py-2 border border-beige-300 rounded-md focus:border-maroon-400 focus:ring-maroon-200"
+                                className="px-3 py-2 border border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md focus:border-maroon-400 focus:ring-maroon-200"
                             >
                                 <option value="">All Status</option>
                                 <option value="active">Active</option>
@@ -467,10 +467,10 @@ export default function EmailTemplatesManagement({ user }: Props) {
                 </Card>
 
                 {/* Templates List */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800">Email Templates</CardTitle>
-                        <CardDescription className="text-maroon-600">
+                        <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Email Templates</CardTitle>
+                        <CardDescription className="text-maroon-600 dark:text-gray-400">
                             Showing {templates.length} template{templates.length !== 1 ? 's' : ''}
                         </CardDescription>
                     </CardHeader>
@@ -478,8 +478,8 @@ export default function EmailTemplatesManagement({ user }: Props) {
                         {templates.length === 0 ? (
                             <div className="text-center py-8">
                                 <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                                <h3 className="text-lg font-medium text-gray-900 mb-2">No templates found</h3>
-                                <p className="text-gray-500 mb-4">
+                                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No templates found</h3>
+                                <p className="text-gray-500 dark:text-gray-400 mb-4">
                                     {searchTerm || selectedCategory || selectedType || statusFilter
                                         ? 'Try adjusting your filters'
                                         : 'Create your first email template to get started'
@@ -496,37 +496,37 @@ export default function EmailTemplatesManagement({ user }: Props) {
                         ) : (
                             <div className="space-y-4">
                                 {templates.map((template) => (
-                                    <div key={template.id} className="border border-beige-200 rounded-lg p-4 hover:bg-beige-50">
+                                    <div key={template.id} className="border border-beige-200 dark:border-gray-700 rounded-lg p-4 hover:bg-beige-50 dark:hover:bg-gray-700">
                                         <div className="flex items-start justify-between">
                                             <div className="flex-1">
                                                 <div className="flex items-center space-x-2 mb-2">
-                                                    <Mail className="h-4 w-4 text-maroon-600" />
-                                                    <h3 className="font-medium text-maroon-800">{template.name}</h3>
+                                                    <Mail className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                                                    <h3 className="font-medium text-maroon-800 dark:text-gray-200">{template.name}</h3>
                                                     {getTypeBadge(template.type)}
                                                     {getCategoryBadge(template.category)}
                                                     {getStatusBadge(template.status)}
                                                 </div>
 
                                                 <div className="mb-2">
-                                                    <p className="text-sm font-medium text-gray-700 mb-1">
+                                                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                                         Subject: {template.subject}
                                                     </p>
-                                                    <p className="text-sm text-gray-600">
+                                                    <p className="text-sm text-gray-600 dark:text-gray-400">
                                                         {truncateText(template.body.replace(/<[^>]*>/g, ''), 150)}
                                                     </p>
                                                 </div>
 
                                                 {template.variables.length > 0 && (
                                                     <div className="mb-2">
-                                                        <p className="text-sm text-gray-600 mb-1">Variables:</p>
+                                                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Variables:</p>
                                                         <div className="flex flex-wrap gap-1">
                                                             {template.variables.slice(0, 5).map((variable, index) => (
-                                                                <Badge key={index} className="bg-gray-100 text-gray-700 text-xs">
+                                                                <Badge key={index} className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs">
                                                                     {variable}
                                                                 </Badge>
                                                             ))}
                                                             {template.variables.length > 5 && (
-                                                                <Badge className="bg-gray-100 text-gray-700 text-xs">
+                                                                <Badge className="bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-xs">
                                                                     +{template.variables.length - 5} more
                                                                 </Badge>
                                                             )}
@@ -534,7 +534,7 @@ export default function EmailTemplatesManagement({ user }: Props) {
                                                     </div>
                                                 )}
 
-                                                <div className="flex items-center space-x-4 text-sm text-gray-600">
+                                                <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400">
                                                     <span>Used {template.usage_count} times</span>
                                                     {template.last_sent_at && (
                                                         <span>Last sent: {formatDate(template.last_sent_at)}</span>
@@ -576,7 +576,7 @@ export default function EmailTemplatesManagement({ user }: Props) {
                                                     onClick={() => router.visit(`/admin/email-templates/${template.id}/edit`)}
                                                     variant="outline"
                                                     size="sm"
-                                                    className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                                    className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                                 >
                                                     <Edit className="h-4 w-4" />
                                                 </Button>
@@ -601,9 +601,9 @@ export default function EmailTemplatesManagement({ user }: Props) {
                 {/* Preview Modal */}
                 {previewTemplate && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
                             <div className="flex items-center justify-between p-6 border-b">
-                                <h3 className="text-lg font-semibold text-maroon-800">
+                                <h3 className="text-lg font-semibold text-maroon-800 dark:text-gray-200">
                                     Template Preview: {previewTemplate.name}
                                 </h3>
                                 <Button
@@ -617,19 +617,19 @@ export default function EmailTemplatesManagement({ user }: Props) {
                             <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="text-sm font-medium text-gray-700">Subject:</label>
-                                        <p className="text-maroon-800 font-medium">{previewTemplate.subject}</p>
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Subject:</label>
+                                        <p className="text-maroon-800 dark:text-gray-200 font-medium">{previewTemplate.subject}</p>
                                     </div>
                                     <div>
-                                        <label className="text-sm font-medium text-gray-700">Body:</label>
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Body:</label>
                                         <div
-                                            className="border border-gray-200 rounded-lg p-4 bg-gray-50 min-h-[300px]"
+                                            className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-900 min-h-[300px]"
                                             dangerouslySetInnerHTML={{ __html: previewTemplate.body }}
                                         />
                                     </div>
                                     {previewTemplate.variables.length > 0 && (
                                         <div>
-                                            <label className="text-sm font-medium text-gray-700">Available Variables:</label>
+                                            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Available Variables:</label>
                                             <div className="flex flex-wrap gap-2 mt-2">
                                                 {previewTemplate.variables.map((variable, index) => (
                                                     <Badge key={index} className="bg-blue-100 text-blue-800">

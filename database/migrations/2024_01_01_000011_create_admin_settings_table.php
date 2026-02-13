@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('admin_settings')) {
         Schema::create('admin_settings', function (Blueprint $table) {
             $table->id();
             $table->string('key')->unique();
@@ -23,6 +24,7 @@ return new class extends Migration
 
             $table->index(['category', 'key']);
         });
+        }
     }
 
     /**

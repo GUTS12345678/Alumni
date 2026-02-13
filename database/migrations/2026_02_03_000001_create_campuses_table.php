@@ -12,6 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         // Create campuses table
+        if (!Schema::hasTable('campuses')) {
         Schema::create('campuses', function (Blueprint $table) {
             $table->id();
             $table->string('name', 100);
@@ -26,6 +27,7 @@ return new class extends Migration
             $table->index('code');
             $table->index('is_active');
         });
+        }
 
         // Insert default campuses
         DB::table('campuses')->insert([

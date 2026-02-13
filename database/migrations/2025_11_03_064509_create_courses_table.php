@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('courses')) {
         Schema::create('courses', function (Blueprint $table) {
             $table->id();
             $table->foreignId('department_id')->constrained('departments')->onDelete('cascade');
@@ -26,6 +27,7 @@ return new class extends Migration
             $table->unique(['department_id', 'code'], 'unique_course_code_per_dept');
             $table->index('status');
         });
+        }
     }
 
     /**

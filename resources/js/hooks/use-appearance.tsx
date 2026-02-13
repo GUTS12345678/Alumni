@@ -33,22 +33,36 @@ const mediaQuery = () => {
     return window.matchMedia('(prefers-color-scheme: dark)');
 };
 
-const handleSystemThemeChange = () => {
-    const currentAppearance = localStorage.getItem('appearance') as Appearance;
-    applyTheme(currentAppearance || 'system');
-};
-
 export function initializeTheme() {
-    const savedAppearance = (localStorage.getItem('appearance') as Appearance) || 'system';
+    if (typeof window === 'undefined') return;
 
+    const savedAppearance = (localStorage.getItem('appearance') as Appearance) || 'system';
     applyTheme(savedAppearance);
 
-    // Add the event listener for system theme changes...
-    mediaQuery()?.addEventListener('change', handleSystemThemeChange);
+    // Add system theme change listener (will be managed by useAppearance hook if used)
+    const listener = () => {
+        const currentAppearance = localStorage.getItem('appearance') as Appearance;
+        if (currentAppearance === 'system' || !currentAppearance) {
+            applyTheme(currentAppearance || 'system');
+        }
+    };
+
+    mediaQuery()?.addEventListener('change', listener);
+
+    // Return cleanup function for manual cleanup if needed
+    return () => {
+        mediaQuery()?.removeEventListener('change', listener);
+    };
 }
 
 export function useAppearance() {
-    const [appearance, setAppearance] = useState<Appearance>('system');
+    const [appearance, setAppearance] = useState<Appearance>(() => {
+        // Initialize from localStorage on mount
+        if (typeof window !== 'undefined') {
+            return (localStorage.getItem('appearance') as Appearance) || 'system';
+        }
+        return 'system';
+    });
 
     const updateAppearance = useCallback((mode: Appearance) => {
         setAppearance(mode);
@@ -63,11 +77,24 @@ export function useAppearance() {
     }, []);
 
     useEffect(() => {
-        const savedAppearance = localStorage.getItem('appearance') as Appearance | null;
-        updateAppearance(savedAppearance || 'system');
+        // Apply theme on mount
+        applyTheme(appearance);
 
-        return () => mediaQuery()?.removeEventListener('change', handleSystemThemeChange);
-    }, [updateAppearance]);
+        // Set up system theme change listener
+        const mq = mediaQuery();
+        const listener = () => {
+            const currentAppearance = localStorage.getItem('appearance') as Appearance;
+            if (currentAppearance === 'system' || !currentAppearance) {
+                applyTheme(currentAppearance || 'system');
+            }
+        };
+
+        mq?.addEventListener('change', listener);
+
+        return () => {
+            mq?.removeEventListener('change', listener);
+        };
+    }, [appearance]);
 
     return { appearance, updateAppearance } as const;
 }

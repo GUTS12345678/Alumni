@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('message_reads')) {
         Schema::create('message_reads', function (Blueprint $table) {
             $table->id();
             $table->foreignId('message_id')->constrained('messages')->onDelete('cascade');
@@ -24,6 +25,7 @@ return new class extends Migration
             $table->index('user_id');
             $table->index('read_at');
         });
+        }
     }
 
     /**

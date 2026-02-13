@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('employments')) {
         Schema::create('employments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('alumni_id')->constrained('alumni_profiles')->onDelete('cascade');
@@ -25,6 +26,7 @@ return new class extends Migration
             $table->enum('employment_type', ['full-time', 'part-time', 'contract', 'freelance', 'internship'])->default('full-time');
             $table->timestamps();
         });
+        }
     }
 
     /**

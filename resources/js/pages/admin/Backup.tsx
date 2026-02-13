@@ -140,7 +140,7 @@ export default function BackupManagement({ user }: Props) {
             });
 
             const result = await response.json();
-            
+
             if (response.ok && result.success) {
                 alert(`✅ Backup created successfully!\n\nFilename: ${result.data.filename}\nSize: ${result.data.size}\nType: ${result.data.type}`);
                 fetchBackupData(); // Refresh the backup list
@@ -202,7 +202,7 @@ export default function BackupManagement({ user }: Props) {
             });
 
             const result = await response.json();
-            
+
             if (response.ok && result.success) {
                 alert('✅ Backup deleted successfully!');
                 fetchBackupData(); // Refresh the backup list
@@ -262,8 +262,8 @@ export default function BackupManagement({ user }: Props) {
             <AdminBaseLayout title="Backup Management" user={user}>
                 <div className="flex items-center justify-center min-h-96">
                     <div className="flex items-center space-x-2">
-                        <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
-                        <span className="text-maroon-800 font-medium">Loading backup data...</span>
+                        <RefreshCw className="h-8 w-8 text-maroon-600 dark:text-gray-400 animate-spin" />
+                        <span className="text-maroon-800 dark:text-gray-200 font-medium">Loading backup data...</span>
                     </div>
                 </div>
             </AdminBaseLayout>
@@ -294,8 +294,8 @@ export default function BackupManagement({ user }: Props) {
                 {/* Header with Actions */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h2 className="text-2xl font-bold text-maroon-800">Database Backup Management</h2>
-                        <p className="text-maroon-600">Create, manage, and restore database backups</p>
+                        <h2 className="text-2xl font-bold text-maroon-800 dark:text-gray-200">Database Backup Management</h2>
+                        <p className="text-maroon-600 dark:text-gray-400">Create, manage, and restore database backups</p>
                     </div>
 
                     <div className="flex items-center space-x-2">
@@ -303,7 +303,7 @@ export default function BackupManagement({ user }: Props) {
                             onClick={() => fetchBackupData()}
                             variant="outline"
                             size="sm"
-                            className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                         >
                             <RefreshCw className="h-4 w-4 mr-2" />
                             Refresh
@@ -314,62 +314,62 @@ export default function BackupManagement({ user }: Props) {
                 {/* System Information */}
                 {systemInfo && (
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-maroon-800">Database Size</CardTitle>
-                                <Database className="h-4 w-4 text-maroon-600" />
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Database Size</CardTitle>
+                                <Database className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                             </CardHeader>
                             <CardContent>
-                                <div className="text-2xl font-bold text-maroon-800">{systemInfo.database_size}</div>
-                                <p className="text-xs text-maroon-600 mt-1">Total database size</p>
+                                <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">{systemInfo.database_size}</div>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Total database size</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-maroon-800">Total Records</CardTitle>
-                                <FileText className="h-4 w-4 text-maroon-600" />
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Records</CardTitle>
+                                <FileText className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-bold text-blue-600">{systemInfo.total_records.toLocaleString()}</div>
-                                <p className="text-xs text-maroon-600 mt-1">Across {systemInfo.total_tables} tables</p>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Across {systemInfo.total_tables} tables</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-maroon-800">Available Space</CardTitle>
-                                <HardDrive className="h-4 w-4 text-maroon-600" />
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Available Space</CardTitle>
+                                <HardDrive className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-2xl font-bold text-green-600">{systemInfo.available_space}</div>
-                                <p className="text-xs text-maroon-600 mt-1">Free disk space</p>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Free disk space</p>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-beige-200 shadow-lg">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-maroon-800">Last Backup</CardTitle>
-                                <Calendar className="h-4 w-4 text-maroon-600" />
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Last Backup</CardTitle>
+                                <Calendar className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                             </CardHeader>
                             <CardContent>
                                 <div className="text-lg font-bold text-purple-600">
                                     {systemInfo.last_backup || 'Never'}
                                 </div>
-                                <p className="text-xs text-maroon-600 mt-1">Most recent backup</p>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Most recent backup</p>
                             </CardContent>
                         </Card>
                     </div>
                 )}
 
                 {/* Create Backup Actions */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800 flex items-center">
+                        <CardTitle className="text-xl text-maroon-800 dark:text-gray-200 flex items-center">
                             <Database className="h-5 w-5 mr-2" />
                             Create New Backup
                         </CardTitle>
-                        <CardDescription className="text-maroon-600">
+                        <CardDescription className="text-maroon-600 dark:text-gray-400">
                             Choose the type of backup to create
                         </CardDescription>
                     </CardHeader>
@@ -379,7 +379,7 @@ export default function BackupManagement({ user }: Props) {
                                 <CardContent className="p-4 text-center">
                                     <Shield className="h-8 w-8 text-purple-600 mx-auto mb-2" />
                                     <h3 className="font-medium text-purple-800 mb-2">Full Backup</h3>
-                                    <p className="text-sm text-gray-600 mb-4">
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                                         Complete database backup with all data and structure
                                     </p>
                                     <Button
@@ -397,7 +397,7 @@ export default function BackupManagement({ user }: Props) {
                                 <CardContent className="p-4 text-center">
                                     <FileText className="h-8 w-8 text-orange-600 mx-auto mb-2" />
                                     <h3 className="font-medium text-orange-800 mb-2">Data Only</h3>
-                                    <p className="text-sm text-gray-600 mb-4">
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                                         Backup only the data without structure
                                     </p>
                                     <Button
@@ -415,7 +415,7 @@ export default function BackupManagement({ user }: Props) {
                                 <CardContent className="p-4 text-center">
                                     <Database className="h-8 w-8 text-blue-600 mx-auto mb-2" />
                                     <h3 className="font-medium text-blue-800 mb-2">Structure Only</h3>
-                                    <p className="text-sm text-gray-600 mb-4">
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                                         Backup only database structure and schema
                                     </p>
                                     <Button
@@ -433,10 +433,10 @@ export default function BackupManagement({ user }: Props) {
                 </Card>
 
                 {/* Backup History */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800">Backup History</CardTitle>
-                        <CardDescription className="text-maroon-600">
+                        <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Backup History</CardTitle>
+                        <CardDescription className="text-maroon-600 dark:text-gray-400">
                             Previous database backups and their status
                         </CardDescription>
                     </CardHeader>
@@ -444,27 +444,27 @@ export default function BackupManagement({ user }: Props) {
                         {backups.length === 0 ? (
                             <div className="text-center py-8">
                                 <Database className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                                <h3 className="text-lg font-medium text-gray-900 mb-2">No backups found</h3>
-                                <p className="text-gray-500">
+                                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No backups found</h3>
+                                <p className="text-gray-500 dark:text-gray-400">
                                     Create your first backup using the options above
                                 </p>
                             </div>
                         ) : (
                             <div className="space-y-4">
                                 {backups.map((backup) => (
-                                    <div key={backup.id} className="flex items-center justify-between p-4 border border-beige-200 rounded-lg hover:bg-beige-50">
+                                    <div key={backup.id} className="flex items-center justify-between p-4 border border-beige-200 dark:border-gray-700 rounded-lg hover:bg-beige-50 dark:hover:bg-gray-700">
                                         <div className="flex items-center space-x-4">
                                             <div className="flex-shrink-0">
                                                 <Database className="h-8 w-8 text-maroon-600" />
                                             </div>
                                             <div>
-                                                <h4 className="font-medium text-maroon-800">{backup.filename}</h4>
+                                                <h4 className="font-medium text-maroon-800 dark:text-gray-200">{backup.filename}</h4>
                                                 <div className="flex items-center space-x-2 mt-1">
                                                     {getTypeBadge(backup.type)}
                                                     {getStatusBadge(backup.status)}
-                                                    <span className="text-sm text-gray-500">{backup.size}</span>
+                                                    <span className="text-sm text-gray-500 dark:text-gray-400">{backup.size}</span>
                                                 </div>
-                                                <p className="text-sm text-gray-600 mt-1">
+                                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                                                     Created: {formatDate(backup.created_at)}
                                                 </p>
                                             </div>
@@ -475,7 +475,7 @@ export default function BackupManagement({ user }: Props) {
                                                     onClick={() => downloadBackup(backup)}
                                                     variant="outline"
                                                     size="sm"
-                                                    className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                                    className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                                 >
                                                     <Download className="h-4 w-4 mr-2" />
                                                     Download
@@ -498,26 +498,26 @@ export default function BackupManagement({ user }: Props) {
                 </Card>
 
                 {/* Restore Options */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800 flex items-center">
+                        <CardTitle className="text-xl text-maroon-800 dark:text-gray-200 flex items-center">
                             <Upload className="h-5 w-5 mr-2" />
                             Restore Database
                         </CardTitle>
-                        <CardDescription className="text-maroon-600">
+                        <CardDescription className="text-maroon-600 dark:text-gray-400">
                             Upload and restore from a backup file
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="border-2 border-dashed border-beige-300 rounded-lg p-6 text-center">
+                        <div className="border-2 border-dashed border-beige-300 dark:border-gray-600 rounded-lg p-6 text-center">
                             <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                            <h3 className="text-lg font-medium text-gray-900 mb-2">Upload Backup File</h3>
-                            <p className="text-gray-500 mb-4">
+                            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Upload Backup File</h3>
+                            <p className="text-gray-500 dark:text-gray-400 mb-4">
                                 Select a backup file to restore your database
                             </p>
                             <Button
                                 variant="outline"
-                                className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                             >
                                 <Upload className="h-4 w-4 mr-2" />
                                 Choose File

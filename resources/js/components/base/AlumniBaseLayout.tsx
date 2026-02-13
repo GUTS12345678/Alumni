@@ -20,7 +20,8 @@ import {
     LogOut,
     GraduationCap,
     MessageCircle,
-    Bell
+    Bell,
+    UserCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import AppearanceToggleDropdown from '@/components/appearance-dropdown';
@@ -73,6 +74,7 @@ const alumniNavigation = [
             { name: "Career Timeline", href: "/alumni/career", icon: TrendingUp },
             { name: "Job Board", href: "/alumni/job-board", icon: Briefcase },
             { name: "Alumni Network", href: "/alumni/network", icon: Users },
+            { name: "My Connections", href: "/alumni/connections", icon: UserCheck },
             { name: "Mentorship", href: "/alumni/mentorship", icon: Heart }
         ]
     },
@@ -143,7 +145,7 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
         <div className="flex flex-col h-screen">
             {/* Logo */}
             <div className={cn(
-                "flex items-center px-6 py-4 border-b border-beige-200 flex-shrink-0",
+                "flex items-center px-6 py-4 border-b border-beige-200 dark:border-gray-700 flex-shrink-0",
                 sidebarCollapsed && "px-4"
             )}>
                 {appearanceSettings.logoLight || appearanceSettings.logoDark ? (
@@ -155,18 +157,18 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                         />
                         {!sidebarCollapsed && (
                             <div className="ml-3">
-                                <h1 className="text-lg font-bold text-maroon-800">Alumni Tracer</h1>
-                                <p className="text-xs text-maroon-600">Alumni Portal</p>
+                                <h1 className="text-lg font-bold text-maroon-800 dark:text-maroon-200">Alumni Tracer</h1>
+                                <p className="text-xs text-maroon-600 dark:text-maroon-400">Alumni Portal</p>
                             </div>
                         )}
                     </div>
                 ) : (
                     <div className="flex items-center">
-                        <GraduationCap className="h-8 w-8 text-maroon-600 flex-shrink-0" />
+                        <GraduationCap className="h-8 w-8 text-maroon-600 dark:text-maroon-400 flex-shrink-0" />
                         {!sidebarCollapsed && (
                             <div className="ml-3">
-                                <h1 className="text-lg font-bold text-maroon-800">Alumni Tracer</h1>
-                                <p className="text-xs text-maroon-600">Alumni Portal</p>
+                                <h1 className="text-lg font-bold text-maroon-800 dark:text-maroon-200">Alumni Tracer</h1>
+                                <p className="text-xs text-maroon-600 dark:text-maroon-400">Alumni Portal</p>
                             </div>
                         )}
                     </div>
@@ -174,11 +176,11 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
             </div>
 
             {/* Navigation */}
-            <div className="flex-1 overflow-y-auto py-4 scrollbar-thin scrollbar-thumb-maroon-300 scrollbar-track-beige-100">
+            <div className="flex-1 overflow-y-auto py-4 scrollbar-none">
                 {alumniNavigation.map((section) => (
                     <div key={section.section} className="mb-6">
                         {!sidebarCollapsed && (
-                            <h3 className="px-6 mb-2 text-xs font-semibold text-maroon-600 uppercase tracking-wider">
+                            <h3 className="px-6 mb-2 text-xs font-semibold text-maroon-600 dark:text-maroon-400 uppercase tracking-wider">
                                 {section.section}
                             </h3>
                         )}
@@ -195,8 +197,8 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                                             "flex items-center px-6 py-3 text-sm font-medium transition-colors duration-200",
                                             sidebarCollapsed && "px-4 justify-center",
                                             isActive
-                                                ? "bg-maroon-100 text-maroon-800 border-r-2 border-maroon-600"
-                                                : "text-gray-700 hover:bg-beige-50 hover:text-maroon-700"
+                                                ? "bg-maroon-100 dark:bg-maroon-900/50 text-maroon-800 dark:text-maroon-200 border-r-2 border-maroon-600"
+                                                : "text-gray-700 dark:text-gray-300 hover:bg-beige-50 dark:hover:bg-gray-800 hover:text-maroon-700 dark:hover:text-maroon-300"
                                         )}
                                         title={sidebarCollapsed ? item.name : undefined}
                                     >
@@ -214,14 +216,14 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
 
             {/* User Profile */}
             <div className={cn(
-                "border-t border-beige-200 p-4 flex-shrink-0",
+                "border-t border-beige-200 dark:border-gray-700 p-4 flex-shrink-0",
                 sidebarCollapsed && "px-2"
             )}>
                 <div className={cn(
                     "flex items-center",
                     sidebarCollapsed ? "justify-center" : "space-x-3"
                 )}>
-                    <div className="h-8 w-8 bg-maroon-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    <div className="h-8 w-8 bg-maroon-600 dark:bg-maroon-700 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
                         {currentUser?.profile_picture_path ? (
                             <img
                                 src={currentUser.profile_picture_path.startsWith('/storage') ? currentUser.profile_picture_path : `/storage/${currentUser.profile_picture_path}`}
@@ -234,12 +236,12 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                     </div>
                     {!sidebarCollapsed && (
                         <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                                 {currentUser?.alumniProfile?.first_name && currentUser?.alumniProfile?.last_name
                                     ? `${currentUser.alumniProfile.first_name} ${currentUser.alumniProfile.last_name}`
                                     : currentUser?.email?.split('@')[0] || 'Alumni User'}
                             </p>
-                            <p className="text-xs text-gray-500">Alumni Member</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">Alumni Member</p>
                         </div>
                     )}
                 </div>
@@ -248,7 +250,7 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                         onClick={handleLogout}
                         variant="ghost"
                         size="sm"
-                        className="w-full mt-3 text-gray-700 hover:text-maroon-700 hover:bg-beige-50 justify-start"
+                        className="w-full mt-3 text-gray-700 dark:text-gray-300 hover:text-maroon-700 dark:hover:text-maroon-300 hover:bg-beige-50 dark:hover:bg-gray-800 justify-start"
                     >
                         <LogOut className="h-4 w-4 mr-2" />
                         Logout
@@ -262,10 +264,10 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
         <>
             <Head title={title} />
 
-            <div className="flex h-screen bg-beige-50 overflow-hidden">
+            <div className="flex min-h-screen md:h-screen bg-beige-50 dark:bg-gray-900 overflow-x-hidden md:overflow-hidden">
                 {/* Desktop Sidebar - Fixed Position */}
                 <div className={cn(
-                    "hidden md:flex md:flex-col bg-white border-r border-beige-200 transition-all duration-300 fixed left-0 top-0 bottom-0 z-20",
+                    "hidden md:flex md:flex-col bg-white dark:bg-gray-900 border-r border-beige-200 dark:border-gray-700 transition-all duration-300 fixed left-0 top-0 bottom-0 z-20",
                     sidebarCollapsed ? "md:w-16" : "md:w-64"
                 )}>
                     <SidebarContent />
@@ -275,7 +277,7 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                         onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
                         variant="ghost"
                         size="sm"
-                        className="absolute -right-3 top-4 h-6 w-6 p-0 border border-beige-200 bg-white shadow-sm hover:bg-beige-50 z-30"
+                        className="absolute -right-3 top-4 h-6 w-6 p-0 border border-beige-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm hover:bg-beige-50 dark:hover:bg-gray-700 z-30"
                     >
                         {sidebarCollapsed ? (
                             <ChevronRight className="h-3 w-3" />
@@ -288,14 +290,14 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                 {/* Mobile Sidebar Overlay */}
                 {mobileMenuOpen && (
                     <div
-                        className="fixed inset-0 bg-gray-900/20 backdrop-blur-sm z-40 md:hidden"
+                        className="fixed inset-0 bg-gray-900/20 dark:bg-gray-900/50 backdrop-blur-sm z-40 md:hidden"
                         onClick={() => setMobileMenuOpen(false)}
                     />
                 )}
 
                 {/* Mobile Sidebar */}
                 <div className={cn(
-                    "fixed inset-y-0 left-0 z-50 w-64 bg-white transform transition-transform duration-300 ease-in-out md:hidden",
+                    "fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-gray-900 transform transition-transform duration-300 ease-in-out md:hidden",
                     mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
                 )}>
                     <SidebarContent />
@@ -303,28 +305,28 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
 
                 {/* Main Content - Add margin for fixed sidebar */}
                 <div className={cn(
-                    "flex-1 flex flex-col min-w-0 bg-white h-screen transition-all duration-300",
+                    "flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-900 transition-all duration-300",
                     sidebarCollapsed ? "md:ml-16" : "md:ml-64"
                 )}>
                     {/* Header */}
-                    <header className="bg-white border-b border-beige-200 px-4 py-3 flex-shrink-0 shadow-sm">
+                    <header className="bg-white dark:bg-gray-900 border-b border-beige-200 dark:border-gray-700 px-4 py-3 flex-shrink-0 shadow-sm dark:shadow-gray-950/20">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center">
                                 <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                                    className="md:hidden text-gray-700 hover:text-maroon-700 hover:bg-beige-50"
+                                    className="md:hidden text-gray-700 dark:text-gray-300 hover:text-maroon-700 dark:hover:text-maroon-300 hover:bg-beige-50 dark:hover:bg-gray-800"
                                 >
                                     <Menu className="h-5 w-5" />
                                 </Button>
-                                <h1 className="ml-2 text-xl font-semibold text-maroon-800">{title}</h1>
+                                <h1 className="ml-2 text-xl font-semibold text-maroon-800 dark:text-maroon-200">{title}</h1>
                             </div>
 
                             <div className="flex items-center space-x-4">
                                 {/* Campus Badge */}
                                 <CampusSelector variant="minimal" />
-                                <span className="hidden sm:block text-sm text-gray-600">
+                                <span className="hidden sm:block text-sm text-gray-600 dark:text-gray-400">
                                     Welcome, {currentUser?.alumniProfile?.first_name || currentUser?.email?.split('@')[0] || 'Alumni'}
                                 </span>
                                 <AppearanceToggleDropdown />
@@ -333,8 +335,8 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                     </header>
 
                     {/* Page Content - Scrollable */}
-                    <main className="flex-1 overflow-y-auto bg-beige-50">
-                        <div className="container mx-auto px-4 py-6 max-w-7xl">
+                    <main className="flex-1 overflow-y-auto bg-beige-50 dark:bg-gray-950 scrollbar-none">
+                        <div className="container mx-auto px-4 pt-6 pb-8 max-w-7xl min-h-full">
                             {children}
                         </div>
                     </main>

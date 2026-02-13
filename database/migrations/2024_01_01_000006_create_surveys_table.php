@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('surveys')) {
         Schema::create('surveys', function (Blueprint $table) {
             $table->id();
             $table->string('title');
@@ -51,6 +52,7 @@ return new class extends Migration
             $table->index(['status', 'type']);
             $table->index(['start_date', 'end_date']);
         });
+        }
     }
 
     /**

@@ -14,6 +14,15 @@ export default defineConfig({
         react(),
         tailwindcss(),
     ],
+    build: {
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    recharts: ['recharts'],
+                },
+            },
+        },
+    },
     server: {
         host: '0.0.0.0', // Allow external access
         port: 5173,

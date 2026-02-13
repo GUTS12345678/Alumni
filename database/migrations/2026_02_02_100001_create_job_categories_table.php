@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('job_categories')) {
         Schema::create('job_categories', function (Blueprint $table) {
             $table->id();
             $table->string('name');
@@ -26,6 +27,7 @@ return new class extends Migration
             $table->index('is_active');
             $table->index('sort_order');
         });
+        }
     }
 
     /**

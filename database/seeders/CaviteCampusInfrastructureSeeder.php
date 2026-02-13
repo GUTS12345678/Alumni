@@ -21,11 +21,11 @@ class CaviteCampusInfrastructureSeeder extends Seeder
         echo "⏳ Creating departments for Cavite Campus...\n";
         
         $departments = [
-            ['name' => 'College of Engineering', 'code' => 'COE-CAV', 'campus_id' => 2],
-            ['name' => 'College of Computer Studies', 'code' => 'CCS-CAV', 'campus_id' => 2],
-            ['name' => 'College of Business Administration', 'code' => 'CBA-CAV', 'campus_id' => 2],
-            ['name' => 'College of Industrial Education', 'code' => 'CIE-CAV', 'campus_id' => 2],
-            ['name' => 'College of Science', 'code' => 'CS-CAV', 'campus_id' => 2],
+            ['name' => 'College of Engineering - Cavite', 'code' => 'COE-CAV', 'campus_id' => 2],
+            ['name' => 'College of Computer Studies - Cavite', 'code' => 'CCS-CAV', 'campus_id' => 2],
+            ['name' => 'College of Business Administration - Cavite', 'code' => 'CBA-CAV', 'campus_id' => 2],
+            ['name' => 'College of Industrial Education - Cavite', 'code' => 'CIE-CAV', 'campus_id' => 2],
+            ['name' => 'College of Science - Cavite', 'code' => 'CS-CAV', 'campus_id' => 2],
         ];
 
         foreach ($departments as $dept) {

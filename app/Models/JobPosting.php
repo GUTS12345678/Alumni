@@ -20,13 +20,16 @@ class JobPosting extends Model
         'company_name',
         'company_logo',
         'poster_image',
+        'background_image',
         'company_website',
         'description',
+        'pages',
+        'use_pages',
         
         // Category & Type
         'category_id',
         'job_type',
-        'employment_type',
+        'job_type',
         'experience_level',
         'work_arrangement',
         
@@ -57,7 +60,6 @@ class JobPosting extends Model
         
         // Dates
         'application_deadline',
-        'expires_at',
         'start_date',
         
         // Status & Tracking
@@ -78,12 +80,13 @@ class JobPosting extends Model
         'is_featured' => 'boolean',
         'is_salary_visible' => 'boolean',
         'show_on_landing' => 'boolean',
+        'use_pages' => 'boolean',
+        'pages' => 'array',
         'views' => 'integer',
         'views_count' => 'integer',
         'salary_min' => 'decimal:2',
         'salary_max' => 'decimal:2',
         'application_deadline' => 'date',
-        'expires_at' => 'date',
         'start_date' => 'date',
         'featured_until' => 'date',
         'published_at' => 'datetime',
@@ -120,6 +123,14 @@ class JobPosting extends Model
      * Alias for creator() - used by controller
      */
     public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Alias for creator() - some controllers use 'user' relationship
+     */
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
     }

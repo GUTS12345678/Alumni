@@ -44,6 +44,30 @@ const getCsrfToken = (): string => {
     return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 };
 
+// Helper function to get user display name
+const getDisplayName = (user: { name?: string; display_name?: string; email?: string; alumniProfile?: { first_name?: string; last_name?: string } } | null | undefined): string => {
+    if (!user) return 'Unknown';
+
+    // Use display_name if available (from Laravel accessor)
+    if (user.display_name) return user.display_name;
+
+    // Use name if available
+    if (user.name) return user.name;
+
+    // Try alumni profile
+    if (user.alumniProfile) {
+        const firstName = user.alumniProfile.first_name || '';
+        const lastName = user.alumniProfile.last_name || '';
+        const fullName = `${firstName} ${lastName}`.trim();
+        if (fullName) return fullName;
+    }
+
+    // Fall back to email username
+    if (user.email) return user.email.split('@')[0];
+
+    return 'Unknown';
+};
+
 interface PageProps extends InertiaPageProps {
     auth: {
         user: {
@@ -356,7 +380,8 @@ export default function Messages() {
         }
 
         try {
-            const response = await fetch(`/api/v1/messaging/users/search?query=${encodeURIComponent(query)}`, {
+            // Add connections_only=true to only show connected alumni
+            const response = await fetch(`/api/v1/messaging/users/search?query=${encodeURIComponent(query)}&connections_only=true`, {
                 headers: {
                     'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
@@ -420,7 +445,7 @@ export default function Messages() {
         const otherParticipant = conversation.participants?.find(
             p => p.user_id !== auth.user.id
         );
-        return otherParticipant?.user?.name || 'Unknown';
+        return getDisplayName(otherParticipant?.user);
     };
 
     const getConversationAvatar = (conversation: Conversation): string | undefined => {
@@ -623,44 +648,79 @@ export default function Messages() {
 
                             {/* Messages */}
                             <ScrollArea className="flex-1 p-4">
-                                <div className="space-y-4">
-                                    {messages.map((message) => (
-                                        <div
-                                            key={message.id}
-                                            className={cn(
-                                                "flex",
-                                                message.sender_id === auth.user.id ? "justify-end" : "justify-start"
-                                            )}
-                                        >
+                                <div className="space-y-3">
+                                    {messages.map((message, index) => {
+                                        const isOwnMessage = message.sender_id === auth.user.id;
+                                        const showAvatar = !isOwnMessage && (
+                                            index === 0 ||
+                                            messages[index - 1]?.sender_id !== message.sender_id
+                                        );
+                                        const isLastInGroup = index === messages.length - 1 ||
+                                            messages[index + 1]?.sender_id !== message.sender_id;
+
+                                        return (
                                             <div
+                                                key={message.id}
                                                 className={cn(
-                                                    "max-w-[70%] rounded-lg px-4 py-2",
-                                                    message.sender_id === auth.user.id
-                                                        ? "bg-primary text-primary-foreground"
-                                                        : "bg-muted"
+                                                    "flex items-end gap-2",
+                                                    isOwnMessage ? "justify-end" : "justify-start"
                                                 )}
                                             >
-                                                {message.sender_id !== auth.user.id && selectedConversation.type === 'group' && (
-                                                    <p className="text-xs font-medium mb-1 opacity-70">
-                                                        {message.sender?.name}
-                                                    </p>
+                                                {/* Avatar for received messages */}
+                                                {!isOwnMessage && (
+                                                    <div className="w-8 flex-shrink-0">
+                                                        {showAvatar ? (
+                                                            <Avatar className="h-8 w-8">
+                                                                <AvatarImage src={message.sender?.profile_picture_path || undefined} />
+                                                                <AvatarFallback className="text-xs">
+                                                                    {getDisplayName(message.sender).charAt(0).toUpperCase()}
+                                                                </AvatarFallback>
+                                                            </Avatar>
+                                                        ) : null}
+                                                    </div>
                                                 )}
-                                                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                                                <div className="flex items-center justify-end gap-1 mt-1">
-                                                    <span className="text-xs opacity-70">
-                                                        {formatTime(message.created_at)}
-                                                    </span>
-                                                    {message.sender_id === auth.user.id && (
-                                                        message.is_read ? (
-                                                            <CheckCheck className="h-3 w-3 opacity-70" />
-                                                        ) : (
-                                                            <Check className="h-3 w-3 opacity-70" />
-                                                        )
+
+                                                {/* Message bubble */}
+                                                <div
+                                                    className={cn(
+                                                        "max-w-[70%] px-3 py-2",
+                                                        isOwnMessage
+                                                            ? "bg-primary text-primary-foreground rounded-2xl rounded-br-md"
+                                                            : "bg-muted rounded-2xl rounded-bl-md",
+                                                        // Adjust border radius for message groups
+                                                        !isLastInGroup && isOwnMessage && "rounded-br-2xl",
+                                                        !isLastInGroup && !isOwnMessage && "rounded-bl-2xl"
                                                     )}
+                                                >
+                                                    {/* Sender name for group chats */}
+                                                    {!isOwnMessage && selectedConversation.type === 'group' && showAvatar && (
+                                                        <p className="text-xs font-medium mb-1 opacity-70">
+                                                            {getDisplayName(message.sender)}
+                                                        </p>
+                                                    )}
+
+                                                    <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+
+                                                    {/* Time and read status */}
+                                                    <div className={cn(
+                                                        "flex items-center gap-1 mt-1",
+                                                        isOwnMessage ? "justify-end" : "justify-start"
+                                                    )}>
+                                                        <span className="text-[10px] opacity-60">
+                                                            {formatTime(message.created_at)}
+                                                        </span>
+                                                        {isOwnMessage && (
+                                                            message.is_read ? (
+                                                                <CheckCheck className="h-3 w-3 opacity-60" />
+                                                            ) : (
+                                                                <Check className="h-3 w-3 opacity-60" />
+                                                            )
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                     <div ref={messagesEndRef} />
                                 </div>
                             </ScrollArea>
@@ -727,7 +787,7 @@ export default function Messages() {
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search by name or email..."
+                                placeholder="Search connected alumni or admins..."
                                 value={userSearchQuery}
                                 onChange={(e) => {
                                     setUserSearchQuery(e.target.value);
@@ -736,11 +796,17 @@ export default function Messages() {
                                 className="pl-9"
                             />
                         </div>
+                        <p className="text-xs text-muted-foreground px-1">
+                            You can only message alumni you are connected with. <a href="/alumni/network" className="text-maroon-600 hover:underline">Find more alumni to connect with</a>
+                        </p>
                         <ScrollArea className="h-64">
                             {searchResults.length === 0 && userSearchQuery.length >= 2 ? (
                                 <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                                     <User className="h-8 w-8 mb-2" />
-                                    <p>No users found</p>
+                                    <p>No connected alumni found</p>
+                                    <a href="/alumni/network" className="text-sm text-maroon-600 hover:underline mt-2">
+                                        Browse alumni directory
+                                    </a>
                                 </div>
                             ) : (
                                 <div className="space-y-2">
@@ -760,7 +826,11 @@ export default function Messages() {
                                                 <p className="font-medium">{user.name}</p>
                                                 <p className="text-sm text-muted-foreground">{user.email}</p>
                                             </div>
-                                            {user.role && <Badge variant="secondary">{user.role}</Badge>}
+                                            {user.role === 'admin' || user.role === 'super_admin' ? (
+                                                <Badge variant="secondary" className="bg-blue-100 text-blue-800">Admin</Badge>
+                                            ) : (
+                                                <Badge variant="secondary" className="bg-green-100 text-green-800">Connected</Badge>
+                                            )}
                                         </div>
                                     ))}
                                 </div>

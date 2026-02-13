@@ -2,8 +2,11 @@
 
 namespace App\Providers;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\URL;
+use App\Models\AlumniProfile;
+use App\Observers\AlumniProfileObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -33,5 +36,12 @@ class AppServiceProvider extends ServiceProvider
             \Illuminate\Http\Request::HEADER_X_FORWARDED_PORT | 
             \Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO
         );
+
+        // Register model observers for auto-classification
+        AlumniProfile::observe(AlumniProfileObserver::class);
+
+        // Prevent lazy loading in non-production to catch N+1 issues early.
+        // In production, lazy loads are allowed (but logged) to avoid breaking pages.
+        Model::preventLazyLoading(! app()->isProduction());
     }
 }

@@ -7,6 +7,7 @@ use App\Models\Announcement;
 use App\Models\AnnouncementRead;
 use App\Models\User;
 use App\Events\AnnouncementPublished;
+use App\Services\EmailNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
@@ -111,7 +112,15 @@ class AnnouncementController extends Controller
 
         $request->validate([
             'title' => 'required|string|max:255',
-            'content' => 'required|string|max:10000',
+            'content' => 'nullable|string|max:10000',
+            'pages' => 'nullable|array',
+            'pages.*.title' => 'nullable|string|max:255',
+            'pages.*.content' => 'required|string',
+            'pages.*.image' => 'nullable|string',
+            'pages.*.layout' => 'required|in:text-only,image-left,image-right,image-top,image-full',
+            'use_pages' => 'nullable|boolean',
+            'featured_image' => 'nullable|string|max:500',
+            'show_on_landing' => 'nullable|boolean',
             'target_type' => ['required', Rule::in(['all', 'batch', 'department'])],
             'target_batch_years' => 'required_if:target_type,batch|nullable|array',
             'target_batch_years.*' => 'integer|min:1950|max:2100',
@@ -124,7 +133,11 @@ class AnnouncementController extends Controller
 
         $announcement = Announcement::create([
             'title' => $request->title,
-            'content' => $request->content,
+            'content' => $request->content ?? '',
+            'pages' => $request->pages,
+            'use_pages' => $request->use_pages ?? false,
+            'featured_image' => $request->featured_image,
+            'show_on_landing' => $request->show_on_landing ?? false,
             'target_type' => $request->target_type,
             'target_batch_years' => $request->target_batch_years,
             'target_department_ids' => $request->target_department_ids,
@@ -137,12 +150,25 @@ class AnnouncementController extends Controller
 
         if ($announcement->is_published) {
             broadcast(new AnnouncementPublished($announcement));
+            
+            // Send email notifications to all eligible alumni
+            try {
+                $emailService = app(EmailNotificationService::class);
+                $emailResult = $emailService->sendAnnouncementNotification($announcement);
+                
+                $emailInfo = $emailResult['success'] 
+                    ? " Email notifications queued for {$emailResult['total_recipients']} recipients."
+                    : '';
+            } catch (\Exception $e) {
+                \Log::error('Failed to send announcement emails: ' . $e->getMessage());
+                $emailInfo = '';
+            }
         }
 
         return response()->json([
             'success' => true,
             'data' => $announcement,
-            'message' => 'Announcement created successfully.',
+            'message' => 'Announcement created successfully.' . ($emailInfo ?? ''),
         ], 201);
     }
 
@@ -162,7 +188,15 @@ class AnnouncementController extends Controller
 
         $request->validate([
             'title' => 'sometimes|string|max:255',
-            'content' => 'sometimes|string|max:10000',
+            'content' => 'nullable|string|max:10000',
+            'pages' => 'nullable|array',
+            'pages.*.title' => 'nullable|string|max:255',
+            'pages.*.content' => 'required|string',
+            'pages.*.image' => 'nullable|string',
+            'pages.*.layout' => 'required|in:text-only,image-left,image-right,image-top,image-full',
+            'use_pages' => 'nullable|boolean',
+            'featured_image' => 'nullable|string|max:500',
+            'show_on_landing' => 'nullable|boolean',
             'target_type' => ['sometimes', Rule::in(['all', 'batch', 'department'])],
             'target_batch_years' => 'nullable|array',
             'target_batch_years.*' => 'integer|min:1950|max:2100',
@@ -175,20 +209,34 @@ class AnnouncementController extends Controller
         $wasPublished = $announcement->is_published;
         
         $announcement->update($request->only([
-            'title', 'content', 'target_type', 'target_batch_years',
+            'title', 'content', 'pages', 'use_pages', 'featured_image', 'show_on_landing',
+            'target_type', 'target_batch_years',
             'target_department_ids', 'priority', 'is_published',
         ]));
 
-        // If just published, broadcast
+        // If just published, broadcast and send emails
         if (!$wasPublished && $announcement->is_published) {
             $announcement->update(['published_at' => now()]);
             broadcast(new AnnouncementPublished($announcement));
+            
+            // Send email notifications
+            try {
+                $emailService = app(EmailNotificationService::class);
+                $emailResult = $emailService->sendAnnouncementNotification($announcement);
+                
+                $emailInfo = $emailResult['success'] 
+                    ? " Email notifications queued for {$emailResult['total_recipients']} recipients."
+                    : '';
+            } catch (\Exception $e) {
+                \Log::error('Failed to send announcement emails: ' . $e->getMessage());
+                $emailInfo = '';
+            }
         }
 
         return response()->json([
             'success' => true,
             'data' => $announcement,
-            'message' => 'Announcement updated successfully.',
+            'message' => 'Announcement updated successfully.' . ($emailInfo ?? ''),
         ]);
     }
 

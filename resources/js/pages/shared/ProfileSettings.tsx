@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { useAppearance } from '@/hooks/use-appearance';
 import {
     User,
     Camera,
@@ -23,7 +24,8 @@ import {
     Sun,
     Moon,
     Monitor,
-    X
+    X,
+    AlertCircle
 } from 'lucide-react';
 
 interface PageProps {
@@ -55,6 +57,14 @@ export default function ProfileSettings({ auth }: PageProps) {
     const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'preferences'>('profile');
     const [saving, setSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [showError, setShowError] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
+    const [passwordSaving, setPasswordSaving] = useState(false);
+    const [passwordError, setPasswordError] = useState('');
+    const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+    // Theme/appearance hook
+    const { appearance, updateAppearance } = useAppearance();
 
     // Determine which layout to use based on user role
     const isAlumni = auth.user.role === 'alumni';
@@ -220,13 +230,151 @@ export default function ProfileSettings({ auth }: PageProps) {
 
     const handleSave = async () => {
         setSaving(true);
+        setShowError(false);
+        setShowSuccess(false);
 
-        // Simulate API call
-        setTimeout(() => {
+        try {
+            // Get CSRF token from meta tag
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+            // Get auth token from localStorage
+            const authToken = localStorage.getItem('auth_token');
+
+            const headers: HeadersInit = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            };
+
+            if (csrfToken) {
+                headers['X-CSRF-TOKEN'] = csrfToken;
+            }
+
+            if (authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+
+            // Helper to convert empty strings to null
+            const emptyToNull = (value: string | null | undefined) =>
+                value && value.trim() !== '' ? value.trim() : null;
+
+            // Clean social links - convert empty strings to null
+            const cleanSocialLinks = {
+                linkedin: emptyToNull(socialLinks.linkedin),
+                facebook: emptyToNull(socialLinks.facebook),
+                twitter: emptyToNull(socialLinks.twitter),
+                instagram: emptyToNull(socialLinks.instagram),
+                github: emptyToNull(socialLinks.github),
+            };
+
+            const response = await fetch('/api/v1/profile', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({
+                    name: profileData.name || auth.user.name,
+                    email: profileData.email || auth.user.email,
+                    phone_number: emptyToNull(profileData.phoneNumber),
+                    bio: emptyToNull(profileData.bio),
+                    location: emptyToNull(profileData.location),
+                    website: emptyToNull(profileData.website),
+                    social_links: cleanSocialLinks,
+                }),
+                credentials: 'include',
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                setShowSuccess(true);
+                setTimeout(() => setShowSuccess(false), 3000);
+            } else {
+                // Better error message handling
+                let errorMsg = data.message || 'Failed to save profile';
+                if (data.errors) {
+                    const errorList = Object.values(data.errors).flat().join(', ');
+                    errorMsg = `Validation error: ${errorList}`;
+                }
+                setErrorMessage(errorMsg);
+                setShowError(true);
+                setTimeout(() => setShowError(false), 5000);
+            }
+        } catch (error) {
+            console.error('Save error:', error);
+            setErrorMessage('An error occurred while saving. Please try again.');
+            setShowError(true);
+            setTimeout(() => setShowError(false), 5000);
+        } finally {
             setSaving(false);
-            setShowSuccess(true);
-            setTimeout(() => setShowSuccess(false), 3000);
-        }, 1000);
+        }
+    };
+
+    const handlePasswordChange = async () => {
+        // Validate passwords
+        if (!securityData.currentPassword) {
+            setPasswordError('Current password is required');
+            return;
+        }
+        if (!securityData.newPassword) {
+            setPasswordError('New password is required');
+            return;
+        }
+        if (securityData.newPassword.length < 8) {
+            setPasswordError('New password must be at least 8 characters');
+            return;
+        }
+        if (securityData.newPassword !== securityData.confirmPassword) {
+            setPasswordError('Passwords do not match');
+            return;
+        }
+
+        setPasswordSaving(true);
+        setPasswordError('');
+        setPasswordSuccess(false);
+
+        try {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            const authToken = localStorage.getItem('auth_token');
+
+            const headers: HeadersInit = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            };
+
+            if (csrfToken) {
+                headers['X-CSRF-TOKEN'] = csrfToken;
+            }
+
+            if (authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+
+            const response = await fetch('/api/v1/profile/password', {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify({
+                    current_password: securityData.currentPassword,
+                    new_password: securityData.newPassword,
+                    new_password_confirmation: securityData.confirmPassword,
+                }),
+                credentials: 'include',
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                setPasswordSuccess(true);
+                setSecurityData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                setTimeout(() => setPasswordSuccess(false), 3000);
+            } else {
+                setPasswordError(data.message || 'Failed to update password');
+            }
+        } catch (error) {
+            console.error('Password update error:', error);
+            setPasswordError('An error occurred. Please try again.');
+        } finally {
+            setPasswordSaving(false);
+        }
     };
 
     const tabs = [
@@ -263,6 +411,13 @@ export default function ProfileSettings({ auth }: PageProps) {
                         <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center space-x-3">
                             <Check className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
                             <p className="text-green-800 dark:text-green-200 font-medium">Profile updated successfully!</p>
+                        </div>
+                    )}
+
+                    {showError && (
+                        <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center space-x-3">
+                            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                            <p className="text-red-800 dark:text-red-200 font-medium">{errorMessage}</p>
                         </div>
                     )}
                 </div>
@@ -521,6 +676,21 @@ export default function ProfileSettings({ auth }: PageProps) {
                             <div className="space-y-6">
                                 <div>
                                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Change Password</h3>
+
+                                    {passwordError && (
+                                        <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center space-x-3">
+                                            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                                            <p className="text-red-800 dark:text-red-200 font-medium">{passwordError}</p>
+                                        </div>
+                                    )}
+
+                                    {passwordSuccess && (
+                                        <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center space-x-3">
+                                            <Check className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                                            <p className="text-green-800 dark:text-green-200 font-medium">Password updated successfully!</p>
+                                        </div>
+                                    )}
+
                                     <div className="space-y-4">
                                         <div className="space-y-2">
                                             <Label>Current Password</Label>
@@ -549,9 +719,13 @@ export default function ProfileSettings({ auth }: PageProps) {
                                             />
                                         </div>
 
-                                        <Button className="bg-maroon-600 hover:bg-maroon-700">
-                                            <Lock className="h-4 w-4 mr-2" />
-                                            Update Password
+                                        <Button
+                                            className="bg-maroon-600 hover:bg-maroon-700"
+                                            onClick={handlePasswordChange}
+                                            disabled={passwordSaving}
+                                        >
+                                            <Lock className={`h-4 w-4 mr-2 ${passwordSaving ? 'animate-spin' : ''}`} />
+                                            {passwordSaving ? 'Updating...' : 'Update Password'}
                                         </Button>
                                     </div>
                                 </div>
@@ -585,30 +759,42 @@ export default function ProfileSettings({ auth }: PageProps) {
                                     <div className="space-y-4">
                                         <Label>Theme</Label>
                                         <div className="grid grid-cols-3 gap-4">
-                                            <Card className="cursor-pointer hover:border-maroon-600">
+                                            <Card
+                                                className={`cursor-pointer transition-all ${appearance === 'light' ? 'border-2 border-maroon-600 ring-2 ring-maroon-200' : 'hover:border-maroon-600'}`}
+                                                onClick={() => updateAppearance('light')}
+                                            >
                                                 <CardContent className="p-4 text-center">
                                                     <div className="h-12 w-12 mx-auto mb-2 bg-white rounded-full flex items-center justify-center border-2">
                                                         <Sun className="h-6 w-6 text-yellow-500" />
                                                     </div>
                                                     <p className="text-sm font-medium">Light</p>
+                                                    {appearance === 'light' && <Check className="h-4 w-4 mx-auto mt-1 text-maroon-600" />}
                                                 </CardContent>
                                             </Card>
 
-                                            <Card className="cursor-pointer hover:border-maroon-600">
+                                            <Card
+                                                className={`cursor-pointer transition-all ${appearance === 'dark' ? 'border-2 border-maroon-600 ring-2 ring-maroon-200' : 'hover:border-maroon-600'}`}
+                                                onClick={() => updateAppearance('dark')}
+                                            >
                                                 <CardContent className="p-4 text-center">
                                                     <div className="h-12 w-12 mx-auto mb-2 bg-gray-900 rounded-full flex items-center justify-center border-2">
                                                         <Moon className="h-6 w-6 text-blue-300" />
                                                     </div>
                                                     <p className="text-sm font-medium">Dark</p>
+                                                    {appearance === 'dark' && <Check className="h-4 w-4 mx-auto mt-1 text-maroon-600" />}
                                                 </CardContent>
                                             </Card>
 
-                                            <Card className="cursor-pointer hover:border-maroon-600">
+                                            <Card
+                                                className={`cursor-pointer transition-all ${appearance === 'system' ? 'border-2 border-maroon-600 ring-2 ring-maroon-200' : 'hover:border-maroon-600'}`}
+                                                onClick={() => updateAppearance('system')}
+                                            >
                                                 <CardContent className="p-4 text-center">
                                                     <div className="h-12 w-12 mx-auto mb-2 bg-gradient-to-br from-white to-gray-900 rounded-full flex items-center justify-center border-2">
                                                         <Monitor className="h-6 w-6 text-gray-600" />
                                                     </div>
                                                     <p className="text-sm font-medium">System</p>
+                                                    {appearance === 'system' && <Check className="h-4 w-4 mx-auto mt-1 text-maroon-600" />}
                                                 </CardContent>
                                             </Card>
                                         </div>
@@ -621,6 +807,7 @@ export default function ProfileSettings({ auth }: PageProps) {
                                         <option value="en">English</option>
                                         <option value="fil">Filipino</option>
                                     </select>
+                                    <p className="text-xs text-gray-500 mt-2">Language preference is for display purposes only.</p>
                                 </div>
                             </div>
                         )}

@@ -4,16 +4,19 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Announcement extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'title',
         'content',
+        'pages',
+        'use_pages',
         'featured_image',
         'gallery_images',
         'type',
@@ -36,6 +39,8 @@ class Announcement extends Model
         'target_batch_years' => 'array',
         'target_department_ids' => 'array',
         'gallery_images' => 'array',
+        'pages' => 'array',
+        'use_pages' => 'boolean',
         'is_published' => 'boolean',
         'show_on_landing' => 'boolean',
         'scheduled_at' => 'datetime',

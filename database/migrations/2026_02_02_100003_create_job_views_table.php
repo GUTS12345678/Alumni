@@ -11,6 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (!Schema::hasTable('job_views')) {
         Schema::create('job_views', function (Blueprint $table) {
             $table->id();
             $table->foreignId('job_posting_id')->constrained('job_postings')->onDelete('cascade');
@@ -24,6 +25,7 @@ return new class extends Migration
             $table->index('user_id');
             $table->index('viewed_at');
         });
+        }
     }
 
     /**

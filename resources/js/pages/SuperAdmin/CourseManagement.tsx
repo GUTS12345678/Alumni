@@ -336,23 +336,23 @@ export default function CourseManagement({ auth }: PageProps) {
             <div className="max-w-7xl mx-auto space-y-6">
                 {/* Page Header */}
                 <div className="bg-gradient-to-r from-maroon-600 to-maroon-700 rounded-xl shadow-lg p-6 text-white">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                         <div>
                             <h1 className="text-3xl font-bold mb-2">Course Management</h1>
                             <p className="text-maroon-100">Manage academic programs and courses across all departments</p>
                         </div>
-                        <BookOpen className="h-16 w-16 opacity-20" />
+                        <BookOpen className="h-16 w-16 opacity-20 hidden sm:block" />
                     </div>
                 </div>
 
                 {/* Statistics Cards */}
                 {stats && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600">Total Courses</p>
-                                    <p className="text-3xl font-bold text-gray-900 mt-2">{stats.total_courses}</p>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Courses</p>
+                                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 mt-2">{stats.total_courses}</p>
                                 </div>
                                 <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
                                     <BookOpen className="h-6 w-6 text-blue-600" />
@@ -360,10 +360,10 @@ export default function CourseManagement({ auth }: PageProps) {
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600">Active Courses</p>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Courses</p>
                                     <p className="text-3xl font-bold text-green-600 mt-2">{stats.active_courses}</p>
                                 </div>
                                 <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -372,10 +372,10 @@ export default function CourseManagement({ auth }: PageProps) {
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600">With Alumni</p>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">With Alumni</p>
                                     <p className="text-3xl font-bold text-purple-600 mt-2">{stats.courses_with_alumni}</p>
                                 </div>
                                 <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -384,10 +384,10 @@ export default function CourseManagement({ auth }: PageProps) {
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600">Departments</p>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Departments</p>
                                     <p className="text-3xl font-bold text-orange-600 mt-2">{stats.total_departments}</p>
                                 </div>
                                 <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -399,7 +399,7 @@ export default function CourseManagement({ auth }: PageProps) {
                 )}
 
                 {/* Filters and Search */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                     <div className="flex flex-col lg:flex-row gap-4">
                         {/* Search */}
                         <div className="flex-1">
@@ -410,7 +410,7 @@ export default function CourseManagement({ auth }: PageProps) {
                                     placeholder="Search courses by name, code, or department..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent"
+                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
                                 />
                             </div>
                         </div>
@@ -420,7 +420,7 @@ export default function CourseManagement({ auth }: PageProps) {
                             <select
                                 value={departmentFilter}
                                 onChange={(e) => setDepartmentFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                                className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent bg-white"
+                                className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent bg-white dark:bg-gray-700 dark:text-gray-100"
                             >
                                 <option value="all">All Departments</option>
                                 {departments.map(dept => (
@@ -431,21 +431,21 @@ export default function CourseManagement({ auth }: PageProps) {
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
-                                className="px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent bg-white"
+                                className="px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent bg-white dark:bg-gray-700 dark:text-gray-100"
                             >
                                 <option value="all">All Status</option>
                                 <option value="active">Active</option>
                                 <option value="inactive">Inactive</option>
                             </select>
 
-                            <label className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg bg-white cursor-pointer hover:bg-gray-50">
+                            <label className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
                                 <input
                                     type="checkbox"
                                     checked={showDeleted}
                                     onChange={(e) => setShowDeleted(e.target.checked)}
-                                    className="rounded border-gray-300 text-maroon-600 focus:ring-maroon-500"
+                                    className="rounded border-gray-300 dark:border-gray-600 text-maroon-600 focus:ring-maroon-500"
                                 />
-                                <span className="text-sm font-medium text-gray-700">Show Deleted</span>
+                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Show Deleted</span>
                             </label>
 
                             <button
@@ -460,17 +460,17 @@ export default function CourseManagement({ auth }: PageProps) {
                 </div>
 
                 {/* Courses Grid/List */}
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
                     {loading ? (
                         <div className="flex flex-col items-center justify-center py-16">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-maroon-600 mb-4"></div>
-                            <p className="text-gray-500">Loading courses...</p>
+                            <p className="text-gray-500 dark:text-gray-400">Loading courses...</p>
                         </div>
                     ) : filteredCourses.length === 0 ? (
                         <div className="text-center py-16">
                             <BookOpen className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                            <h3 className="text-lg font-medium text-gray-900 mb-2">No courses found</h3>
-                            <p className="text-gray-500 mb-6">Get started by creating your first course</p>
+                            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No courses found</h3>
+                            <p className="text-gray-500 dark:text-gray-400 mb-6">Get started by creating your first course</p>
                             <button
                                 onClick={openCreateModal}
                                 className="inline-flex items-center gap-2 bg-maroon-600 text-white px-6 py-3 rounded-lg hover:bg-maroon-700 transition-colors font-medium"
@@ -484,9 +484,9 @@ export default function CourseManagement({ auth }: PageProps) {
                             {filteredCourses.map((course) => (
                                 <div
                                     key={course.id}
-                                    className={`relative bg-white border-2 rounded-xl p-6 transition-all hover:shadow-lg ${course.deleted_at
+                                    className={`relative bg-white dark:bg-gray-800 border-2 rounded-xl p-6 transition-all hover:shadow-lg ${course.deleted_at
                                         ? 'border-red-200 bg-red-50'
-                                        : 'border-gray-200 hover:border-maroon-300'
+                                        : 'border-gray-200 dark:border-gray-700 hover:border-maroon-300'
                                         }`}
                                 >
                                     {/* Status Badge */}
@@ -507,7 +507,7 @@ export default function CourseManagement({ auth }: PageProps) {
 
                                     {/* Course Info */}
                                     <div className="pr-20 mb-4">
-                                        <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-2">{course.name}</h3>
+                                        <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1 line-clamp-2">{course.name}</h3>
                                         <p className="text-sm font-medium text-maroon-600 mb-2">{course.code}</p>
                                         {course.majors && (
                                             <p className="text-xs text-blue-600 bg-blue-50 inline-block px-2 py-1 rounded">
@@ -517,13 +517,13 @@ export default function CourseManagement({ auth }: PageProps) {
                                     </div>
 
                                     {/* Department */}
-                                    <div className="flex items-center gap-2 text-sm text-gray-600 mb-3">
+                                    <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-3">
                                         <Building className="h-4 w-4" />
                                         <span>{course.department?.name || 'N/A'}</span>
                                     </div>
 
                                     {/* Stats */}
-                                    <div className="flex items-center gap-4 text-sm text-gray-600 mb-4 pb-4 border-b border-gray-200">
+                                    <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400 mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
                                         <div className="flex items-center gap-1">
                                             <Clock className="h-4 w-4" />
                                             <span>{course.duration_years} years</span>
@@ -573,10 +573,10 @@ export default function CourseManagement({ auth }: PageProps) {
             {/* Create Modal */}
             {showCreateModal && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-                        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-2xl">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+                        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-2xl">
                             <div className="flex items-center justify-between">
-                                <h2 className="text-2xl font-bold text-gray-900">Create New Course</h2>
+                                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Create New Course</h2>
                                 <button
                                     onClick={() => setShowCreateModal(false)}
                                     className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -589,13 +589,13 @@ export default function CourseManagement({ auth }: PageProps) {
                         <form onSubmit={handleCreateSubmit} className="p-6 space-y-5">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Department <span className="text-red-500">*</span>
                                     </label>
                                     <select
                                         value={formData.department_id}
                                         onChange={(e) => setFormData({ ...formData, department_id: e.target.value })}
-                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.department_id ? 'border-red-500' : 'border-gray-300'
+                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.department_id ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                             }`}
                                         required
                                     >
@@ -612,14 +612,14 @@ export default function CourseManagement({ auth }: PageProps) {
                                 </div>
 
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Course Name <span className="text-red-500">*</span>
                                     </label>
                                     <input
                                         type="text"
                                         value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
+                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                             }`}
                                         placeholder="e.g., Bachelor of Science in Computer Science"
                                         required
@@ -630,14 +630,14 @@ export default function CourseManagement({ auth }: PageProps) {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Course Code <span className="text-red-500">*</span>
                                     </label>
                                     <input
                                         type="text"
                                         value={formData.code}
                                         onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.code ? 'border-red-500' : 'border-gray-300'
+                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.code ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                             }`}
                                         placeholder="e.g., BSCS"
                                         required
@@ -648,7 +648,7 @@ export default function CourseManagement({ auth }: PageProps) {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Duration (Years) <span className="text-red-500">*</span>
                                     </label>
                                     <input
@@ -657,7 +657,7 @@ export default function CourseManagement({ auth }: PageProps) {
                                         max="10"
                                         value={formData.duration_years}
                                         onChange={(e) => setFormData({ ...formData, duration_years: Number(e.target.value) })}
-                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.duration_years ? 'border-red-500' : 'border-gray-300'
+                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.duration_years ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                             }`}
                                         required
                                     />
@@ -667,40 +667,40 @@ export default function CourseManagement({ auth }: PageProps) {
                                 </div>
 
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Majors/Specializations
                                     </label>
                                     <input
                                         type="text"
                                         value={formData.majors}
                                         onChange={(e) => setFormData({ ...formData, majors: e.target.value })}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500"
+                                        className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
                                         placeholder="e.g., Software Engineering, Data Science"
                                     />
-                                    <p className="mt-1 text-xs text-gray-500">Comma-separated if multiple</p>
+                                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Comma-separated if multiple</p>
                                 </div>
 
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Description
                                     </label>
                                     <textarea
                                         value={formData.description}
                                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500"
+                                        className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
                                         rows={3}
                                         placeholder="Brief description of the course..."
                                     />
                                 </div>
 
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Status
                                     </label>
                                     <select
                                         value={formData.status}
                                         onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500"
+                                        className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
                                     >
                                         <option value="active">Active</option>
                                         <option value="inactive">Inactive</option>
@@ -708,11 +708,11 @@ export default function CourseManagement({ auth }: PageProps) {
                                 </div>
                             </div>
 
-                            <div className="flex gap-3 pt-4 border-t border-gray-200">
+                            <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                                 <button
                                     type="button"
                                     onClick={() => setShowCreateModal(false)}
-                                    className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                                    className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                                 >
                                     Cancel
                                 </button>
@@ -732,10 +732,10 @@ export default function CourseManagement({ auth }: PageProps) {
             {/* Edit Modal */}
             {showEditModal && selectedCourse && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-                        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-2xl">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+                        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 rounded-t-2xl">
                             <div className="flex items-center justify-between">
-                                <h2 className="text-2xl font-bold text-gray-900">Edit Course</h2>
+                                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Edit Course</h2>
                                 <button
                                     onClick={() => setShowEditModal(false)}
                                     className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -748,13 +748,13 @@ export default function CourseManagement({ auth }: PageProps) {
                         <form onSubmit={handleEditSubmit} className="p-6 space-y-5">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Department <span className="text-red-500">*</span>
                                     </label>
                                     <select
                                         value={formData.department_id}
                                         onChange={(e) => setFormData({ ...formData, department_id: e.target.value })}
-                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.department_id ? 'border-red-500' : 'border-gray-300'
+                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.department_id ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                             }`}
                                         required
                                     >
@@ -771,14 +771,14 @@ export default function CourseManagement({ auth }: PageProps) {
                                 </div>
 
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Course Name <span className="text-red-500">*</span>
                                     </label>
                                     <input
                                         type="text"
                                         value={formData.name}
                                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
+                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                             }`}
                                         required
                                     />
@@ -788,14 +788,14 @@ export default function CourseManagement({ auth }: PageProps) {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Course Code <span className="text-red-500">*</span>
                                     </label>
                                     <input
                                         type="text"
                                         value={formData.code}
                                         onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.code ? 'border-red-500' : 'border-gray-300'
+                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.code ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                             }`}
                                         required
                                     />
@@ -805,7 +805,7 @@ export default function CourseManagement({ auth }: PageProps) {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Duration (Years) <span className="text-red-500">*</span>
                                     </label>
                                     <input
@@ -814,7 +814,7 @@ export default function CourseManagement({ auth }: PageProps) {
                                         max="10"
                                         value={formData.duration_years}
                                         onChange={(e) => setFormData({ ...formData, duration_years: Number(e.target.value) })}
-                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 ${formErrors.duration_years ? 'border-red-500' : 'border-gray-300'
+                                        className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 ${formErrors.duration_years ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'
                                             }`}
                                         required
                                     />
@@ -824,39 +824,39 @@ export default function CourseManagement({ auth }: PageProps) {
                                 </div>
 
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Majors/Specializations
                                     </label>
                                     <input
                                         type="text"
                                         value={formData.majors}
                                         onChange={(e) => setFormData({ ...formData, majors: e.target.value })}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500"
+                                        className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
                                         placeholder="e.g., Software Engineering, Data Science"
                                     />
-                                    <p className="mt-1 text-xs text-gray-500">Comma-separated if multiple</p>
+                                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Comma-separated if multiple</p>
                                 </div>
 
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Description
                                     </label>
                                     <textarea
                                         value={formData.description}
                                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500"
+                                        className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
                                         rows={3}
                                     />
                                 </div>
 
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                         Status
                                     </label>
                                     <select
                                         value={formData.status}
                                         onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'inactive' })}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500"
+                                        className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
                                     >
                                         <option value="active">Active</option>
                                         <option value="inactive">Inactive</option>
@@ -864,11 +864,11 @@ export default function CourseManagement({ auth }: PageProps) {
                                 </div>
                             </div>
 
-                            <div className="flex gap-3 pt-4 border-t border-gray-200">
+                            <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                                 <button
                                     type="button"
                                     onClick={() => setShowEditModal(false)}
-                                    className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                                    className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                                 >
                                     Cancel
                                 </button>
@@ -888,9 +888,9 @@ export default function CourseManagement({ auth }: PageProps) {
             {/* Delete Modal */}
             {showDeleteModal && selectedCourse && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-bold text-gray-900">Delete Course</h2>
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Delete Course</h2>
                             <button
                                 onClick={() => setShowDeleteModal(false)}
                                 className="text-gray-400 hover:text-gray-600"

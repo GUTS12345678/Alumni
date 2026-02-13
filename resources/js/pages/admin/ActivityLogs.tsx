@@ -281,8 +281,8 @@ export default function ActivityLogs({ user }: Props) {
             <AdminBaseLayout title="Activity Logs" user={user}>
                 <div className="flex items-center justify-center min-h-96">
                     <div className="flex items-center space-x-2">
-                        <RefreshCw className="h-8 w-8 text-maroon-600 animate-spin" />
-                        <span className="text-maroon-800 font-medium">Loading activity logs...</span>
+                        <RefreshCw className="h-8 w-8 text-maroon-600 dark:text-gray-400 animate-spin" />
+                        <span className="text-maroon-800 dark:text-gray-200 font-medium">Loading activity logs...</span>
                     </div>
                 </div>
             </AdminBaseLayout>
@@ -298,11 +298,11 @@ export default function ActivityLogs({ user }: Props) {
                             <div className="mb-4">
                                 <Activity className="h-12 w-12 text-red-400 mx-auto mb-2" />
                                 <p className="text-red-600 font-medium">Unable to load activity logs</p>
-                                <p className="text-sm text-gray-600 mt-1">{error}</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{error}</p>
                                 {debugInfo && (
-                                    <details className="mt-2 text-xs text-gray-500">
+                                    <details className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                                         <summary className="cursor-pointer">Debug Information</summary>
-                                        <p className="mt-1 font-mono bg-gray-100 p-2 rounded">{debugInfo}</p>
+                                        <p className="mt-1 font-mono bg-gray-100 dark:bg-gray-800 p-2 rounded">{debugInfo}</p>
                                     </details>
                                 )}
                             </div>
@@ -321,7 +321,7 @@ export default function ActivityLogs({ user }: Props) {
                                 <Button
                                     onClick={() => window.location.reload()}
                                     variant="outline"
-                                    className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                    className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                 >
                                     Reload Page
                                 </Button>
@@ -339,8 +339,8 @@ export default function ActivityLogs({ user }: Props) {
                 {/* Header with Actions */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h2 className="text-2xl font-bold text-maroon-800">System Activity Logs</h2>
-                        <p className="text-maroon-600">Monitor system activities and user actions</p>
+                        <h2 className="text-2xl font-bold text-maroon-800 dark:text-gray-200">System Activity Logs</h2>
+                        <p className="text-maroon-600 dark:text-gray-400">Monitor system activities and user actions</p>
                     </div>
 
                     <div className="flex items-center space-x-2">
@@ -349,7 +349,7 @@ export default function ActivityLogs({ user }: Props) {
                             variant="outline"
                             size="sm"
                             disabled={refreshing}
-                            className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                         >
                             <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
                             Refresh
@@ -359,7 +359,7 @@ export default function ActivityLogs({ user }: Props) {
                             onClick={handleExport}
                             variant="outline"
                             size="sm"
-                            className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                         >
                             <Download className="h-4 w-4 mr-2" />
                             Export
@@ -368,9 +368,9 @@ export default function ActivityLogs({ user }: Props) {
                 </div>
 
                 {/* Search and Filters */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-lg text-maroon-800 flex items-center">
+                        <CardTitle className="text-lg text-maroon-800 dark:text-gray-200 flex items-center">
                             <Filter className="h-5 w-5 mr-2" />
                             Filter Activity Logs
                         </CardTitle>
@@ -383,14 +383,14 @@ export default function ActivityLogs({ user }: Props) {
                                     placeholder="Search activities..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-10 border-beige-300 focus:border-maroon-500 focus:ring-maroon-500"
+                                    className="pl-10 border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 focus:border-maroon-500 focus:ring-maroon-500"
                                 />
                             </div>
 
                             <select
                                 value={actionFilter}
                                 onChange={(e) => setActionFilter(e.target.value)}
-                                className="border border-beige-300 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
+                                className="border border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
                             >
                                 <option value="all">All Actions</option>
                                 <option value="login">Login</option>
@@ -405,7 +405,7 @@ export default function ActivityLogs({ user }: Props) {
                             <select
                                 value={userFilter}
                                 onChange={(e) => setUserFilter(e.target.value)}
-                                className="border border-beige-300 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
+                                className="border border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
                             >
                                 <option value="all">All Users</option>
                                 <option value="admin">Admin Users</option>
@@ -415,7 +415,7 @@ export default function ActivityLogs({ user }: Props) {
                             <select
                                 value={dateFilter}
                                 onChange={(e) => setDateFilter(e.target.value)}
-                                className="border border-beige-300 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
+                                className="border border-beige-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
                             >
                                 <option value="all">All Time</option>
                                 <option value="today">Today</option>
@@ -429,21 +429,21 @@ export default function ActivityLogs({ user }: Props) {
 
                 {/* Activity Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Total Activities</CardTitle>
-                            <Activity className="h-4 w-4 text-maroon-600" />
+                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Activities</CardTitle>
+                            <Activity className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-maroon-800">{total}</div>
-                            <p className="text-xs text-maroon-600 mt-1">All recorded activities</p>
+                            <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">{total}</div>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">All recorded activities</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Today</CardTitle>
-                            <Calendar className="h-4 w-4 text-maroon-600" />
+                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Today</CardTitle>
+                            <Calendar className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-blue-600">
@@ -453,57 +453,94 @@ export default function ActivityLogs({ user }: Props) {
                                     return activityDate.toDateString() === today.toDateString();
                                 }).length}
                             </div>
-                            <p className="text-xs text-maroon-600 mt-1">Activities today</p>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Activities today</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">User Actions</CardTitle>
-                            <User className="h-4 w-4 text-maroon-600" />
+                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">User Actions</CardTitle>
+                            <User className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-green-600">
                                 {activities.filter(a => ['create', 'update', 'delete'].includes(a.action)).length}
                             </div>
-                            <p className="text-xs text-maroon-600 mt-1">CRUD operations</p>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">CRUD operations</p>
                         </CardContent>
                     </Card>
 
-                    <Card className="border-beige-200 shadow-lg">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800">Unique Users</CardTitle>
-                            <Shield className="h-4 w-4 text-maroon-600" />
+                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Unique Users</CardTitle>
+                            <Shield className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-purple-600">
                                 {new Set(activities.filter(a => a.user).map(a => a.user.id)).size}
                             </div>
-                            <p className="text-xs text-maroon-600 mt-1">Active users</p>
+                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Active users</p>
                         </CardContent>
                     </Card>
                 </div>
 
                 {/* Activity Logs Table */}
-                <Card className="border-beige-200 shadow-lg">
+                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                     <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800">Activity Timeline</CardTitle>
-                        <CardDescription className="text-maroon-600">
+                        <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Activity Timeline</CardTitle>
+                        <CardDescription className="text-maroon-600 dark:text-gray-400">
                             Showing {activities.length} of {total} activities
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="p-0">
-                        <div className="overflow-x-auto">
+                        {/* Mobile Card View */}
+                        <div className="md:hidden divide-y divide-beige-200 dark:divide-gray-700">
+                            {activities.length === 0 ? (
+                                <div className="text-center py-8">
+                                    <Activity className="h-8 w-8 text-gray-400 mx-auto" />
+                                    <p className="text-gray-500 dark:text-gray-400 mt-2">No activity logs found</p>
+                                </div>
+                            ) : (
+                                activities.map((activity) => (
+                                    <div key={activity.id} className="p-4 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                {getActionBadge(activity.action)}
+                                                <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                                    {getEntityIcon(activity.entity_type)}
+                                                    <span>{activity.entity_type || 'Unknown'}</span>
+                                                </div>
+                                            </div>
+                                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="View Details">
+                                                <Eye className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                        <div className="text-sm font-medium text-maroon-800 dark:text-gray-200">
+                                            {activity.user?.name || 'Unknown User'}
+                                            <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">({activity.user?.email})</span>
+                                        </div>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{activity.description || 'No description'}</p>
+                                        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                                            <span>{formatDate(activity.created_at)}</span>
+                                            <span>{activity.ip_address || 'Unknown IP'}</span>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        {/* Desktop Table View */}
+                        <div className="hidden md:block overflow-x-auto">
                             <Table>
                                 <TableHeader>
-                                    <TableRow className="bg-beige-50">
-                                        <TableHead className="text-maroon-800 font-semibold">Timestamp</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">User</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Action</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Entity</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Description</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">IP Address</TableHead>
-                                        <TableHead className="text-maroon-800 font-semibold">Actions</TableHead>
+                                    <TableRow className="bg-beige-50 dark:bg-gray-800/50">
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Timestamp</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">User</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Action</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Entity</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Description</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">IP Address</TableHead>
+                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Actions</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -512,8 +549,8 @@ export default function ActivityLogs({ user }: Props) {
                                             <TableCell colSpan={7} className="text-center py-8">
                                                 <div className="space-y-2">
                                                     <Activity className="h-8 w-8 text-gray-400 mx-auto" />
-                                                    <p className="text-gray-500">No activity logs found</p>
-                                                    <p className="text-sm text-gray-400">
+                                                    <p className="text-gray-500 dark:text-gray-400">No activity logs found</p>
+                                                    <p className="text-sm text-gray-400 dark:text-gray-500">
                                                         {searchTerm || actionFilter !== 'all' || userFilter !== 'all' || dateFilter !== 'all'
                                                             ? 'Try adjusting your filters'
                                                             : 'Activity will appear here as users interact with the system'
@@ -524,7 +561,7 @@ export default function ActivityLogs({ user }: Props) {
                                         </TableRow>
                                     ) : (
                                         activities.map((activity) => (
-                                            <TableRow key={activity.id} className="hover:bg-beige-50">
+                                            <TableRow key={activity.id} className="hover:bg-beige-50 dark:hover:bg-gray-800">
                                                 <TableCell>
                                                     <div className="text-sm">
                                                         {formatDate(activity.created_at)}
@@ -532,10 +569,10 @@ export default function ActivityLogs({ user }: Props) {
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="space-y-1">
-                                                        <div className="font-medium text-maroon-800">
+                                                        <div className="font-medium text-maroon-800 dark:text-gray-200">
                                                             {activity.user?.name || 'Unknown User'}
                                                         </div>
-                                                        <div className="text-xs text-gray-600">
+                                                        <div className="text-xs text-gray-600 dark:text-gray-400">
                                                             {activity.user?.email || 'No email'}
                                                         </div>
                                                     </div>
@@ -551,7 +588,7 @@ export default function ActivityLogs({ user }: Props) {
                                                                 {activity.entity_type || 'Unknown'}
                                                             </div>
                                                             {activity.entity_id && (
-                                                                <div className="text-xs text-gray-500">
+                                                                <div className="text-xs text-gray-500 dark:text-gray-400">
                                                                     ID: {activity.entity_id}
                                                                 </div>
                                                             )}
@@ -559,12 +596,12 @@ export default function ActivityLogs({ user }: Props) {
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div className="text-sm text-gray-700 max-w-xs truncate">
+                                                    <div className="text-sm text-gray-700 dark:text-gray-300 max-w-xs truncate">
                                                         {activity.description || 'No description'}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <div className="text-sm text-gray-600">
+                                                    <div className="text-sm text-gray-600 dark:text-gray-400">
                                                         {activity.ip_address || 'Unknown'}
                                                     </div>
                                                 </TableCell>
@@ -572,7 +609,7 @@ export default function ActivityLogs({ user }: Props) {
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="text-maroon-700 hover:text-maroon-800 hover:bg-maroon-50"
+                                                        className="text-maroon-700 dark:text-gray-300 hover:text-maroon-800 dark:hover:text-gray-200 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                                         title="View Details"
                                                     >
                                                         <Eye className="h-4 w-4" />
@@ -587,8 +624,8 @@ export default function ActivityLogs({ user }: Props) {
 
                         {/* Pagination */}
                         {totalPages > 1 && (
-                            <div className="flex items-center justify-between px-6 py-4 border-t border-beige-200">
-                                <div className="text-sm text-gray-700">
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 sm:px-6 py-4 border-t border-beige-200 dark:border-gray-700">
+                                <div className="text-sm text-gray-700 dark:text-gray-300">
                                     Showing page {currentPage} of {totalPages}
                                 </div>
                                 <div className="space-x-2">
@@ -597,7 +634,7 @@ export default function ActivityLogs({ user }: Props) {
                                         size="sm"
                                         onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                                         disabled={currentPage === 1}
-                                        className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                     >
                                         Previous
                                     </Button>
@@ -606,7 +643,7 @@ export default function ActivityLogs({ user }: Props) {
                                         size="sm"
                                         onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                                         disabled={currentPage === totalPages}
-                                        className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
+                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                     >
                                         Next
                                     </Button>

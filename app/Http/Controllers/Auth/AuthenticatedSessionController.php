@@ -22,10 +22,27 @@ class AuthenticatedSessionController extends Controller
         if (!$request->session()->has('url.intended')) {
             $request->session()->forget('url.intended');
         }
-        
+
+        // Compute real stats for the login page
+        $totalAlumniProfiles = \App\Models\AlumniProfile::count();
+        $employedAlumni = \App\Models\AlumniProfile::whereIn('employment_status', [
+            'employed_full_time', 'employed_part_time', 'self_employed'
+        ])->count();
+        $employmentRate = $totalAlumniProfiles > 0 ? round(($employedAlumni / $totalAlumniProfiles) * 100) : 0;
+
+        $stats = [
+            'totalAlumni'    => \App\Models\User::where('role_id', 3)->count(),
+            'employmentRate' => $employmentRate,
+            'industries'     => \App\Models\CareerHistory::whereNotNull('industry')
+                ->where('industry', '!=', '')
+                ->distinct('industry')
+                ->count('industry'),
+        ];
+
         return Inertia::render('auth/login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => $request->session()->get('status'),
+            'stats' => $stats,
         ]);
     }
 

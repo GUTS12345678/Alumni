@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Head } from '@inertiajs/react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
@@ -25,8 +25,16 @@ import {
     Moon,
     Monitor,
     X,
-    AlertCircle
+    AlertCircle,
+    Smartphone,
+    Laptop,
+    Tablet,
+    Trash2,
+    RefreshCw,
+    Loader2
 } from 'lucide-react';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface PageProps {
     auth: {
@@ -37,7 +45,9 @@ interface PageProps {
             role: 'super_admin' | 'admin' | 'alumni';
             status: string;
             profile_picture_path?: string | null;
+            profile_picture_url?: string | null;
             cover_photo_path?: string | null;
+            cover_photo_url?: string | null;
             phone_number?: string | null;
             bio?: string | null;
             location?: string | null;
@@ -53,15 +63,37 @@ interface PageProps {
     };
 }
 
+interface SessionDevice {
+    id: number;
+    device_name: string;
+    browser: string;
+    platform: string;
+    device_type: 'desktop' | 'mobile' | 'tablet';
+    ip_address: string;
+    last_active: string;
+    last_active_at: string | null;
+    created_at: string;
+    is_current: boolean;
+}
+
 export default function ProfileSettings({ auth }: PageProps) {
     const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'preferences'>('profile');
     const [saving, setSaving] = useState(false);
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
     const [showSuccess, setShowSuccess] = useState(false);
     const [showError, setShowError] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [passwordSaving, setPasswordSaving] = useState(false);
     const [passwordError, setPasswordError] = useState('');
     const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+    // Session/Device management state
+    const [sessions, setSessions] = useState<SessionDevice[]>([]);
+    const [sessionsLoading, setSessionsLoading] = useState(false);
+    const [maxDevices, setMaxDevices] = useState(5);
+    const [revokingId, setRevokingId] = useState<number | null>(null);
+    const [revokingAll, setRevokingAll] = useState(false);
+    const [sessionMessage, setSessionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     // Theme/appearance hook
     const { appearance, updateAppearance } = useAppearance();
@@ -74,10 +106,8 @@ export default function ProfileSettings({ auth }: PageProps) {
     // Helper function to get the correct image URL
     const getImageUrl = (path: string | null | undefined): string | null => {
         if (!path) return null;
-        // If path already starts with /storage, use it as is
-        if (path.startsWith('/storage')) return path;
-        // Otherwise, prepend /storage/
-        return `/storage/${path}`;
+        if (path.startsWith('http') || path.startsWith('/')) return path;
+        return `/api/v1/files/${path}`;
     };
 
     const [profileData, setProfileData] = useState({
@@ -87,8 +117,8 @@ export default function ProfileSettings({ auth }: PageProps) {
         bio: auth.user.bio || '',
         location: auth.user.location || '',
         website: auth.user.website || '',
-        profilePicture: getImageUrl(auth.user.profile_picture_path),
-        coverPhoto: getImageUrl(auth.user.cover_photo_path),
+        profilePicture: auth.user.profile_picture_url || getImageUrl(auth.user.profile_picture_path),
+        coverPhoto: auth.user.cover_photo_url || getImageUrl(auth.user.cover_photo_path),
     });
 
     // Social Links
@@ -169,7 +199,8 @@ export default function ProfileSettings({ auth }: PageProps) {
     };
 
     const handleDeleteImage = async (type: 'profile_picture' | 'cover_photo') => {
-        if (!confirm(`Are you sure you want to remove this ${type === 'profile_picture' ? 'profile picture' : 'cover photo'}?`)) {
+        const ok = await confirm({ title: 'Remove Image', message: `Are you sure you want to remove this ${type === 'profile_picture' ? 'profile picture' : 'cover photo'}?`, variant: 'destructive', confirmLabel: 'Remove' });
+        if (!ok) {
             return;
         }
 
@@ -305,6 +336,119 @@ export default function ProfileSettings({ auth }: PageProps) {
             setTimeout(() => setShowError(false), 5000);
         } finally {
             setSaving(false);
+        }
+    };
+
+    // Session/Device management
+    const fetchSessions = async () => {
+        setSessionsLoading(true);
+        setSessionMessage(null);
+        try {
+            const token = document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1];
+            const response = await fetch('/api/v1/profile/sessions', {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-XSRF-TOKEN': token ? decodeURIComponent(token) : '',
+                },
+                credentials: 'include',
+            });
+            const data = await response.json();
+            if (data.success) {
+                setSessions(data.data.sessions);
+                setMaxDevices(data.data.max_devices);
+            }
+        } catch (error) {
+            console.error('Failed to fetch sessions:', error);
+        } finally {
+            setSessionsLoading(false);
+        }
+    };
+
+    const revokeSession = async (tokenId: number) => {
+        const confirmed = await confirm({
+            title: 'Revoke Session',
+            message: 'Are you sure you want to revoke this session? The device will be signed out immediately.',
+            confirmLabel: 'Revoke',
+            variant: 'destructive',
+        });
+        if (!confirmed) return;
+
+        setRevokingId(tokenId);
+        setSessionMessage(null);
+        try {
+            const token = document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1];
+            const response = await fetch(`/api/v1/profile/sessions/${tokenId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-XSRF-TOKEN': token ? decodeURIComponent(token) : '',
+                },
+                credentials: 'include',
+            });
+            const data = await response.json();
+            if (data.success) {
+                setSessionMessage({ type: 'success', text: data.message });
+                fetchSessions();
+            } else {
+                setSessionMessage({ type: 'error', text: data.message });
+            }
+        } catch {
+            setSessionMessage({ type: 'error', text: 'Failed to revoke session.' });
+        } finally {
+            setRevokingId(null);
+        }
+    };
+
+    const revokeAllOtherSessions = async () => {
+        const confirmed = await confirm({
+            title: 'Revoke All Other Sessions',
+            message: 'Are you sure you want to sign out all other devices? Only your current session will remain active.',
+            confirmLabel: 'Revoke All',
+            variant: 'destructive',
+        });
+        if (!confirmed) return;
+
+        setRevokingAll(true);
+        setSessionMessage(null);
+        try {
+            const token = document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1];
+            const response = await fetch('/api/v1/profile/sessions', {
+                method: 'DELETE',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-XSRF-TOKEN': token ? decodeURIComponent(token) : '',
+                },
+                credentials: 'include',
+            });
+            const data = await response.json();
+            if (data.success) {
+                setSessionMessage({ type: 'success', text: data.message });
+                fetchSessions();
+            } else {
+                setSessionMessage({ type: 'error', text: data.message });
+            }
+        } catch {
+            setSessionMessage({ type: 'error', text: 'Failed to revoke sessions.' });
+        } finally {
+            setRevokingAll(false);
+        }
+    };
+
+    // Fetch sessions when security tab is opened
+    useEffect(() => {
+        if (activeTab === 'security') {
+            fetchSessions();
+        }
+    }, [activeTab]);
+
+    const getDeviceIcon = (deviceType: string) => {
+        switch (deviceType) {
+            case 'mobile':
+                return <Smartphone className="h-5 w-5" />;
+            case 'tablet':
+                return <Tablet className="h-5 w-5" />;
+            default:
+                return <Laptop className="h-5 w-5" />;
         }
     };
 
@@ -748,6 +892,175 @@ export default function ProfileSettings({ auth }: PageProps) {
                                         </CardContent>
                                     </Card>
                                 </div>
+
+                                {/* Active Sessions / Device Management */}
+                                <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div>
+                                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Active Sessions</h3>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                                Manage your active sessions across devices ({sessions.length} of {maxDevices} max)
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={fetchSessions}
+                                                disabled={sessionsLoading}
+                                            >
+                                                <RefreshCw className={`h-4 w-4 mr-1.5 ${sessionsLoading ? 'animate-spin' : ''}`} />
+                                                Refresh
+                                            </Button>
+                                            {sessions.filter(s => !s.is_current).length > 0 && (
+                                                <Button
+                                                    variant="destructive"
+                                                    size="sm"
+                                                    onClick={revokeAllOtherSessions}
+                                                    disabled={revokingAll}
+                                                >
+                                                    {revokingAll ? (
+                                                        <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                                                    ) : (
+                                                        <Trash2 className="h-4 w-4 mr-1.5" />
+                                                    )}
+                                                    Revoke All Others
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {sessionMessage && (
+                                        <div className={`mb-4 p-4 rounded-lg flex items-center space-x-3 animate-fade-in-up ${sessionMessage.type === 'success'
+                                            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                                            : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
+                                            }`}>
+                                            {sessionMessage.type === 'success' ? (
+                                                <Check className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                                            ) : (
+                                                <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                                            )}
+                                            <p className={`text-sm font-medium ${sessionMessage.type === 'success'
+                                                ? 'text-green-800 dark:text-green-200'
+                                                : 'text-red-800 dark:text-red-200'
+                                                }`}>{sessionMessage.text}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Device limit indicator */}
+                                    <div className="mb-4">
+                                        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400 mb-1.5">
+                                            <span>Device usage</span>
+                                            <span>{sessions.length} / {maxDevices}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                            <div
+                                                className={`h-2 rounded-full transition-all duration-500 ${sessions.length >= maxDevices
+                                                    ? 'bg-red-500'
+                                                    : sessions.length >= maxDevices * 0.8
+                                                        ? 'bg-yellow-500'
+                                                        : 'bg-maroon-600'
+                                                    }`}
+                                                style={{ width: `${Math.min((sessions.length / maxDevices) * 100, 100)}%` }}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {sessionsLoading ? (
+                                        <div className="space-y-3">
+                                            {[1, 2, 3].map(i => (
+                                                <div key={i} className="animate-pulse flex items-center space-x-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                                                    <div className="h-10 w-10 bg-gray-200 dark:bg-gray-700 rounded-full" />
+                                                    <div className="flex-1 space-y-2">
+                                                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
+                                                        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : sessions.length === 0 ? (
+                                        <Card className="bg-gray-50 dark:bg-gray-800">
+                                            <CardContent className="p-8 text-center">
+                                                <Shield className="h-12 w-12 mx-auto text-gray-400 mb-3" />
+                                                <p className="text-gray-500 dark:text-gray-400">No active sessions found.</p>
+                                            </CardContent>
+                                        </Card>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {sessions.map((session, index) => (
+                                                <Card
+                                                    key={session.id}
+                                                    className={`transition-all duration-200 animate-fade-in-up ${session.is_current
+                                                        ? 'border-maroon-300 dark:border-maroon-700 bg-maroon-50/50 dark:bg-maroon-900/10'
+                                                        : 'hover:border-gray-300 dark:hover:border-gray-600'
+                                                        }`}
+                                                    style={{ animationDelay: `${index * 50}ms` }}
+                                                >
+                                                    <CardContent className="p-4">
+                                                        <div className="flex items-center gap-4">
+                                                            {/* Device Icon */}
+                                                            <div className={`flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center ${session.is_current
+                                                                ? 'bg-maroon-100 dark:bg-maroon-900/30 text-maroon-600 dark:text-maroon-400'
+                                                                : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'
+                                                                }`}>
+                                                                {getDeviceIcon(session.device_type)}
+                                                            </div>
+
+                                                            {/* Device Info */}
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                                                        {session.device_name}
+                                                                    </p>
+                                                                    {session.is_current && (
+                                                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-maroon-100 dark:bg-maroon-900/30 text-maroon-700 dark:text-maroon-300">
+                                                                            This device
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                                                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                                        {session.browser} on {session.platform}
+                                                                    </span>
+                                                                    <span className="text-xs text-gray-400 dark:text-gray-500">•</span>
+                                                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                                        IP: {session.ip_address}
+                                                                    </span>
+                                                                    <span className="text-xs text-gray-400 dark:text-gray-500">•</span>
+                                                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                                        Last active: {session.last_active}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Revoke Button */}
+                                                            {!session.is_current && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-900/20 flex-shrink-0"
+                                                                    onClick={() => revokeSession(session.id)}
+                                                                    disabled={revokingId === session.id}
+                                                                >
+                                                                    {revokingId === session.id ? (
+                                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                                    ) : (
+                                                                        <X className="h-4 w-4" />
+                                                                    )}
+                                                                    <span className="ml-1.5 hidden sm:inline">Revoke</span>
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+                                        If you notice any unfamiliar device, revoke its access immediately and change your password.
+                                    </p>
+                                </div>
                             </div>
                         )}
 
@@ -814,6 +1127,7 @@ export default function ProfileSettings({ auth }: PageProps) {
                     </div>
                 </div>
             </div>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </BaseLayout>
     );
 }

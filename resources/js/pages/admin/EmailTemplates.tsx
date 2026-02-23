@@ -22,6 +22,8 @@ import {
     Download
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface EmailTemplate {
     id: string;
@@ -62,6 +64,7 @@ interface Props {
 export default function EmailTemplatesManagement({ user }: Props) {
     const [templates, setTemplates] = useState<EmailTemplate[]>([]);
     const [stats, setStats] = useState<EmailStats | null>(null);
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
@@ -200,7 +203,8 @@ export default function EmailTemplatesManagement({ user }: Props) {
     };
 
     const deleteTemplate = async (templateId: string) => {
-        if (!confirm('Are you sure you want to delete this email template?')) {
+        const ok = await confirm({ title: 'Delete Template', message: 'Are you sure you want to delete this email template?', variant: 'destructive', confirmLabel: 'Delete' });
+        if (!ok) {
             return;
         }
 
@@ -342,7 +346,7 @@ export default function EmailTemplatesManagement({ user }: Props) {
                         <p className="text-maroon-600 dark:text-gray-400">Manage system email templates and communications</p>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Button
                             onClick={exportTemplates}
                             variant="outline"
@@ -645,6 +649,7 @@ export default function EmailTemplatesManagement({ user }: Props) {
                     </div>
                 )}
             </div>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AdminBaseLayout>
     );
 }

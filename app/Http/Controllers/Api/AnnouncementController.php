@@ -7,6 +7,7 @@ use App\Models\Announcement;
 use App\Models\AnnouncementRead;
 use App\Models\User;
 use App\Events\AnnouncementPublished;
+use App\Events\ContentChanged;
 use App\Services\EmailNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -256,6 +257,8 @@ class AnnouncementController extends Controller
 
         $announcement->delete();
 
+        ContentChanged::dispatch('announcement', 'deleted', $announcement->id, $announcement->title);
+
         return response()->json([
             'success' => true,
             'message' => 'Announcement deleted successfully.',
@@ -424,5 +427,265 @@ class AnnouncementController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * Export announcements.
+     */
+    public function exportAnnouncements(Request $request)
+    {
+        $user = Auth::user();
+        
+        if (!in_array($user->role, ['admin', 'super_admin'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Access denied.',
+            ], 403);
+        }
+
+        $format = $request->get('format', 'csv');
+
+        $query = Announcement::with('createdBy:id,name')
+            ->withCount('reads')
+            ->orderBy('created_at', 'desc');
+
+        // Apply filters (same as adminIndex)
+        if ($request->has('campus_id')) {
+            $campusId = $request->campus_id;
+            $query->where(function ($q) use ($campusId) {
+                $q->where('campus_id', $campusId)
+                  ->orWhere('is_multi_campus', true)
+                  ->orWhereNull('campus_id');
+            });
+        }
+
+        if ($request->has('is_published')) {
+            $query->where('is_published', $request->boolean('is_published'));
+        }
+
+        if ($request->has('target_type')) {
+            $query->where('target_type', $request->target_type);
+        }
+
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('content', 'like', "%{$search}%");
+            });
+        }
+
+        $announcements = $query->limit(5000)->get();
+
+        switch ($format) {
+            case 'excel':
+                return $this->exportAnnouncementsToExcel($announcements);
+            case 'pdf':
+                return $this->exportAnnouncementsToPdf($announcements);
+            case 'csv':
+            default:
+                return $this->exportAnnouncementsToCsv($announcements);
+        }
+    }
+
+    private function exportAnnouncementsToCsv($announcements)
+    {
+        $handle = fopen('php://temp', 'w+');
+
+        fputcsv($handle, [
+            'Announcement ID', 'Title', 'Priority', 'Target Type', 'Target Audience',
+            'Show on Landing', 'Status', 'Published Date', 'Created Date', 'Views Count', 'Created By'
+        ]);
+
+        foreach ($announcements as $announcement) {
+            $targetType = ucfirst($announcement->target_type);
+
+            $targetAudience = 'All';
+            if ($announcement->target_type === 'batch' && $announcement->target_batch_years) {
+                $targetAudience = 'Batches: ' . implode(', ', $announcement->target_batch_years);
+            } elseif ($announcement->target_type === 'department' && $announcement->target_department_ids) {
+                $targetAudience = 'Departments: ' . implode(', ', $announcement->target_department_ids);
+            }
+
+            $status = $announcement->is_published ? 'Published' : 'Draft';
+            $publishedDate = $announcement->published_at ? $announcement->published_at->format('Y-m-d H:i:s') : 'Not published';
+            $priority = ucfirst($announcement->priority ?? 'normal');
+            $showOnLanding = $announcement->show_on_landing ? 'Yes' : 'No';
+
+            fputcsv($handle, [
+                $announcement->id,
+                $announcement->title,
+                $priority,
+                $targetType,
+                $targetAudience,
+                $showOnLanding,
+                $status,
+                $publishedDate,
+                $announcement->created_at->format('Y-m-d H:i:s'),
+                $announcement->reads_count ?? 0,
+                $announcement->createdBy->name ?? 'Unknown'
+            ]);
+        }
+
+        rewind($handle);
+        $content = stream_get_contents($handle);
+        fclose($handle);
+
+        return response($content, 200)
+            ->header('Content-Type', 'text/csv')
+            ->header('Content-Disposition', 'attachment; filename="announcements_' . date('Y-m-d_His') . '.csv"');
+    }
+
+    private function exportAnnouncementsToExcel($announcements)
+    {
+        $handle = fopen('php://temp', 'w+');
+        fwrite($handle, "\xEF\xBB\xBF"); // UTF-8 BOM
+
+        fputcsv($handle, [
+            'Announcement ID', 'Title', 'Priority', 'Target Type', 'Target Audience',
+            'Show on Landing', 'Status', 'Published Date', 'Created Date', 'Views Count', 'Created By'
+        ]);
+
+        foreach ($announcements as $announcement) {
+            $targetType = ucfirst($announcement->target_type);
+
+            $targetAudience = 'All';
+            if ($announcement->target_type === 'batch' && $announcement->target_batch_years) {
+                $targetAudience = 'Batches: ' . implode(', ', $announcement->target_batch_years);
+            } elseif ($announcement->target_type === 'department' && $announcement->target_department_ids) {
+                $targetAudience = 'Departments: ' . implode(', ', $announcement->target_department_ids);
+            }
+
+            $status = $announcement->is_published ? 'Published' : 'Draft';
+            $publishedDate = $announcement->published_at ? $announcement->published_at->format('Y-m-d H:i:s') : 'Not published';
+            $priority = ucfirst($announcement->priority ?? 'normal');
+            $showOnLanding = $announcement->show_on_landing ? 'Yes' : 'No';
+
+            fputcsv($handle, [
+                $announcement->id,
+                $announcement->title,
+                $priority,
+                $targetType,
+                $targetAudience,
+                $showOnLanding,
+                $status,
+                $publishedDate,
+                $announcement->created_at->format('Y-m-d H:i:s'),
+                $announcement->reads_count ?? 0,
+                $announcement->createdBy->name ?? 'Unknown'
+            ]);
+        }
+
+        rewind($handle);
+        $content = stream_get_contents($handle);
+        fclose($handle);
+
+        return response($content, 200)
+            ->header('Content-Type', 'application/vnd.ms-excel')
+            ->header('Content-Disposition', 'attachment; filename="announcements_' . date('Y-m-d_His') . '.xlsx"');
+    }
+
+    private function exportAnnouncementsToPdf($announcements)
+    {
+        $html = '<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #800000; text-align: center; }
+        .report-info { text-align: center; margin-bottom: 20px; color: #666; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background-color: #800000; color: white; padding: 10px; text-align: left; font-size: 11px; }
+        td { padding: 8px; border-bottom: 1px solid #ddd; font-size: 10px; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .status-published { color: #16a34a; font-weight: bold; }
+        .status-draft { color: #ca8a04; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Announcements Report</h1>
+    <div class="report-info">
+        Generated on ' . date('F d, Y h:i A') . '<br>
+        Total Records: ' . count($announcements) . '
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Priority</th>
+                <th>Target Type</th>
+                <th>Target Audience</th>
+                <th>Show on Landing</th>
+                <th>Status</th>
+                <th>Published Date</th>
+                <th>Created Date</th>
+                <th>Views</th>
+                <th>Created By</th>
+            </tr>
+        </thead>
+        <tbody>';
+
+        foreach ($announcements as $announcement) {
+            $targetType = ucfirst($announcement->target_type);
+            
+            $targetAudience = 'All';
+            if ($announcement->target_type === 'batch' && $announcement->target_batch_years) {
+                $years = array_slice($announcement->target_batch_years, 0, 3);
+                $targetAudience = 'Batches: ' . implode(', ', $years);
+                if (count($announcement->target_batch_years) > 3) {
+                    $targetAudience .= '...';
+                }
+            } elseif ($announcement->target_type === 'department' && $announcement->target_department_ids) {
+                $depts = array_slice($announcement->target_department_ids, 0, 2);
+                $targetAudience = 'Depts: ' . implode(', ', $depts);
+                if (count($announcement->target_department_ids) > 2) {
+                    $targetAudience .= '...';
+                }
+            }
+
+            $status = $announcement->is_published ? 'Published' : 'Draft';
+            $statusClass = $announcement->is_published ? 'status-published' : 'status-draft';
+            $publishedDate = $announcement->published_at ? $announcement->published_at->format('M d, Y') : 'N/A';
+            $priority = ucfirst($announcement->priority ?? 'normal');
+            $showOnLanding = $announcement->show_on_landing ? 'Yes' : 'No';
+            
+            $html .= '<tr>
+                <td>' . htmlspecialchars($announcement->title) . '</td>
+                <td>' . htmlspecialchars($priority) . '</td>
+                <td>' . htmlspecialchars($targetType) . '</td>
+                <td>' . htmlspecialchars($targetAudience) . '</td>
+                <td>' . htmlspecialchars($showOnLanding) . '</td>
+                <td class="' . $statusClass . '">' . htmlspecialchars($status) . '</td>
+                <td>' . htmlspecialchars($publishedDate) . '</td>
+                <td>' . $announcement->created_at->format('M d, Y') . '</td>
+                <td>' . ($announcement->reads_count ?? 0) . '</td>
+                <td>' . htmlspecialchars($announcement->createdBy->name ?? 'Unknown') . '</td>
+            </tr>';
+        }
+
+        $html .= '</tbody>
+    </table>
+</body>
+</html>';
+
+        return response($html, 200)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'attachment; filename="announcements_' . date('Y-m-d_His') . '.pdf"');
+    }
+
+    private function escapeCsvField($field)
+    {
+        if (is_null($field)) {
+            return '';
+        }
+        
+        $field = str_replace('"', '""', $field);
+        
+        if (strpos($field, ',') !== false || strpos($field, '"') !== false || strpos($field, "\n") !== false) {
+            return '"' . $field . '"';
+        }
+        
+        return $field;
     }
 }

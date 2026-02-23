@@ -37,7 +37,10 @@ import {
     Laptop,
     Layers,
     ChevronRight,
-    Send
+    Send,
+    Download,
+    ChevronDown,
+    FileText
 } from 'lucide-react';
 import {
     Dialog,
@@ -68,9 +71,18 @@ import {
     TabsList,
     TabsTrigger,
 } from '@/components/ui/tabs';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { JobPosting, JobCategory, JobFormData } from '@/types/jobs';
 import { useToast } from '@/hooks/use-toast';
+import { useAdminChannel } from '@/hooks/useAdminChannel';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 // Helper function to get CSRF token
 const getCsrfToken = (): string => {
@@ -79,6 +91,7 @@ const getCsrfToken = (): string => {
 
 export default function JobBoard() {
     const { toast } = useToast();
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
     // Campus context for filtering
     const { selectedCampus } = useCampus();
 
@@ -112,7 +125,7 @@ export default function JobBoard() {
         company_logo: '',
         company_website: '',
         category_id: 0,
-        description: '',
+        content: '',
         pages: [],
         use_pages: false,
         requirements: '',
@@ -208,6 +221,49 @@ export default function JobBoard() {
         return () => clearTimeout(timer);
     }, [search]);
 
+    const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
+        try {
+            const params = new URLSearchParams();
+            params.append('format', format);
+            if (debouncedSearch) params.append('search', debouncedSearch);
+            if (statusFilter) params.append('status', statusFilter);
+            if (categoryFilter) params.append('category_id', categoryFilter);
+            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
+
+            const response = await fetch(`/api/v1/admin/jobs/export?${params.toString()}`, {
+                headers: {
+                    'Accept': 'application/octet-stream',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'include',
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const extension = format === 'excel' ? 'xlsx' : format;
+                a.download = `job_postings_${new Date().toISOString().split('T')[0]}.${extension}`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                toast({
+                    title: 'Export Successful',
+                    description: `Job postings exported as ${format.toUpperCase()}.`,
+                });
+            } else {
+                console.error('Export failed:', response.statusText);
+                alert('Export failed. Please try again.');
+            }
+        } catch (error) {
+            console.error('Export error:', error);
+            alert('Export failed. Please try again.');
+        }
+    };
+
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
@@ -220,6 +276,16 @@ export default function JobBoard() {
         };
         fetchData();
     }, [statusFilter, categoryFilter, fetchJobs]);
+
+    // Real-time: refresh when jobs change
+    useAdminChannel({
+        onContentChange: (data) => {
+            if (data.content_type === 'job') {
+                fetchJobs();
+                fetchStatistics();
+            }
+        },
+    });
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -235,7 +301,7 @@ export default function JobBoard() {
                 company_logo: job.company_logo || '',
                 company_website: job.company_website || '',
                 category_id: job.category_id,
-                description: job.description,
+                content: job.content,
                 pages: job.pages || [],
                 use_pages: job.use_pages || false,
                 requirements: job.requirements || '',
@@ -265,7 +331,7 @@ export default function JobBoard() {
                 company_logo: '',
                 company_website: '',
                 category_id: categories[0]?.id || 0,
-                description: '',
+                content: '',
                 pages: [],
                 use_pages: false,
                 requirements: '',
@@ -379,7 +445,8 @@ export default function JobBoard() {
     };
 
     const deleteJob = async (job: JobPosting) => {
-        if (!confirm(`Are you sure you want to delete "${job.title}"?`)) return;
+        const ok = await confirm({ title: 'Delete Job', message: `Are you sure you want to delete "${job.title}"?`, variant: 'destructive', confirmLabel: 'Delete' });
+        if (!ok) return;
 
         try {
             const response = await fetch(`/api/v1/admin/jobs/${job.id}`, {
@@ -605,10 +672,35 @@ export default function JobBoard() {
                             Manage job postings and categories
                         </p>
                     </div>
-                    <Button onClick={() => openJobForm()}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        New Job Posting
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline">
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Export
+                                    <ChevronDown className="h-4 w-4 ml-2" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleExport('csv')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as CSV
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('excel')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as Excel
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as PDF
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <Button onClick={() => openJobForm()}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            New Job Posting
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Statistics */}
@@ -742,10 +834,10 @@ export default function JobBoard() {
                                         className="group bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1 hover:border-maroon-300"
                                     >
                                         {/* Image Section */}
-                                        {job.poster_image ? (
+                                        {job.poster_image_url ? (
                                             <div className="h-48 overflow-hidden relative">
                                                 <img
-                                                    src={job.poster_image}
+                                                    src={job.poster_image_url}
                                                     alt={job.title}
                                                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                                                 />
@@ -885,7 +977,7 @@ export default function JobBoard() {
                             </Button>
                         </div>
                         <Card>
-                            <CardContent className="p-0">
+                            <CardContent className="p-0 overflow-x-auto">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
@@ -1028,10 +1120,10 @@ export default function JobBoard() {
                                 />
                             ) : (
                                 <div>
-                                    <Label>Description *</Label>
+                                    <Label>Content *</Label>
                                     <Textarea
-                                        value={formData.description}
-                                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                        value={formData.content}
+                                        onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                                         placeholder="Describe the role and responsibilities..."
                                         rows={4}
                                     />
@@ -1416,10 +1508,10 @@ export default function JobBoard() {
                     {viewingJob && (
                         <>
                             {/* Poster Image Banner */}
-                            {viewingJob.poster_image && (
+                            {viewingJob.poster_image_url && (
                                 <div className="w-full h-48 -mt-6 -mx-6 mb-4 overflow-hidden rounded-t-lg" style={{ width: 'calc(100% + 3rem)' }}>
                                     <img
-                                        src={viewingJob.poster_image}
+                                        src={viewingJob.poster_image_url}
                                         alt={viewingJob.title}
                                         className="w-full h-full object-cover"
                                     />
@@ -1427,9 +1519,9 @@ export default function JobBoard() {
                             )}
                             <DialogHeader>
                                 <div className="flex items-start gap-4">
-                                    {viewingJob.company_logo ? (
+                                    {viewingJob.company_logo_url ? (
                                         <img
-                                            src={viewingJob.company_logo}
+                                            src={viewingJob.company_logo_url}
                                             alt={viewingJob.company_name}
                                             className="w-16 h-16 rounded-lg object-cover"
                                         />
@@ -1519,7 +1611,7 @@ export default function JobBoard() {
                                     ) : (
                                         <div
                                             className="text-sm text-muted-foreground prose prose-sm max-w-none dark:prose-invert"
-                                            dangerouslySetInnerHTML={{ __html: viewingJob.description }}
+                                            dangerouslySetInnerHTML={{ __html: viewingJob.content }}
                                         />
                                     )}
                                 </div>
@@ -1646,6 +1738,7 @@ export default function JobBoard() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AdminBaseLayout>
     );
 }

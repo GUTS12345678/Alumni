@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\JobPosting;
 use App\Models\JobCategory;
 use App\Models\JobView;
+use App\Events\ContentChanged;
+use App\Events\DashboardUpdated;
 use App\Services\EmailNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -80,7 +82,7 @@ class JobBoardController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
                   ->orWhere('company_name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%")
+                  ->orWhere('content', 'like', "%{$search}%")
                   ->orWhere('requirements', 'like', "%{$search}%");
             });
         }
@@ -288,7 +290,7 @@ class JobBoardController extends Controller
             'background_image' => 'nullable|string|max:500',
             'company_website' => 'nullable|url|max:500',
             'category_id' => 'required|exists:job_categories,id',
-            'description' => 'nullable|string|max:10000',
+            'content' => 'nullable|string|max:10000',
             'pages' => 'nullable|array',
             'pages.*.title' => 'nullable|string|max:255',
             'pages.*.content' => 'required|string',
@@ -339,6 +341,9 @@ class JobBoardController extends Controller
             }
         }
 
+        ContentChanged::dispatch('job', 'created', $jobPosting->id, $jobPosting->title);
+        DashboardUpdated::dispatch('new_job');
+
         return response()->json([
             'success' => true,
             'data' => $jobPosting,
@@ -368,7 +373,7 @@ class JobBoardController extends Controller
             'background_image' => 'nullable|string|max:500',
             'company_website' => 'nullable|url|max:500',
             'category_id' => 'sometimes|exists:job_categories,id',
-            'description' => 'nullable|string|max:10000',
+            'content' => 'nullable|string|max:10000',
             'pages' => 'nullable|array',
             'pages.*.title' => 'nullable|string|max:255',
             'pages.*.content' => 'required|string',
@@ -422,6 +427,8 @@ class JobBoardController extends Controller
             }
         }
 
+        ContentChanged::dispatch('job', 'updated', $jobPosting->id, $jobPosting->title);
+
         return response()->json([
             'success' => true,
             'data' => $jobPosting,
@@ -444,6 +451,8 @@ class JobBoardController extends Controller
         }
 
         $jobPosting->delete();
+
+        ContentChanged::dispatch('job', 'deleted', $jobPosting->id, $jobPosting->title);
 
         return response()->json([
             'success' => true,
@@ -675,5 +684,268 @@ class JobBoardController extends Controller
                 'user_agent' => request()->userAgent(),
             ]);
         }
+    }
+
+    /**
+     * Export job postings.
+     */
+    public function exportJobs(Request $request)
+    {
+        $user = Auth::user();
+        
+        if (!in_array($user->role, ['admin', 'super_admin'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Access denied.',
+            ], 403);
+        }
+
+        $format = $request->get('format', 'csv');
+
+        $query = JobPosting::with(['category:id,name'])
+            ->withCount('views');
+
+        // Apply filters (same as adminIndex)
+        if ($request->has('campus_id')) {
+            $campusId = $request->campus_id;
+            $query->where(function ($q) use ($campusId) {
+                $q->where('campus_id', $campusId)
+                  ->orWhere('is_multi_campus', true)
+                  ->orWhereNull('campus_id');
+            });
+        }
+
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        if ($request->has('category_id')) {
+            $query->where('category_id', $request->category_id);
+        }
+
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('company_name', 'like', "%{$search}%");
+            });
+        }
+
+        $jobs = $query->orderBy('created_at', 'desc')
+            ->limit(5000)
+            ->get();
+
+        switch ($format) {
+            case 'excel':
+                return $this->exportJobsToExcel($jobs);
+            case 'pdf':
+                return $this->exportJobsToPdf($jobs);
+            case 'csv':
+            default:
+                return $this->exportJobsToCsv($jobs);
+        }
+    }
+
+    private function exportJobsToCsv($jobs)
+    {
+        $handle = fopen('php://temp', 'w+');
+
+        // CSV Headers
+        fputcsv($handle, [
+            'Job ID', 'Job Title', 'Company', 'Category', 'Location',
+            'Job Type', 'Work Arrangement', 'Experience Level', 'Salary Range',
+            'Featured', 'Application Deadline', 'Contact Email', 'Contact Phone',
+            'Status', 'Posted Date', 'Views Count'
+        ]);
+
+        foreach ($jobs as $job) {
+            $jobType = ucwords(str_replace('_', ' ', $job->job_type ?? 'N/A'));
+            $workArrangement = $job->work_arrangement ? ucwords(str_replace('_', ' ', $job->work_arrangement)) : 'N/A';
+            $experienceLevel = ucwords(str_replace('_', ' ', $job->experience_level ?? 'N/A'));
+
+            $salaryRange = 'Not specified';
+            if ($job->salary_min && $job->salary_max) {
+                $currency = $job->salary_currency ?? 'PHP';
+                $salaryRange = "{$currency} {$job->salary_min} - {$job->salary_max}";
+            } elseif ($job->salary_range) {
+                $salaryRange = $job->salary_range;
+            }
+
+            fputcsv($handle, [
+                $job->id,
+                $job->title,
+                $job->company_name,
+                $job->category->name ?? 'Uncategorized',
+                $job->location,
+                $jobType,
+                $workArrangement,
+                $experienceLevel,
+                $salaryRange,
+                $job->is_featured ? 'Yes' : 'No',
+                $job->application_deadline ? (is_string($job->application_deadline) ? $job->application_deadline : $job->application_deadline->format('Y-m-d')) : 'N/A',
+                $job->contact_email ?? '',
+                $job->contact_phone ?? '',
+                ucfirst($job->status),
+                $job->created_at->format('Y-m-d H:i:s'),
+                $job->views_count ?? 0
+            ]);
+        }
+
+        rewind($handle);
+        $content = stream_get_contents($handle);
+        fclose($handle);
+
+        return response($content, 200)
+            ->header('Content-Type', 'text/csv')
+            ->header('Content-Disposition', 'attachment; filename="job_postings_' . date('Y-m-d_His') . '.csv"');
+    }
+
+    private function exportJobsToExcel($jobs)
+    {
+        $handle = fopen('php://temp', 'w+');
+        fwrite($handle, "\xEF\xBB\xBF"); // UTF-8 BOM
+
+        // Excel Headers
+        fputcsv($handle, [
+            'Job ID', 'Job Title', 'Company', 'Category', 'Location',
+            'Job Type', 'Work Arrangement', 'Experience Level', 'Salary Range',
+            'Featured', 'Application Deadline', 'Contact Email', 'Contact Phone',
+            'Status', 'Posted Date', 'Views Count'
+        ]);
+
+        foreach ($jobs as $job) {
+            $jobType = ucwords(str_replace('_', ' ', $job->job_type ?? 'N/A'));
+            $workArrangement = $job->work_arrangement ? ucwords(str_replace('_', ' ', $job->work_arrangement)) : 'N/A';
+            $experienceLevel = ucwords(str_replace('_', ' ', $job->experience_level ?? 'N/A'));
+
+            $salaryRange = 'Not specified';
+            if ($job->salary_min && $job->salary_max) {
+                $currency = $job->salary_currency ?? 'PHP';
+                $salaryRange = "{$currency} {$job->salary_min} - {$job->salary_max}";
+            } elseif ($job->salary_range) {
+                $salaryRange = $job->salary_range;
+            }
+
+            fputcsv($handle, [
+                $job->id,
+                $job->title,
+                $job->company_name,
+                $job->category->name ?? 'Uncategorized',
+                $job->location,
+                $jobType,
+                $workArrangement,
+                $experienceLevel,
+                $salaryRange,
+                $job->is_featured ? 'Yes' : 'No',
+                $job->application_deadline ? (is_string($job->application_deadline) ? $job->application_deadline : $job->application_deadline->format('Y-m-d')) : 'N/A',
+                $job->contact_email ?? '',
+                $job->contact_phone ?? '',
+                ucfirst($job->status),
+                $job->created_at->format('Y-m-d H:i:s'),
+                $job->views_count ?? 0
+            ]);
+        }
+
+        rewind($handle);
+        $content = stream_get_contents($handle);
+        fclose($handle);
+
+        return response($content, 200)
+            ->header('Content-Type', 'application/vnd.ms-excel')
+            ->header('Content-Disposition', 'attachment; filename="job_postings_' . date('Y-m-d_His') . '.xlsx"');
+    }
+
+    private function exportJobsToPdf($jobs)
+    {
+        $html = '<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #800000; text-align: center; }
+        .report-info { text-align: center; margin-bottom: 20px; color: #666; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background-color: #800000; color: white; padding: 10px; text-align: left; font-size: 11px; }
+        td { padding: 8px; border-bottom: 1px solid #ddd; font-size: 10px; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .status-published { color: #16a34a; font-weight: bold; }
+        .status-draft { color: #ca8a04; font-weight: bold; }
+        .status-archived { color: #dc2626; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Job Postings Report</h1>
+    <div class="report-info">
+        Generated on ' . date('F d, Y h:i A') . '<br>
+        Total Records: ' . count($jobs) . '
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Job Title</th>
+                <th>Company</th>
+                <th>Category</th>
+                <th>Location</th>
+                <th>Job Type</th>
+                <th>Salary Range</th>
+                <th>Featured</th>
+                <th>Contact Email</th>
+                <th>Status</th>
+                <th>Posted Date</th>
+                <th>Views</th>
+            </tr>
+        </thead>
+        <tbody>';
+
+        foreach ($jobs as $job) {
+            $jobType = ucwords(str_replace('_', ' ', $job->job_type ?? 'N/A'));
+            $statusClass = 'status-' . strtolower($job->status);
+            $salaryRange = 'N/A';
+            if ($job->salary_min && $job->salary_max) {
+                $currency = $job->salary_currency ?? 'PHP';
+                $salaryRange = "{$currency} {$job->salary_min} - {$job->salary_max}";
+            } elseif ($job->salary_range) {
+                $salaryRange = $job->salary_range;
+            }
+            
+            $html .= '<tr>
+                <td>' . htmlspecialchars($job->title) . '</td>
+                <td>' . htmlspecialchars($job->company_name) . '</td>
+                <td>' . htmlspecialchars($job->category->name ?? 'Uncategorized') . '</td>
+                <td>' . htmlspecialchars($job->location) . '</td>
+                <td>' . htmlspecialchars($jobType) . '</td>
+                <td>' . htmlspecialchars($salaryRange) . '</td>
+                <td>' . ($job->is_featured ? 'Yes' : 'No') . '</td>
+                <td>' . htmlspecialchars($job->contact_email ?? '') . '</td>
+                <td class="' . $statusClass . '">' . htmlspecialchars(ucfirst($job->status)) . '</td>
+                <td>' . $job->created_at->format('M d, Y') . '</td>
+                <td>' . ($job->views_count ?? 0) . '</td>
+            </tr>';
+        }
+
+        $html .= '</tbody>
+    </table>
+</body>
+</html>';
+
+        return response($html, 200)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'attachment; filename="job_postings_' . date('Y-m-d_His') . '.pdf"');
+    }
+
+    private function escapeCsvField($field)
+    {
+        if (is_null($field)) {
+            return '';
+        }
+        
+        $field = str_replace('"', '""', $field);
+        
+        if (strpos($field, ',') !== false || strpos($field, '"') !== false || strpos($field, "\n") !== false) {
+            return '"' . $field . '"';
+        }
+        
+        return $field;
     }
 }

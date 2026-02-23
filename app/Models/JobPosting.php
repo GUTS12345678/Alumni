@@ -22,7 +22,7 @@ class JobPosting extends Model
         'poster_image',
         'background_image',
         'company_website',
-        'description',
+        'content',
         'pages',
         'use_pages',
         
@@ -91,6 +91,75 @@ class JobPosting extends Model
         'featured_until' => 'date',
         'published_at' => 'datetime',
     ];
+
+    protected $appends = [
+        'poster_image_url',
+        'company_logo_url',
+        'background_image_url',
+    ];
+
+    /**
+     * Get the full URL for poster_image
+     */
+    public function getPosterImageUrlAttribute(): ?string
+    {
+        if (!$this->poster_image) {
+            return null;
+        }
+        
+        if (str_starts_with($this->poster_image, '/api/') || str_starts_with($this->poster_image, 'http')) {
+            return $this->poster_image;
+        }
+        
+        $path = $this->poster_image;
+        if (str_starts_with($path, '/storage/')) {
+            $path = substr($path, 9);
+        }
+        
+        return '/api/v1/files/' . $path;
+    }
+
+    /**
+     * Get the full URL for company_logo
+     */
+    public function getCompanyLogoUrlAttribute(): ?string
+    {
+        if (!$this->company_logo) {
+            return null;
+        }
+        
+        if (str_starts_with($this->company_logo, '/api/') || str_starts_with($this->company_logo, 'http')) {
+            return $this->company_logo;
+        }
+        
+        $path = $this->company_logo;
+        if (str_starts_with($path, '/storage/')) {
+            $path = substr($path, 9);
+        }
+        
+        return '/api/v1/files/' . $path;
+    }
+
+    /**
+     * Get the full URL for background_image
+     */
+    public function getBackgroundImageUrlAttribute(): ?string
+    {
+        if (!$this->background_image) {
+            return null;
+        }
+        
+        if (str_starts_with($this->background_image, '/api/') || str_starts_with($this->background_image, 'http')) {
+            return $this->background_image;
+        }
+        
+        $path = $this->background_image;
+        if (str_starts_with($path, '/storage/')) {
+            $path = substr($path, 9);
+        }
+        
+        return '/api/v1/files/' . $path;
+    }
 
     protected static function boot()
     {

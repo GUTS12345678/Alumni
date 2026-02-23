@@ -24,14 +24,17 @@ window.Pusher = Pusher;
 let echo: Echo<'reverb'> | null = null;
 
 try {
+    const wsScheme = import.meta.env.VITE_REVERB_SCHEME ?? 'https';
+    const wsPort = Number(import.meta.env.VITE_REVERB_PORT ?? (wsScheme === 'https' ? 443 : 80));
+
     echo = new Echo({
         broadcaster: 'reverb',
         key: import.meta.env.VITE_REVERB_APP_KEY,
         wsHost: import.meta.env.VITE_REVERB_HOST,
-        wsPort: import.meta.env.VITE_REVERB_PORT ?? 80,
-        wssPort: import.meta.env.VITE_REVERB_PORT ?? 443,
-        forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'https') === 'https',
-        enabledTransports: ['ws', 'wss'],
+        wsPort: wsPort,
+        wssPort: wsPort,
+        forceTLS: wsScheme === 'https',
+        enabledTransports: wsScheme === 'https' ? ['wss'] : ['ws', 'wss'],
         authEndpoint: '/broadcasting/auth',
     });
 

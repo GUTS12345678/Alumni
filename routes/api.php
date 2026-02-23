@@ -9,8 +9,10 @@ use App\Http\Controllers\Api\EmailOtpController;
 use App\Http\Controllers\Api\MessagingController;
 use App\Http\Controllers\Api\AnnouncementController;
 use App\Http\Controllers\Api\JobBoardController;
+use App\Http\Controllers\Api\ContentController;
 use App\Http\Controllers\Api\CampusController;
 use App\Http\Controllers\Api\PublicLandingController;
+use App\Http\Controllers\Api\LandingContentController;
 use App\Http\Controllers\Api\CertificateController;
 
 
@@ -21,6 +23,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/announcements', [PublicLandingController::class, 'getAnnouncements']);
         Route::get('/jobs', [PublicLandingController::class, 'getJobs']);
         Route::get('/stats', [PublicLandingController::class, 'getStats']);
+        Route::get('/content', [PublicLandingController::class, 'getContent']);
         Route::post('/search-alumni', [PublicLandingController::class, 'searchAlumni']);
         Route::get('/appearance', [\App\Http\Controllers\Api\V1\Admin\AppearanceController::class, 'index']);
     });
@@ -46,12 +49,7 @@ Route::prefix('v1')->group(function () {
     Route::prefix('admin')->group(function () {
         Route::get('/departments/active', [\App\Http\Controllers\Admin\DepartmentController::class, 'getActive']);
         Route::get('/departments/{id}', [\App\Http\Controllers\Admin\DepartmentController::class, 'show']);
-        Route::put('/departments/{id}', [\App\Http\Controllers\Admin\DepartmentController::class, 'update']);
         Route::get('/departments/{id}/courses', [\App\Http\Controllers\Admin\DepartmentController::class, 'getCourses']);
-        Route::get('/departments/{id}/alumni', [\App\Http\Controllers\Admin\DepartmentController::class, 'getAlumni']);
-        Route::get('/departments/{id}/analytics', [\App\Http\Controllers\Admin\DepartmentController::class, 'getAnalytics']);
-        Route::get('/departments/{id}/analytics/export', [\App\Http\Controllers\Admin\DepartmentController::class, 'exportAnalytics']);
-        Route::post('/departments/upload-image', [\App\Http\Controllers\Admin\DepartmentController::class, 'uploadImage']);
     });
 
     // Campus routes (public - for registration dropdowns)
@@ -61,8 +59,28 @@ Route::prefix('v1')->group(function () {
     // Validation endpoints for registration
     Route::post('/check-email', [AuthController::class, 'checkEmail']);
     Route::post('/check-student-id', [AuthController::class, 'checkStudentId']);
+    Route::post('/check-phone', [AuthController::class, 'checkPhone']);
     Route::post('/check-login', [AuthController::class, 'checkLogin']);
 });
+
+// ============================================================
+// PUBLIC ASSET SERVE ROUTE (no auth — branding, department images)
+// Only serves whitelisted paths: appearance/, departments/
+// ============================================================
+Route::get('v1/assets/{path}', [\App\Http\Controllers\FileServeController::class, 'servePublic'])
+    ->where('path', '.*')
+    ->name('assets.serve');
+
+// ============================================================
+// PRIVATE FILE SERVE ROUTE
+// Files uploaded to private storage (storage/app/uploads/) are
+// streamed through this authenticated route instead of being
+// directly accessible from the public web root.
+// ============================================================
+Route::get('v1/files/{path}', [\App\Http\Controllers\FileServeController::class, 'serve'])
+    ->where('path', '.*')
+    ->middleware('auth:sanctum')
+    ->name('files.serve');
 
 // Protected routes (authentication required)
 Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
@@ -82,14 +100,14 @@ Route::prefix('v1')->middleware(['auth:sanctum'])->group(function () {
     Route::post('/survey-responses/{responseId}/answer', [SurveyController::class, 'saveAnswer']);
     Route::post('/survey-responses/{responseId}/submit', [SurveyController::class, 'submitSurvey']);
 
-    // Campus routes (authenticated)
-    Route::get('/campuses/{campus}', [CampusController::class, 'show']);
-    Route::get('/campuses/{campus}/statistics', [CampusController::class, 'statistics']);
+    // Campus routes (authenticated) - literal routes MUST come before {campus} wildcard
     Route::get('/campuses/comparison', [CampusController::class, 'comparison']);
     Route::get('/campuses/distribution', [CampusController::class, 'distribution']);
     Route::get('/campuses/employment-breakdown', [CampusController::class, 'employmentBreakdown']);
     Route::get('/campuses/can-switch', [CampusController::class, 'canSwitch']);
     Route::get('/campuses/effective', [CampusController::class, 'effective']);
+    Route::get('/campuses/{campus}', [CampusController::class, 'show']);
+    Route::get('/campuses/{campus}/statistics', [CampusController::class, 'statistics']);
 });
 
 // Alumni-only routes (authentication + alumni role required)
@@ -143,10 +161,47 @@ Route::prefix('v1/messaging')->middleware(['auth:sanctum,web'])->group(function 
     
     // Unread count
     Route::get('/unread-count', [MessagingController::class, 'getUnreadCount']);
+
+    // Admin archive / history (admin-only)
+    Route::get('/archive/conversations', [MessagingController::class, 'getArchiveConversations']);
+    Route::get('/archive/conversations/{conversation}', [MessagingController::class, 'getArchiveMessages']);
+    Route::get('/archive/conversations/{conversation}/export', [MessagingController::class, 'exportConversation']);
 });
 
 // ============================================================
-// ANNOUNCEMENTS ROUTES
+// UNIFIED CONTENT ROUTES (replaces separate announcements/jobs)
+// ============================================================
+Route::prefix('v1/content')->middleware(['auth:sanctum'])->group(function () {
+    // Public/Alumni viewing
+    Route::get('/', [ContentController::class, 'index']);
+    Route::get('/featured', [ContentController::class, 'getFeatured']);
+    Route::get('/recent', [ContentController::class, 'getRecent']);
+    Route::get('/unread-count', [ContentController::class, 'getUnreadCount']);
+    Route::get('/categories', [ContentController::class, 'getCategories']);
+    Route::get('/{content}', [ContentController::class, 'show']);
+    Route::post('/{content}/read', [ContentController::class, 'markAsRead']);
+
+    // Admin routes
+    Route::middleware(['admin'])->group(function () {
+        Route::get('/admin/list', [ContentController::class, 'adminIndex']);
+        Route::get('/admin/statistics', [ContentController::class, 'getStatistics']);
+        Route::get('/admin/export', [ContentController::class, 'exportContent']);
+        Route::get('/admin/batch-years', [ContentController::class, 'getBatchYears']);
+        Route::post('/admin/create', [ContentController::class, 'store']);
+        Route::put('/admin/{content}', [ContentController::class, 'update']);
+        Route::delete('/admin/{content}', [ContentController::class, 'destroy']);
+        Route::post('/admin/bulk-status', [ContentController::class, 'bulkUpdateStatus']);
+        Route::post('/admin/upload-media', [ContentController::class, 'uploadMedia']);
+
+        // Category management
+        Route::post('/admin/categories', [ContentController::class, 'storeCategory']);
+        Route::put('/admin/categories/{category}', [ContentController::class, 'updateCategory']);
+        Route::delete('/admin/categories/{category}', [ContentController::class, 'destroyCategory']);
+    });
+});
+
+// ============================================================
+// LEGACY ANNOUNCEMENTS ROUTES (backward compatibility)
 // ============================================================
 Route::prefix('v1/announcements')->middleware(['auth:sanctum'])->group(function () {
     // Alumni routes (viewing announcements)
@@ -158,6 +213,7 @@ Route::prefix('v1/announcements')->middleware(['auth:sanctum'])->group(function 
     // Admin routes (managing announcements)
     Route::middleware(['admin'])->group(function () {
         Route::get('/admin/list', [AnnouncementController::class, 'adminIndex']);
+        Route::get('/admin/export', [AnnouncementController::class, 'exportAnnouncements']);
         Route::get('/admin/batch-years', [AnnouncementController::class, 'getBatchYears']);
         Route::post('/admin/create', [AnnouncementController::class, 'store']);
         Route::put('/admin/{announcement}', [AnnouncementController::class, 'update']);
@@ -182,6 +238,7 @@ Route::prefix('v1/admin/jobs')->middleware(['auth:sanctum', 'admin'])->group(fun
     // Job postings management
     Route::get('/', [JobBoardController::class, 'adminIndex']);
     Route::post('/', [JobBoardController::class, 'store']);
+    Route::get('/export', [JobBoardController::class, 'exportJobs']);
     Route::get('/statistics', [JobBoardController::class, 'getStatistics']);
     Route::get('/{jobPosting}', [JobBoardController::class, 'show']);
     Route::put('/{jobPosting}', [JobBoardController::class, 'update']);
@@ -206,6 +263,11 @@ Route::prefix('v1/profile')->middleware(['auth:sanctum,web'])->group(function ()
     Route::post('/upload-image', [\App\Http\Controllers\Api\V1\ProfileController::class, 'uploadImage']);
     Route::delete('/delete-image', [\App\Http\Controllers\Api\V1\ProfileController::class, 'deleteImage']);
     Route::post('/password', [\App\Http\Controllers\Api\V1\ProfileController::class, 'updatePassword']);
+
+    // Session/Device management
+    Route::get('/sessions', [\App\Http\Controllers\Api\SessionController::class, 'index']);
+    Route::delete('/sessions/{tokenId}', [\App\Http\Controllers\Api\SessionController::class, 'destroy']);
+    Route::delete('/sessions', [\App\Http\Controllers\Api\SessionController::class, 'destroyOthers']);
 });
 
 // Public routes (no authentication required)
@@ -214,9 +276,33 @@ Route::prefix('v1/public')->group(function () {
 });
 
 // Admin-only routes (authentication + admin role required)
-Route::prefix('v1/admin')->middleware(['auth', 'admin'])->group(function () {
+Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function () {
     // Dashboard
     Route::get('/dashboard', [AdminController::class, 'dashboard']);
+    Route::post('/dashboard/refresh-cache', [AdminController::class, 'refreshDashboardCache']);
+    
+    // Cache Management
+    Route::post('/cache/clear-all', [AdminController::class, 'clearAllCaches']);
+    Route::get('/cache/health', [AdminController::class, 'cacheHealthCheck']);
+
+    // Department management (protected - requires admin auth)
+    Route::put('/departments/{id}', [\App\Http\Controllers\Admin\DepartmentController::class, 'update']);
+    Route::get('/departments/{id}/alumni', [\App\Http\Controllers\Admin\DepartmentController::class, 'getAlumni']);
+    Route::get('/departments/{id}/analytics', [\App\Http\Controllers\Admin\DepartmentController::class, 'getAnalytics']);
+    Route::get('/departments/{id}/analytics/export', [\App\Http\Controllers\Admin\DepartmentController::class, 'exportAnalytics']);
+    Route::post('/departments/upload-image', [\App\Http\Controllers\Admin\DepartmentController::class, 'uploadImage']);
+
+    // Landing Page Content Management (Admin & Counselor)
+    Route::prefix('landing-content')->group(function () {
+        Route::get('/', [LandingContentController::class, 'index']);
+        Route::get('/statistics', [LandingContentController::class, 'getStatistics']);
+        Route::post('/', [LandingContentController::class, 'store']);
+        Route::get('/{content}', [LandingContentController::class, 'show']);
+        Route::put('/{content}', [LandingContentController::class, 'update']);
+        Route::delete('/{content}', [LandingContentController::class, 'destroy']);
+        Route::post('/{content}/toggle-publish', [LandingContentController::class, 'togglePublish']);
+        Route::post('/reorder', [LandingContentController::class, 'reorder']);
+    });
 
     // General file uploads (for announcements, job postings, etc.)
     Route::post('/upload/image', [\App\Http\Controllers\Api\UploadController::class, 'uploadImage']);
@@ -238,10 +324,14 @@ Route::prefix('v1/admin')->middleware(['auth', 'admin'])->group(function () {
     Route::get('/alumni', [AdminController::class, 'getAlumni']);
     Route::get('/alumni/stats', [AdminController::class, 'getAlumniStats']);
     Route::get('/alumni/export', [AdminController::class, 'exportAlumni']);
+    Route::post('/alumni', [AdminController::class, 'createAlumni']);
+    Route::post('/alumni/import/preview', [\App\Http\Controllers\Api\AlumniImportController::class, 'preview']);
+    Route::post('/alumni/import', [\App\Http\Controllers\Api\AlumniImportController::class, 'import']);
+    Route::get('/alumni/import/template', [\App\Http\Controllers\Api\AlumniImportController::class, 'downloadTemplate']);
+    Route::delete('/alumni/bulk-delete', [AdminController::class, 'bulkDeleteAlumni']);
     Route::get('/alumni/{id}', [AdminController::class, 'getAlumniProfile']);
     Route::put('/alumni/{id}', [AdminController::class, 'updateAlumni']);
     Route::delete('/alumni/{id}', [AdminController::class, 'deleteAlumni']);
-    Route::delete('/alumni/bulk-delete', [AdminController::class, 'bulkDeleteAlumni']);
 
     // Profile management
     Route::put('/profiles/{id}', [AdminController::class, 'updateProfile']);
@@ -287,6 +377,7 @@ Route::prefix('v1/admin')->middleware(['auth', 'admin'])->group(function () {
 
     // Batch management
     Route::get('/batches', [AdminController::class, 'getBatches']);
+    Route::get('/batches/export', [AdminController::class, 'exportBatches']);
     Route::post('/batches', [AdminController::class, 'createBatch']);
     Route::put('/batches/{id}', [AdminController::class, 'updateBatch']);
     Route::delete('/batches/{id}', [AdminController::class, 'deleteBatch']);
@@ -300,6 +391,7 @@ Route::prefix('v1/admin')->middleware(['auth', 'admin'])->group(function () {
 
     // User Management
     Route::get('/users', [AdminController::class, 'getUsers']);
+    Route::get('/users/export', [AdminController::class, 'exportUsers']);
     Route::post('/users', [AdminController::class, 'createUser']);
     Route::put('/users/{id}', [AdminController::class, 'updateUser']);
     Route::delete('/users/{id}', [AdminController::class, 'deleteUser']);
@@ -365,6 +457,11 @@ Route::prefix('v1/admin')->middleware(['auth', 'admin'])->group(function () {
     Route::post('/bulk/restore', [\App\Http\Controllers\Api\V1\Admin\BulkOperationsController::class, 'bulkRestore']);
     Route::post('/bulk/export', [\App\Http\Controllers\Api\V1\Admin\BulkOperationsController::class, 'bulkExport']);
     Route::post('/bulk/update-status', [\App\Http\Controllers\Api\V1\Admin\BulkOperationsController::class, 'bulkUpdateStatus']);
+
+    // Admin Session Management
+    Route::get('/sessions', [\App\Http\Controllers\Api\AdminSessionController::class, 'index']);
+    Route::delete('/sessions/{tokenId}', [\App\Http\Controllers\Api\AdminSessionController::class, 'destroy']);
+    Route::delete('/sessions/user/{userId}', [\App\Http\Controllers\Api\AdminSessionController::class, 'destroyUserSessions']);
 
     // Archive (soft-deleted items)
     Route::get('/archive', [\App\Http\Controllers\Api\V1\Admin\ArchiveController::class, 'index']);

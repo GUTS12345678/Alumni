@@ -5,6 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
     Table,
     TableBody,
     TableCell,
@@ -37,10 +43,14 @@ import {
     AlertCircle,
     CheckCircle,
     ArrowUpDown,
-    X
+    X,
+    Download,
+    ChevronDown,
+    FileText
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import { useCampus } from '@/contexts/CampusContext';
+import { useAdminChannel } from '@/hooks/useAdminChannel';
 import axios from 'axios';
 
 interface User {
@@ -120,6 +130,30 @@ export default function UserManagement({ user }: Props) {
         status: 'active',
     });
     const [saving, setSaving] = useState(false);
+
+    // Handler to open edit dialog with user data pre-populated
+    const handleEditUser = (targetUser: User) => {
+        setSelectedUser(targetUser);
+        setEditFormData({
+            name: targetUser.name || '',
+            email: targetUser.email || '',
+            role: targetUser.role || 'alumni',
+            status: targetUser.status || 'active',
+        });
+        setShowEditDialog(true);
+    };
+
+    // Safety net: sync edit form when dialog opens with selected user
+    useEffect(() => {
+        if (showEditDialog && selectedUser) {
+            setEditFormData({
+                name: selectedUser.name || '',
+                email: selectedUser.email || '',
+                role: selectedUser.role || 'alumni',
+                status: selectedUser.status || 'active',
+            });
+        }
+    }, [showEditDialog, selectedUser]);
 
     // Email validation state for add user form
     const [addEmailValidation, setAddEmailValidation] = useState<{
@@ -209,6 +243,15 @@ export default function UserManagement({ user }: Props) {
         return () => clearTimeout(timer);
     }, [searchTerm, roleFilter, statusFilter, sortBy, selectedCampus]);
 
+    // Real-time: refresh user list when profiles change
+    useAdminChannel({
+        onDashboardUpdate: (data) => {
+            if (data.trigger === 'profile_update' || data.trigger === 'new_alumni') {
+                fetchUsers();
+            }
+        },
+    });
+
     const fetchUsers = useCallback(async () => {
         try {
             setLoading(currentPage === 1);
@@ -265,6 +308,53 @@ export default function UserManagement({ user }: Props) {
             setRefreshing(false);
         }
     }, [currentPage, searchTerm, roleFilter, statusFilter]);
+
+    const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
+        try {
+            const params = new URLSearchParams();
+            params.append('format', format);
+            if (searchTerm) params.append('search', searchTerm);
+            if (roleFilter !== 'all') params.append('role', roleFilter);
+            if (statusFilter !== 'all') params.append('status', statusFilter);
+            if (sortBy) params.append('sort', sortBy);
+            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
+
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const response = await fetch(`/api/v1/admin/users/export?${params}`, {
+                credentials: 'include',
+                headers: {
+                    'Accept': 'application/octet-stream',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                const extension = format === 'excel' ? 'xlsx' : format;
+                a.download = `users-${new Date().toISOString().split('T')[0]}.${extension}`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } else {
+                console.error('Export failed:', response.status);
+                alert('Failed to export users. Please try again.');
+            }
+        } catch (err) {
+            console.error('Export error:', err);
+            alert('An error occurred while exporting. Please try again.');
+        }
+    };
 
     useEffect(() => {
         // Only fetch when page changes (not search/filters due to debounce above)
@@ -717,7 +807,7 @@ export default function UserManagement({ user }: Props) {
                         <p className="text-maroon-600 dark:text-gray-400">Manage admin users and permissions</p>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Button
                             onClick={() => fetchUsers()}
                             variant="outline"
@@ -725,9 +815,37 @@ export default function UserManagement({ user }: Props) {
                             disabled={refreshing}
                             className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                         >
-                            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                            Refresh
+                            <RefreshCw className={`h-4 w-4 sm:mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                            <span className="hidden sm:inline">Refresh</span>
                         </Button>
+
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-green-300 text-green-700 hover:bg-green-50"
+                                >
+                                    <Download className="h-4 w-4 sm:mr-2" />
+                                    <span className="hidden sm:inline">Export</span>
+                                    <ChevronDown className="h-4 w-4 sm:ml-2" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleExport('csv')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as CSV
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('excel')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as Excel
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as PDF
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
                         <Button
                             onClick={() => {
@@ -737,8 +855,8 @@ export default function UserManagement({ user }: Props) {
                             className="bg-maroon-700 hover:bg-maroon-800 text-white"
                             size="sm"
                         >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add User
+                            <Plus className="h-4 w-4 sm:mr-2" />
+                            <span className="hidden sm:inline">Add User</span>
                         </Button>
                     </div>
                 </div>
@@ -972,7 +1090,7 @@ export default function UserManagement({ user }: Props) {
                                             <Button variant="ghost" size="sm" className="h-7 text-xs text-maroon-700 dark:text-gray-300" title="View" onClick={() => { setSelectedUser(targetUser); setShowViewDialog(true); }}>
                                                 <Eye className="h-3.5 w-3.5 mr-1" /> View
                                             </Button>
-                                            <Button variant="ghost" size="sm" className="h-7 text-xs text-blue-700" title="Edit" onClick={() => { setSelectedUser(targetUser); setEditFormData({ name: targetUser.name, email: targetUser.email, role: targetUser.role, status: targetUser.status }); setShowEditDialog(true); }}>
+                                            <Button variant="ghost" size="sm" className="h-7 text-xs text-blue-700" title="Edit" onClick={() => handleEditUser(targetUser)}>
                                                 <Edit className="h-3.5 w-3.5 mr-1" /> Edit
                                             </Button>
                                             {user.role === 'super_admin' && (
@@ -1115,16 +1233,7 @@ export default function UserManagement({ user }: Props) {
                                                             size="sm"
                                                             className="text-blue-700 hover:text-blue-800 hover:bg-blue-50"
                                                             title="Edit User"
-                                                            onClick={() => {
-                                                                setSelectedUser(targetUser);
-                                                                setEditFormData({
-                                                                    name: targetUser.name,
-                                                                    email: targetUser.email,
-                                                                    role: targetUser.role,
-                                                                    status: targetUser.status,
-                                                                });
-                                                                setShowEditDialog(true);
-                                                            }}
+                                                            onClick={() => handleEditUser(targetUser)}
                                                         >
                                                             <Edit className="h-4 w-4" />
                                                         </Button>
@@ -1206,7 +1315,7 @@ export default function UserManagement({ user }: Props) {
 
                 {/* View User Dialog */}
                 <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-                    <DialogContent className="max-w-2xl dark:bg-gray-800">
+                    <DialogContent className="sm:max-w-2xl dark:bg-gray-800">
                         <DialogHeader>
                             <DialogTitle className="text-maroon-800 dark:text-gray-200">User Details</DialogTitle>
                             <DialogDescription>
@@ -1282,7 +1391,7 @@ export default function UserManagement({ user }: Props) {
 
                 {/* Edit User Dialog */}
                 <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-                    <DialogContent className="max-w-2xl dark:bg-gray-800">
+                    <DialogContent className="sm:max-w-2xl dark:bg-gray-800">
                         <DialogHeader>
                             <DialogTitle className="text-maroon-800 dark:text-gray-200">Edit User</DialogTitle>
                             <DialogDescription>
@@ -1552,7 +1661,7 @@ export default function UserManagement({ user }: Props) {
 
                 {/* Add User Dialog */}
                 <Dialog open={showAddUserDialog} onOpenChange={setShowAddUserDialog}>
-                    <DialogContent className="max-w-2xl dark:bg-gray-800">
+                    <DialogContent className="sm:max-w-2xl dark:bg-gray-800">
                         <DialogHeader>
                             <DialogTitle className="text-maroon-800 dark:text-gray-200">Add New User</DialogTitle>
                             <DialogDescription>

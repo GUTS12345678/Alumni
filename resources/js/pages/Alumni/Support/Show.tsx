@@ -14,6 +14,8 @@ import {
     XCircle,
     MessageCircle
 } from 'lucide-react';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface Reply {
     id: number;
@@ -55,6 +57,7 @@ export default function SupportShow({ ticket }: Props) {
     const { flash } = usePage<{ flash?: { success?: string; error?: string } }>().props;
     const [replyMessage, setReplyMessage] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
 
     const getStatusBadge = (status: string) => {
         switch (status) {
@@ -96,8 +99,9 @@ export default function SupportShow({ ticket }: Props) {
         });
     };
 
-    const handleClose = () => {
-        if (confirm('Are you sure you want to close this ticket?')) {
+    const handleClose = async () => {
+        const ok = await confirm({ title: 'Close Ticket', message: 'Are you sure you want to close this ticket?', confirmLabel: 'Close Ticket' });
+        if (ok) {
             router.post(`/alumni/support/${ticket.ticket_number}/close`);
         }
     };
@@ -293,6 +297,7 @@ export default function SupportShow({ ticket }: Props) {
                     </CardContent>
                 </Card>
             </div>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AlumniBaseLayout>
     );
 }

@@ -18,10 +18,8 @@ import AppLogoIcon from './app-logo-icon';
 // Helper function to get the correct image URL
 const getImageUrl = (path: string | null | undefined): string | null => {
     if (!path) return null;
-    // If path already starts with /storage, use it as is
-    if (path.startsWith('/storage')) return path;
-    // Otherwise, prepend /storage/
-    return `/storage/${path}`;
+    if (path.startsWith('http') || path.startsWith('/')) return path;
+    return `/api/v1/files/${path}`;
 };
 
 const mainNavItems: NavItem[] = [

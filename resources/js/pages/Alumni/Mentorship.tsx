@@ -240,7 +240,7 @@ export default function Mentorship({ mentors, filters }: Props) {
 
                 {/* Mentorship Request Modal */}
                 <Dialog open={showRequestModal} onOpenChange={setShowRequestModal}>
-                    <DialogContent className="max-w-2xl">
+                    <DialogContent className="sm:max-w-2xl">
                         <DialogHeader>
                             <DialogTitle className="text-2xl text-maroon-800">
                                 Request Mentorship from {selectedMentor?.name}
@@ -277,7 +277,7 @@ export default function Mentorship({ mentors, filters }: Props) {
 
                 {/* Become Mentor Modal */}
                 <Dialog open={showMentorModal} onOpenChange={setShowMentorModal}>
-                    <DialogContent className="max-w-2xl">
+                    <DialogContent className="sm:max-w-2xl">
                         <DialogHeader>
                             <DialogTitle className="text-2xl text-maroon-800">Become a Mentor</DialogTitle>
                             <DialogDescription>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import { useCampus } from '@/contexts/CampusContext';
 import {
     Building,
     Plus,
@@ -14,8 +15,18 @@ import {
     Users,
     BookOpen,
     GraduationCap,
-    Clock
+    Clock,
+    Download,
+    ChevronDown,
+    FileText
 } from 'lucide-react';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
 
 interface Course {
     id: number;
@@ -26,6 +37,7 @@ interface Course {
     majors: string | null;
     duration_years: number;
     status: 'active' | 'inactive';
+    campus_id?: number;
     alumni_profiles_count: number;
     created_at: string;
     updated_at: string;
@@ -122,6 +134,9 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
     const [showDeleteCourseModal, setShowDeleteCourseModal] = useState(false);
     const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
 
+    // Campus context
+    const { campuses, selectedCampus } = useCampus();
+
     // Course form states
     const [courseFormData, setCourseFormData] = useState({
         name: '',
@@ -129,7 +144,8 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
         description: '',
         majors: '',
         duration_years: 4,
-        status: 'active' as 'active' | 'inactive'
+        status: 'active' as 'active' | 'inactive',
+        campus_id: '' as string
     });
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
     const [submitting, setSubmitting] = useState(false);
@@ -238,6 +254,39 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
         fetchAnalytics();
     }, [fetchDepartmentData, fetchCourses, fetchAlumni, fetchAnalytics]);
 
+    const handleExportAnalytics = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
+        try {
+            const response = await fetch(`/api/v1/admin/departments/${departmentId}/analytics/export?format=${format}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/octet-stream',
+                    'X-CSRF-TOKEN': getCsrfToken()
+                },
+                credentials: 'same-origin'
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                const extension = format === 'excel' ? 'xlsx' : format;
+                a.download = `department_analytics_${department?.code}_${new Date().toISOString().split('T')[0]}.${extension}`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } else {
+                console.error('Export failed:', response.status);
+                alert('Failed to export analytics. Please try again.');
+            }
+        } catch (error) {
+            console.error('Export error:', error);
+            alert('An error occurred while exporting. Please try again.');
+        }
+    };
+
     const handleCreateCourse = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormErrors({});
@@ -259,6 +308,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                 body: JSON.stringify({
                     ...courseFormData,
                     department_id: Number(departmentId),
+                    campus_id: courseFormData.campus_id ? Number(courseFormData.campus_id) : undefined,
                     _token: csrfToken
                 })
             });
@@ -305,7 +355,8 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                 credentials: 'same-origin',
                 body: JSON.stringify({
                     ...courseFormData,
-                    department_id: Number(departmentId)
+                    department_id: Number(departmentId),
+                    campus_id: courseFormData.campus_id ? Number(courseFormData.campus_id) : undefined
                 })
             });
 
@@ -371,6 +422,12 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
 
     const openCreateCourseModal = () => {
         resetCourseForm();
+        // Pre-select the currently selected campus from the header selector
+        if (selectedCampus) {
+            setCourseFormData(prev => ({ ...prev, campus_id: selectedCampus.id.toString() }));
+        } else if (campuses.length > 0) {
+            setCourseFormData(prev => ({ ...prev, campus_id: campuses[0].id.toString() }));
+        }
         setShowCourseModal(true);
     };
 
@@ -382,7 +439,8 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
             description: course.description || '',
             majors: course.majors || '',
             duration_years: course.duration_years,
-            status: course.status
+            status: course.status,
+            campus_id: course.campus_id?.toString() || '1'
         });
         setFormErrors({});
         setShowEditCourseModal(true);
@@ -400,7 +458,8 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
             description: '',
             majors: '',
             duration_years: 4,
-            status: 'active'
+            status: 'active',
+            campus_id: selectedCampus?.id.toString() || (campuses[0]?.id.toString() || '1')
         });
         setFormErrors({});
     };
@@ -508,22 +567,33 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                                     <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Department Analytics</h2>
                                     <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Comprehensive insights for {department?.name}</p>
                                 </div>
-                                <button
-                                    onClick={() => {
-                                        const link = document.createElement('a');
-                                        link.href = `/api/v1/admin/departments/${departmentId}/analytics/export`;
-                                        link.download = `department_analytics_${department?.code}_${new Date().toISOString().split('T')[0]}.csv`;
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        document.body.removeChild(link);
-                                    }}
-                                    className="inline-flex items-center px-4 py-2 bg-maroon-600 text-white text-sm font-medium rounded-lg hover:bg-maroon-700 focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:ring-offset-2 transition-colors"
-                                >
-                                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                    Export Analytics
-                                </button>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="inline-flex items-center px-4 py-2 bg-maroon-600 text-white text-sm font-medium rounded-lg hover:bg-maroon-700 focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:ring-offset-2 transition-colors border-0"
+                                        >
+                                            <Download className="w-4 h-4 mr-2" />
+                                            Export Analytics
+                                            <ChevronDown className="w-4 h-4 ml-2" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={() => handleExportAnalytics('csv')}>
+                                            <FileText className="w-4 h-4 mr-2" />
+                                            Export as CSV
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleExportAnalytics('excel')}>
+                                            <FileText className="w-4 h-4 mr-2" />
+                                            Export as Excel
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleExportAnalytics('pdf')}>
+                                            <FileText className="w-4 h-4 mr-2" />
+                                            Export as PDF
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </div>
                         </div>
                         {/* Employment Metrics */}
@@ -938,6 +1008,26 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                                 </select>
                             </div>
 
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Campus *</label>
+                                <select
+                                    value={courseFormData.campus_id}
+                                    onChange={(e) => setCourseFormData({ ...courseFormData, campus_id: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
+                                    required
+                                >
+                                    <option value="">Select Campus</option>
+                                    {campuses.map((campus) => (
+                                        <option key={campus.id} value={campus.id.toString()}>
+                                            {campus.display_name || campus.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                {formErrors.campus_id && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.campus_id}</p>
+                                )}
+                            </div>
+
                             <div className="flex space-x-3 pt-4">
                                 <button
                                     type="button"
@@ -1067,6 +1157,26 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                                     <option value="active">Active</option>
                                     <option value="inactive">Inactive</option>
                                 </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Campus *</label>
+                                <select
+                                    value={courseFormData.campus_id}
+                                    onChange={(e) => setCourseFormData({ ...courseFormData, campus_id: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100"
+                                    required
+                                >
+                                    <option value="">Select Campus</option>
+                                    {campuses.map((campus) => (
+                                        <option key={campus.id} value={campus.id.toString()}>
+                                            {campus.display_name || campus.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                {formErrors.campus_id && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.campus_id}</p>
+                                )}
                             </div>
 
                             <div className="flex space-x-3 pt-4">

@@ -49,6 +49,11 @@ class MessagingController extends Controller
         ->orderBy('updated_at', 'desc')
         ->paginate($request->get('per_page', 20));
 
+        // Transform: add other_participant (for direct chats) and latest_message
+        $conversations->getCollection()->transform(function ($conversation) use ($user) {
+            return $this->transformConversation($conversation, $user);
+        });
+
         return response()->json([
             'success' => true,
             'data' => $conversations,
@@ -139,9 +144,15 @@ class MessagingController extends Controller
             // Check for existing direct conversation
             $existingConversation = $this->findExistingDirectConversation($user->id, $otherUserId);
             if ($existingConversation) {
+                $existingConversation->load([
+                    'participants.user:id,name,email,profile_picture_path,role',
+                    'participants.user.alumniProfile:id,user_id,first_name,last_name',
+                    'lastMessage.sender:id,name,role',
+                ]);
+                $this->transformConversation($existingConversation, $user);
                 return response()->json([
                     'success' => true,
-                    'data' => $existingConversation->load(['participants.user', 'lastMessage']),
+                    'data' => $existingConversation,
                     'message' => 'Existing conversation found.',
                 ]);
             }
@@ -197,7 +208,7 @@ class MessagingController extends Controller
                     'conversation_id' => $conversation->id,
                     'sender_id' => $user->id,
                     'content' => $request->initial_message,
-                    'message_type' => 'text',
+                    'type' => 'text',
                 ]);
 
                 $conversation->update(['last_message_id' => $message->id]);
@@ -207,7 +218,12 @@ class MessagingController extends Controller
 
             DB::commit();
 
-            $conversation->load(['participants.user', 'lastMessage']);
+            $conversation->load([
+                'participants.user:id,name,email,profile_picture_path,role',
+                'participants.user.alumniProfile:id,user_id,first_name,last_name',
+                'lastMessage.sender:id,name,role',
+            ]);
+            $this->transformConversation($conversation, $user);
             
             broadcast(new ConversationCreated($conversation))->toOthers();
 
@@ -275,7 +291,7 @@ class MessagingController extends Controller
             'conversation_id' => $conversation->id,
             'sender_id' => $user->id,
             'content' => $request->content,
-            'message_type' => $request->message_type ?? 'text',
+            'type' => $request->type ?? $request->message_type ?? 'text',
             'attachments' => $request->attachments,
         ]);
 
@@ -386,7 +402,7 @@ class MessagingController extends Controller
             'conversation_id' => $conversation->id,
             'sender_id' => $user->id,
             'content' => $user->name . ' joined the group.',
-            'message_type' => 'system',
+            'type' => 'system',
         ]);
 
         return response()->json([
@@ -482,7 +498,7 @@ class MessagingController extends Controller
             'conversation_id' => $conversation->id,
             'sender_id' => $user->id,
             'content' => $user->name . ' left the group.',
-            'message_type' => 'system',
+            'type' => 'system',
         ]);
 
         return response()->json([
@@ -695,6 +711,26 @@ class MessagingController extends Controller
 
     // =========== HELPER METHODS ===========
 
+    /**
+     * Transform a conversation model to include other_participant and latest_message
+     * so the frontend receives the expected shape.
+     */
+    private function transformConversation(Conversation $conversation, $user): Conversation
+    {
+        $conversation->latest_message = $conversation->lastMessage;
+
+        if ($conversation->type === 'direct') {
+            $other = $conversation->participants
+                ->where('user_id', '!=', $user->id)
+                ->first();
+            $conversation->other_participant = $other?->user;
+        }
+
+        unset($conversation->lastMessage);
+
+        return $conversation;
+    }
+
     private function canCreateConversation(User $user, string $type, array $participantIds): bool
     {
         // Admins can create any type of conversation
@@ -773,5 +809,187 @@ class MessagingController extends Controller
         }
 
         return $lastMessage;
+    }
+
+    // =========== ADMIN ARCHIVE / HISTORY ===========
+
+    /**
+     * Get all conversations for admin archival view (admin-only).
+     */
+    public function getArchiveConversations(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+        if (!in_array($user->role, ['admin', 'super_admin'])) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $query = Conversation::with([
+            'participants.user:id,name,email,profile_picture_path,role',
+            'participants.user.alumniProfile:id,user_id,first_name,last_name',
+            'lastMessage.sender:id,name,role',
+            'creator:id,name,email',
+        ])
+        ->withCount('messages')
+        ->withCount(['participants as active_participants_count' => function ($q) {
+            $q->whereNull('left_at')->where('invitation_status', 'accepted');
+        }]);
+
+        // Search by participant name/email or conversation name
+        if ($search = $request->get('search')) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhereHas('participants.user', function ($subQ) use ($search) {
+                      $subQ->where('name', 'like', "%{$search}%")
+                           ->orWhere('email', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        // Filter by type
+        if ($type = $request->get('type')) {
+            $query->where('type', $type);
+        }
+
+        // Date range
+        if ($from = $request->get('from')) {
+            $query->where('created_at', '>=', $from);
+        }
+        if ($to = $request->get('to')) {
+            $query->where('created_at', '<=', $to . ' 23:59:59');
+        }
+
+        $conversations = $query->orderBy('updated_at', 'desc')
+            ->paginate($request->get('per_page', 20));
+
+        // Transform to add participant names for display
+        $conversations->getCollection()->transform(function ($conversation) {
+            $participants = $conversation->participants->map(function ($p) {
+                $u = $p->user;
+                if (!$u) return null;
+                $name = $u->name;
+                if ($u->alumniProfile) {
+                    $full = trim(($u->alumniProfile->first_name ?? '') . ' ' . ($u->alumniProfile->last_name ?? ''));
+                    if ($full) $name = $full;
+                }
+                return [
+                    'id' => $u->id,
+                    'name' => $name,
+                    'email' => $u->email,
+                    'role' => $u->role,
+                    'profile_picture_path' => $u->profile_picture_path,
+                ];
+            })->filter()->values();
+
+            $conversation->participant_list = $participants;
+            $conversation->latest_message = $conversation->lastMessage;
+            unset($conversation->lastMessage);
+
+            return $conversation;
+        });
+
+        // Stats
+        $stats = [
+            'total_conversations' => Conversation::count(),
+            'total_messages' => Message::count(),
+            'direct_conversations' => Conversation::where('type', 'direct')->count(),
+            'group_conversations' => Conversation::where('type', 'group')->count(),
+            'today_messages' => Message::whereDate('created_at', today())->count(),
+        ];
+
+        return response()->json([
+            'success' => true,
+            'data' => $conversations,
+            'stats' => $stats,
+        ]);
+    }
+
+    /**
+     * Get all messages in a conversation for archival viewing (admin-only).
+     */
+    public function getArchiveMessages(Conversation $conversation, Request $request): JsonResponse
+    {
+        $user = Auth::user();
+        if (!in_array($user->role, ['admin', 'super_admin'])) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $conversation->load([
+            'participants.user:id,name,email,profile_picture_path,role',
+            'participants.user.alumniProfile:id,user_id,first_name,last_name',
+            'creator:id,name,email',
+        ]);
+
+        $query = $conversation->messages()
+            ->with([
+                'sender:id,name,email,profile_picture_path,role',
+                'sender.alumniProfile:id,user_id,first_name,last_name',
+            ]);
+
+        // Search within messages
+        if ($search = $request->get('search')) {
+            $query->where('content', 'like', "%{$search}%");
+        }
+
+        $messages = $query->orderBy('created_at', 'asc')
+            ->paginate($request->get('per_page', 100));
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'conversation' => $conversation,
+                'messages' => $messages,
+            ],
+        ]);
+    }
+
+    /**
+     * Export conversation messages as JSON (admin-only).
+     */
+    public function exportConversation(Conversation $conversation): JsonResponse
+    {
+        $user = Auth::user();
+        if (!in_array($user->role, ['admin', 'super_admin'])) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $conversation->load([
+            'participants.user:id,name,email,role',
+            'participants.user.alumniProfile:id,user_id,first_name,last_name',
+        ]);
+
+        $messages = $conversation->messages()
+            ->with('sender:id,name,email,role')
+            ->orderBy('created_at', 'asc')
+            ->get()
+            ->map(function ($msg) {
+                return [
+                    'id' => $msg->id,
+                    'sender' => $msg->sender?->name ?? 'Unknown',
+                    'sender_email' => $msg->sender?->email ?? '',
+                    'content' => $msg->content,
+                    'type' => $msg->type,
+                    'sent_at' => $msg->created_at->toIso8601String(),
+                    'is_edited' => $msg->is_edited,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'conversation' => [
+                    'id' => $conversation->id,
+                    'type' => $conversation->type,
+                    'name' => $conversation->name,
+                    'created_at' => $conversation->created_at->toIso8601String(),
+                    'participants' => $conversation->participants->map(fn($p) => [
+                        'name' => $p->user?->name ?? 'Unknown',
+                        'email' => $p->user?->email ?? '',
+                        'role' => $p->user?->role ?? '',
+                    ]),
+                ],
+                'messages' => $messages,
+                'exported_at' => now()->toIso8601String(),
+            ],
+        ]);
     }
 }

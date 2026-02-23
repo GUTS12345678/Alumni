@@ -19,6 +19,8 @@ import {
     ChevronDown
 } from 'lucide-react';
 import axios from 'axios';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface Department {
     id: number;
@@ -48,6 +50,7 @@ interface PageProps {
 export default function DepartmentSettings({ auth }: PageProps) {
     const [departments, setDepartments] = useState<Department[]>([]);
     const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
@@ -57,9 +60,9 @@ export default function DepartmentSettings({ auth }: PageProps) {
     // Helper function to get the correct image URL
     const getImageUrl = (path: string | null | undefined): string | null => {
         if (!path) return null;
-        if (path.startsWith('/storage')) return path;
-        if (path.startsWith('http')) return path;
-        return `/storage/${path}`;
+        if (path.startsWith('http') || path.startsWith('/')) return path;
+        // Department images are served via the public asset route (no auth required)
+        return `/api/v1/assets/${path}`;
     };
 
     const fetchDepartments = useCallback(async () => {
@@ -188,7 +191,8 @@ export default function DepartmentSettings({ auth }: PageProps) {
     const handleDeleteImage = async (type: 'logo' | 'background') => {
         if (!selectedDepartment) return;
 
-        if (!confirm(`Are you sure you want to remove this ${type === 'logo' ? 'logo' : 'background image'}?`)) {
+        const ok = await confirm({ title: 'Remove Image', message: `Are you sure you want to remove this ${type === 'logo' ? 'logo' : 'background image'}?`, variant: 'destructive', confirmLabel: 'Remove' });
+        if (!ok) {
             return;
         }
 
@@ -284,7 +288,7 @@ export default function DepartmentSettings({ auth }: PageProps) {
             <div className="space-y-6">
                 {/* Header */}
                 <div className="bg-white rounded-lg shadow-sm border border-beige-200 p-6">
-                    <div className="flex items-start justify-between">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900 mb-2">Department Settings</h1>
                             <p className="text-gray-600">
@@ -621,6 +625,7 @@ export default function DepartmentSettings({ auth }: PageProps) {
                     )}
                 </div>
             </div>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AdminBaseLayout>
     );
 }

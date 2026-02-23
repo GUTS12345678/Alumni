@@ -259,6 +259,8 @@
 }
 
 @layer utilities {
+    /* ---- Micro-interaction animations ---- */
+
     @keyframes fade-in {
         from {
             opacity: 0;
@@ -271,8 +273,100 @@
         }
     }
 
+    @keyframes fade-in-up {
+        from {
+            opacity: 0;
+            transform: translateY(16px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes scale-in {
+        from {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    @keyframes shimmer {
+        0% {
+            background-position: -200% 0;
+        }
+
+        100% {
+            background-position: 200% 0;
+        }
+    }
+
+    @keyframes pulse-soft {
+
+        0%,
+        100% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.7;
+        }
+    }
+
+    @keyframes shake {
+
+        0%,
+        100% {
+            transform: translateX(0);
+        }
+
+        20% {
+            transform: translateX(-4px);
+        }
+
+        40% {
+            transform: translateX(4px);
+        }
+
+        60% {
+            transform: translateX(-3px);
+        }
+
+        80% {
+            transform: translateX(2px);
+        }
+    }
+
     .animate-fade-in {
         animation: fade-in 0.5s ease-out;
+    }
+
+    .animate-fade-in-up {
+        animation: fade-in-up 0.35s ease-out both;
+    }
+
+    .animate-scale-in {
+        animation: scale-in 0.25s ease-out both;
+    }
+
+    .animate-shimmer {
+        background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.08) 50%, transparent 100%);
+        background-size: 200% 100%;
+        animation: shimmer 1.5s infinite;
+    }
+
+    .animate-pulse-soft {
+        animation: pulse-soft 2s ease-in-out infinite;
+    }
+
+    .animate-shake {
+        animation: shake 0.4s ease-in-out;
     }
 
     /* Pop-out animation for scroll reveal */

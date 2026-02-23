@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Models\ActivityLog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -65,6 +66,14 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        // Log successful login
+        ActivityLog::logLogin($user->id, $request->ip());
+
+        // Check if user must change their password (imported alumni)
+        if ($user->must_change_password) {
+            return redirect()->route('force-change-password');
+        }
+
         // Use the central dashboard route which handles role-based redirects
         return redirect()->intended(route('dashboard'));
     }
@@ -74,10 +83,17 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        $userId = Auth::id();
+        
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();
+
+        // Log logout activity
+        if ($userId) {
+            ActivityLog::logLogout($userId);
+        }
 
         return redirect('/');
     }

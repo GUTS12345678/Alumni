@@ -304,7 +304,7 @@ class JobController extends Controller
         // Handle resume upload
         $resumePath = null;
         if ($request->hasFile('resume')) {
-            $resumePath = $request->file('resume')->store('resumes', 'public');
+            $resumePath = $request->file('resume')->store('resumes', 'uploads');
         }
 
         $application = JobApplication::create([
@@ -370,7 +370,7 @@ class JobController extends Controller
         
         // Delete resume file if exists
         if ($application->resume_path) {
-            Storage::disk('public')->delete($application->resume_path);
+            Storage::disk('uploads')->delete($application->resume_path);
         }
 
         $application->delete();

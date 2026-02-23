@@ -2,7 +2,11 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Broadcast;
 use Inertia\Inertia;
+
+// Register broadcasting auth endpoint (required for private/presence channels)
+Broadcast::routes(['middleware' => ['web', 'auth']]);
 
 
 // Landing Page
@@ -199,10 +203,31 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
         ]);
     })->name('admin.announcements');
 
+    // Unified Content Management (Announcements + Jobs + Events)
+    Route::get('/admin/content', function () {
+        return Inertia::render('admin/ContentManagement', [
+            'user' => Auth::user()
+        ]);
+    })->name('admin.content');
+
+    // Landing Content Management
+    Route::get('/admin/landing-content', function () {
+        return Inertia::render('admin/LandingContentManagement', [
+            'user' => Auth::user()
+        ]);
+    })->name('admin.landing-content');
+
     // Messages
     Route::get('/admin/messages', function () {
         return Inertia::render('admin/Messages');
     })->name('admin.messages');
+
+    // Message Archives / History
+    Route::get('/admin/message-archives', function () {
+        return Inertia::render('admin/MessageArchives', [
+            'user' => Auth::user()
+        ]);
+    })->name('admin.message-archives');
 
     // Archive
     Route::get('/admin/archive', function () {
@@ -217,6 +242,13 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
             'user' => Auth::user()
         ]);
     })->name('admin.campuses');
+
+    // Session Management
+    Route::get('/admin/sessions', function () {
+        return Inertia::render('admin/SessionManagement', [
+            'user' => Auth::user()
+        ]);
+    })->name('admin.sessions');
 
     // Profile Settings (accessible to all admins)
     Route::get('/admin/profile', function () {
@@ -499,6 +531,11 @@ Route::middleware(['web', 'auth', 'alumni'])->group(function () {
     Route::get('/alumni/announcements', function () {
         return Inertia::render('Alumni/Announcements');
     })->name('alumni.announcements');
+
+    // Unified Content Feed (Announcements + Jobs + Events)
+    Route::get('/alumni/content', function () {
+        return Inertia::render('Alumni/ContentFeed');
+    })->name('alumni.content');
 
     // New Job Board Route (API-based)
     Route::get('/alumni/job-board', function () {

@@ -52,6 +52,7 @@ interface SurveyData {
 
     // Employment
     presentlyEmployed: string; // Yes or No
+    employmentLocation: string; // Local or Abroad/Foreign
     notEmployedReason: string;
     companyName: string;
     companyAddress: string;
@@ -188,6 +189,13 @@ const sections = [
                 type: 'radio',
                 required: true,
                 options: ['Yes', 'No']
+            },
+            {
+                key: 'employmentLocation',
+                label: 'If Yes, where are you employed?',
+                type: 'radio',
+                required: false,
+                options: ['Local', 'Abroad/Foreign']
             },
             { key: 'notEmployedReason', label: 'If No, please state the reason(s) why you are not employed', type: 'textarea', required: false },
             { key: 'companyName', label: 'Name of the Agency/Company/Business', type: 'text', required: false },
@@ -326,6 +334,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
         honorsAwards: '',
         examinations: [],
         presentlyEmployed: '',
+        employmentLocation: '',
         notEmployedReason: '',
         companyName: '',
         companyAddress: '',
@@ -362,6 +371,14 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
         exists: boolean;
         message: string;
     }>({ checking: false, exists: false, message: '' });
+
+    // Phone number validation state
+    const [phoneValidation, setPhoneValidation] = useState<{
+        checking: boolean;
+        exists: boolean;
+        field: string;
+        message: string;
+    }>({ checking: false, exists: false, field: '', message: '' });
 
     // OTP verification state
     const [otpState, setOtpState] = useState<{
@@ -549,6 +566,44 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
         return () => clearTimeout(timer);
     }, [formData.studentId]);
 
+    // Debounced validation for phone numbers (tel & mobile)
+    useEffect(() => {
+        const checkPhone = async () => {
+            const phone = formData.mobileNo || formData.telNo;
+            if (!phone || phone.length < 7) {
+                setPhoneValidation({ checking: false, exists: false, field: '', message: '' });
+                return;
+            }
+
+            setPhoneValidation({ checking: true, exists: false, field: '', message: 'Checking phone...' });
+
+            try {
+                const response = await axios.post('/api/v1/check-phone', { phone });
+
+                if (response.data.exists) {
+                    setPhoneValidation({
+                        checking: false,
+                        exists: true,
+                        field: formData.mobileNo ? 'mobileNo' : 'telNo',
+                        message: 'This phone number is already registered.'
+                    });
+                } else {
+                    setPhoneValidation({
+                        checking: false,
+                        exists: false,
+                        field: '',
+                        message: ''
+                    });
+                }
+            } catch {
+                setPhoneValidation({ checking: false, exists: false, field: '', message: '' });
+            }
+        };
+
+        const timer = setTimeout(checkPhone, 800);
+        return () => clearTimeout(timer);
+    }, [formData.telNo, formData.mobileNo]);
+
     const handleInputChange = useCallback((key: string, value: string | boolean | Array<{ name: string; place: string; dateTaken: string; rating: string }>) => {
         setFormData(prev => {
             // If campus changes, reset department and course selection and populate campus name
@@ -696,23 +751,33 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
             }
         });
 
-        // Check for duplicate email in personal section
-        if (currentSection === 0 && emailValidation.exists) {
+        // Check for duplicate email in personal section (section index 1)
+        if (currentSection === 1 && emailValidation.exists) {
             newErrors.email = 'This email is already registered';
         }
 
-        // Check for duplicate student ID in personal section
-        if (currentSection === 0 && studentIdValidation.exists) {
+        // Check for duplicate student ID in account section (section index 7)
+        if (currentSection === 7 && studentIdValidation.exists) {
             newErrors.studentId = 'This student ID is already registered';
         }
 
-        // Require OTP verification in personal section
-        if (currentSection === 0 && formData.email && !otpState.verified) {
+        // Require OTP verification in personal section (section index 1)
+        if (currentSection === 1 && formData.email && !otpState.verified) {
             newErrors.email = 'Please verify your email with the OTP code sent to your inbox';
         }
 
+        // Check for duplicate phone number in personal section (section index 1)
+        if (currentSection === 1 && phoneValidation.exists) {
+            if (formData.telNo && phoneValidation.field === 'telNo') {
+                newErrors.telNo = 'This telephone number is already registered';
+            }
+            if (formData.mobileNo && phoneValidation.field === 'mobileNo') {
+                newErrors.mobileNo = 'This mobile number is already registered';
+            }
+        }
+
         // Special validation for password confirmation
-        if (currentSection === 5) { // Account setup section
+        if (currentSection === 7) { // Account setup section (index 7)
             if (formData.password !== formData.confirmPassword) {
                 newErrors.confirmPassword = 'Passwords do not match';
             }
@@ -738,7 +803,7 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
-    }, [currentSection, formData, emailValidation.exists, studentIdValidation.exists, otpState.verified]);
+    }, [currentSection, formData, emailValidation.exists, studentIdValidation.exists, otpState.verified, phoneValidation.exists, phoneValidation.field]);
 
     const handleNext = useCallback(() => {
         // Special validation for privacy section - require consent
@@ -792,51 +857,136 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                 setResponseToken(currentResponseToken);
             }
 
-            // Step 2: Submit all answers to the survey
-            const questionMapping = [
-                { key: 'firstName', label: 'First Name' },
-                { key: 'lastName', label: 'Last Name' },
-                { key: 'studentId', label: 'Student ID' },
-                { key: 'email', label: 'Email Address' },
-                { key: 'phone', label: 'Phone Number' },
-                { key: 'birthDate', label: 'Date of Birth' },
-                { key: 'gender', label: 'Gender' },
-                { key: 'departmentId', label: 'Department' },
-                { key: 'courseId', label: 'Course/Program' },
-                { key: 'graduationYear', label: 'Graduation Year' },
-                { key: 'gpa', label: 'GPA' },
-                { key: 'employmentStatus', label: 'Current Employment Status' },
-                { key: 'jobTitle', label: 'Current Job Title' },
-                { key: 'employer', label: 'Current Employer' },
-                { key: 'salary', label: 'Annual Salary (Optional)' },
-                { key: 'salaryRange', label: 'Salary Range (Monthly)' },
-                { key: 'careerField', label: 'Career Field/Industry' },
-                { key: 'address', label: 'Current Address' },
-                { key: 'city', label: 'City' },
-                { key: 'country', label: 'Country' },
-                { key: 'willingToMentor', label: 'Are you willing to mentor current students?' },
-                { key: 'comments', label: 'Additional Comments or Feedback' },
-            ];
+            // Step 2: Fetch the survey's actual questions so we can use real question IDs
+            const surveyResponse = await axios.get(`/api/v1/surveys/${surveyId}`);
+            const surveyQuestions = surveyResponse.data?.data?.survey?.questions || [];
 
-            // For now, we'll simulate question IDs (1-20) since we don't have the actual survey structure
-            for (let i = 0; i < questionMapping.length; i++) {
-                const mapping = questionMapping[i];
-                const answer = formData[mapping.key as keyof SurveyData];
+            // Map form data to survey questions by matching labels (case-insensitive)
+            const answerMapping: Record<string, string> = {
+                'first name': 'firstName',
+                'last name': 'lastName',
+                'student id': 'studentId',
+                'student number': 'studentId',
+                'email': 'email',
+                'email address': 'email',
+                'phone': 'mobileNo',
+                'phone number': 'mobileNo',
+                'mobile': 'mobileNo',
+                'mobile no': 'mobileNo',
+                'tel': 'telNo',
+                'telephone': 'telNo',
+                'gender': 'gender',
+                'age': 'age',
+                'place of birth': 'placeOfBirth',
+                'civil status': 'civilStatus',
+                'civil_status': 'civilStatus',
+                'maiden name': 'maidenName',
+                'spouse': 'spouseName',
+                'spouse name': 'spouseName',
+                'children': 'numberOfChildren',
+                'number of children': 'numberOfChildren',
+                'address': 'residenceAddress',
+                'residence': 'residenceAddress',
+                'mailing address': 'residenceAddress',
+                'campus': 'campus',
+                'department': 'departmentId',
+                'course': 'course',
+                'program': 'course',
+                'major': 'major',
+                'year graduated': 'yearGraduated',
+                'graduation year': 'yearGraduated',
+                'enrollment year': 'enrollmentYear',
+                'honors': 'honorsAwards',
+                'awards': 'honorsAwards',
+                'presently employed': 'presentlyEmployed',
+                'employed': 'presentlyEmployed',
+                'employment location': 'employmentLocation',
+                'local or abroad': 'employmentLocation',
+                'where are you employed': 'employmentLocation',
+                'company': 'companyName',
+                'company name': 'companyName',
+                'company address': 'companyAddress',
+                'position': 'presentPosition',
+                'present position': 'presentPosition',
+                'job title': 'presentPosition',
+                'date hired': 'dateHired',
+                'years of service': 'yearsOfService',
+                'job aligned': 'jobAlignedToCourse',
+                'monthly income': 'averageMonthlyIncome',
+                'income': 'averageMonthlyIncome',
+                'employment status': 'employmentStatus',
+                'job level': 'jobLevelPosition',
+                'line of business': 'majorLineOfBusiness',
+                'achievements': 'achievements',
+                'about me': 'aboutMe',
+            };
 
-                if (answer) {
-                    await axios.post(`/api/v1/surveys/${surveyId}/answer`, {
-                        response_token: currentResponseToken,
-                        question_id: i + 1, // This should be the actual question ID from the database
-                        answer: answer
-                    });
+            // Submit answers using real question IDs
+            for (const question of surveyQuestions) {
+                const questionText = (question.question_text || '').toLowerCase().trim();
+                // Try to find a matching form field
+                let formKey: string | undefined;
+                for (const [pattern, key] of Object.entries(answerMapping)) {
+                    if (questionText.includes(pattern)) {
+                        formKey = key;
+                        break;
+                    }
+                }
+
+                if (formKey) {
+                    const answer = formData[formKey as keyof SurveyData];
+                    if (answer) {
+                        try {
+                            await axios.post(`/api/v1/surveys/${surveyId}/answer`, {
+                                response_token: currentResponseToken,
+                                question_id: question.id,
+                                answer: typeof answer === 'object' ? JSON.stringify(answer) : answer
+                            });
+                        } catch (answerError) {
+                            // Log but don't fail the entire submission for individual answer errors
+                            console.warn(`Could not submit answer for question ${question.id}:`, answerError);
+                        }
+                    }
                 }
             }
 
             // Step 3: Complete the survey and create account
+            // Send all profile-relevant data directly so the backend can
+            // populate alumni_profiles accurately (not relying on keyword matching)
             await axios.post(`/api/v1/surveys/${surveyId}/complete`, {
                 response_token: currentResponseToken,
                 email: formData.email,
-                password: formData.password
+                password: formData.password,
+                profile_data: {
+                    first_name: formData.firstName,
+                    last_name: formData.lastName,
+                    maiden_name: formData.maidenName,
+                    student_id: formData.studentId,
+                    phone: formData.mobileNo,
+                    gender: formData.gender,
+                    current_address: formData.residenceAddress,
+                    campus_id: formData.campusId || null,
+                    department_id: formData.departmentId || null,
+                    course_id: formData.courseId || null,
+                    degree_program: formData.course,
+                    major: formData.major,
+                    graduation_year: formData.yearGraduated,
+                    presently_employed: formData.presentlyEmployed,
+                    employment_location: formData.employmentLocation,
+                    not_employed_reason: formData.notEmployedReason,
+                    company_name: formData.companyName,
+                    company_address: formData.companyAddress,
+                    present_position: formData.presentPosition,
+                    date_hired: formData.dateHired,
+                    years_of_service: formData.yearsOfService,
+                    job_aligned_to_course: formData.jobAlignedToCourse,
+                    average_monthly_income: formData.averageMonthlyIncome,
+                    employment_status: formData.employmentStatus,
+                    job_level_position: formData.jobLevelPosition,
+                    major_line_of_business: formData.majorLineOfBusiness,
+                    achievements: formData.achievements,
+                    about_me: formData.aboutMe,
+                },
             });
 
             setSubmissionStatus('success');
@@ -1457,9 +1607,31 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                             </p>
                         )}
                         {question.key === 'email' && emailValidation.exists && (
-                            <p className="text-sm mt-1 flex items-center text-red-600">
-                                <AlertCircle className="h-4 w-4 mr-1" />{emailValidation.message}
-                            </p>
+                            <div className="mt-3 p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-xl">
+                                <div className="flex items-center mb-2">
+                                    <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mr-2 flex-shrink-0" />
+                                    <span className="text-sm font-semibold text-red-800 dark:text-red-200">Email Already Registered</span>
+                                </div>
+                                <p className="text-sm text-red-700 dark:text-red-300 mb-3">
+                                    This email is already associated with an existing account. You can log in or reset your password instead.
+                                </p>
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                    <a
+                                        href="/login"
+                                        className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold rounded-lg bg-maroon-600 hover:bg-maroon-700 text-white transition-colors duration-200 shadow-sm"
+                                    >
+                                        <Lock className="w-4 h-4 mr-1.5" />
+                                        Go to Login
+                                    </a>
+                                    <a
+                                        href="/forgot-password"
+                                        className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold rounded-lg border-2 border-maroon-300 dark:border-maroon-600 text-maroon-700 dark:text-maroon-300 hover:bg-maroon-50 dark:hover:bg-maroon-900/30 transition-colors duration-200"
+                                    >
+                                        <RefreshCw className="w-4 h-4 mr-1.5" />
+                                        Forgot Password?
+                                    </a>
+                                </div>
+                            </div>
                         )}
 
                         {/* OTP Verification Section */}
@@ -1700,17 +1872,21 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                     {currentSectionData.questions.map((question) => {
                                         // For employment section, conditionally show fields based on employment status
                                         if (currentSectionData.id === 'employment') {
-                                            // Show "Are you presently employed?" and "If No, reason" first
-                                            if (question.key === 'presentlyEmployed' || question.key === 'notEmployedReason') {
-                                                // Always show these
-                                            } else {
-                                                // Hide other employment fields if not employed or if "notEmployedReason" should only show when No
-                                                if (question.key === 'notEmployedReason' && formData.presentlyEmployed === 'Yes') {
-                                                    return null;
-                                                }
-                                                if (question.key !== 'presentlyEmployed' && question.key !== 'notEmployedReason' && formData.presentlyEmployed !== 'Yes') {
-                                                    return null;
-                                                }
+                                            // Always show "Are you presently employed?"
+                                            if (question.key === 'presentlyEmployed') {
+                                                // always visible
+                                            }
+                                            // Only show employment location when employed (Yes)
+                                            else if (question.key === 'employmentLocation') {
+                                                if (formData.presentlyEmployed !== 'Yes') return null;
+                                            }
+                                            // Only show "reason not employed" when not employed (No)
+                                            else if (question.key === 'notEmployedReason') {
+                                                if (formData.presentlyEmployed !== 'No') return null;
+                                            }
+                                            // Hide all other employment fields unless presently employed
+                                            else {
+                                                if (formData.presentlyEmployed !== 'Yes') return null;
                                             }
                                         }
 
@@ -1812,14 +1988,62 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                     </Button>
 
                                     {currentSection < totalSections - 1 ? (
-                                        <Button
-                                            onClick={handleNext}
-                                            disabled={isSubmitting}
-                                            className="bg-gradient-to-r from-maroon-600 to-maroon-700 hover:from-maroon-700 hover:to-maroon-800 text-white disabled:opacity-50 h-12 px-8 text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300 order-1 sm:order-2"
-                                        >
-                                            Next Step
-                                            <ArrowRight className="w-5 h-5 ml-2" />
-                                        </Button>
+                                        (() => {
+                                            // Determine if the "Next" button should be disabled
+                                            const privacyBlocked = currentSection === 0 && !formData.dataPrivacyConsent;
+                                            const emailBlocked = currentSection === 1 && formData.email && !otpState.verified;
+                                            const emailDuplicate = currentSection === 1 && emailValidation.exists;
+                                            const phoneDuplicate = currentSection === 1 && phoneValidation.exists;
+                                            const studentIdDuplicate = currentSection === 7 && studentIdValidation.exists;
+                                            const duplicateBlocked = emailDuplicate || phoneDuplicate || studentIdDuplicate;
+                                            const nextDisabled = isSubmitting || privacyBlocked || !!emailBlocked || duplicateBlocked;
+
+                                            return (
+                                                <div className="flex flex-col items-end space-y-1 order-1 sm:order-2">
+                                                    <Button
+                                                        onClick={handleNext}
+                                                        disabled={nextDisabled}
+                                                        className={`h-12 px-8 text-base font-semibold shadow-lg transition-all duration-300 ${nextDisabled
+                                                            ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed shadow-none'
+                                                            : 'bg-gradient-to-r from-maroon-600 to-maroon-700 hover:from-maroon-700 hover:to-maroon-800 text-white hover:shadow-xl'
+                                                            }`}
+                                                    >
+                                                        Next Step
+                                                        <ArrowRight className="w-5 h-5 ml-2" />
+                                                    </Button>
+                                                    {privacyBlocked && (
+                                                        <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center">
+                                                            <AlertCircle className="w-3 h-3 mr-1" />
+                                                            Please agree to the Data Privacy Consent first
+                                                        </p>
+                                                    )}
+                                                    {emailBlocked && !emailDuplicate && (
+                                                        <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center">
+                                                            <AlertCircle className="w-3 h-3 mr-1" />
+                                                            Please verify your email before proceeding
+                                                        </p>
+                                                    )}
+                                                    {emailDuplicate && (
+                                                        <p className="text-xs text-red-600 dark:text-red-400 flex items-center">
+                                                            <AlertCircle className="w-3 h-3 mr-1" />
+                                                            Email is already registered — use a different email
+                                                        </p>
+                                                    )}
+                                                    {phoneDuplicate && (
+                                                        <p className="text-xs text-red-600 dark:text-red-400 flex items-center">
+                                                            <AlertCircle className="w-3 h-3 mr-1" />
+                                                            Phone number is already registered
+                                                        </p>
+                                                    )}
+                                                    {studentIdDuplicate && (
+                                                        <p className="text-xs text-red-600 dark:text-red-400 flex items-center">
+                                                            <AlertCircle className="w-3 h-3 mr-1" />
+                                                            Student ID is already registered
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()
                                     ) : (
                                         <div className="flex flex-col items-stretch sm:items-end space-y-3 order-1 sm:order-2">
                                             {submissionStatus === 'success' && (
@@ -1828,10 +2052,19 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                                                     Redirecting to login page...
                                                 </p>
                                             )}
+                                            {studentIdValidation.exists && (
+                                                <p className="text-xs text-red-600 dark:text-red-400 flex items-center justify-center sm:justify-end">
+                                                    <AlertCircle className="w-3 h-3 mr-1" />
+                                                    Student ID is already registered — please use a different one
+                                                </p>
+                                            )}
                                             <Button
                                                 onClick={handleSubmit}
-                                                disabled={isSubmitting || submissionStatus === 'success'}
-                                                className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white disabled:opacity-50 h-12 px-8 text-base font-bold shadow-lg hover:shadow-xl transition-all duration-300 min-w-[220px]"
+                                                disabled={isSubmitting || submissionStatus === 'success' || studentIdValidation.exists}
+                                                className={`h-12 px-8 text-base font-bold shadow-lg transition-all duration-300 min-w-[220px] ${studentIdValidation.exists
+                                                    ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed shadow-none'
+                                                    : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white disabled:opacity-50 hover:shadow-xl'
+                                                    }`}
                                             >
                                                 {isSubmitting ? (
                                                     <>
@@ -1860,20 +2093,36 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                         <div className="mt-8 flex justify-center">
                             <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm px-6 py-4 rounded-full shadow-lg border-2 border-maroon-200 dark:border-gray-700">
                                 <div className="flex space-x-3">
-                                    {sections.map((section, index) => (
-                                        <button
-                                            key={section.id}
-                                            onClick={() => setCurrentSection(index)}
-                                            className={`transition-all duration-300 rounded-full ${index === currentSection
-                                                ? 'w-10 h-4 bg-gradient-to-r from-maroon-600 to-maroon-700 shadow-md'
-                                                : index < currentSection
-                                                    ? 'w-4 h-4 bg-maroon-400 hover:bg-maroon-500'
-                                                    : 'w-4 h-4 bg-beige-300 dark:bg-gray-600 hover:bg-beige-400 dark:hover:bg-gray-500'
-                                                }`}
-                                            title={section.title}
-                                            aria-label={`Go to ${section.title}`}
-                                        />
-                                    ))}
+                                    {sections.map((section, index) => {
+                                        // Prevent jumping ahead if privacy not agreed, email not verified, or duplicates found
+                                        const canNavigate = (() => {
+                                            if (index <= currentSection) return true; // Can always go back
+                                            if (!formData.dataPrivacyConsent) return false; // Privacy not agreed
+                                            if (index > 1 && formData.email && !otpState.verified) return false; // Email not verified
+                                            if (index > 1 && emailValidation.exists) return false; // Duplicate email
+                                            if (index > 1 && phoneValidation.exists) return false; // Duplicate phone
+                                            if (index > 7 && studentIdValidation.exists) return false; // Duplicate student ID
+                                            return true;
+                                        })();
+
+                                        return (
+                                            <button
+                                                key={section.id}
+                                                onClick={() => canNavigate && setCurrentSection(index)}
+                                                disabled={!canNavigate}
+                                                className={`transition-all duration-300 rounded-full ${!canNavigate
+                                                    ? 'w-4 h-4 bg-gray-300 dark:bg-gray-600 cursor-not-allowed opacity-50'
+                                                    : index === currentSection
+                                                        ? 'w-10 h-4 bg-gradient-to-r from-maroon-600 to-maroon-700 shadow-md'
+                                                        : index < currentSection
+                                                            ? 'w-4 h-4 bg-maroon-400 hover:bg-maroon-500'
+                                                            : 'w-4 h-4 bg-beige-300 dark:bg-gray-600 hover:bg-beige-400 dark:hover:bg-gray-500'
+                                                    }`}
+                                                title={section.title}
+                                                aria-label={`Go to ${section.title}`}
+                                            />
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>

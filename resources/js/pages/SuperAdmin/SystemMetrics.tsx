@@ -188,8 +188,8 @@ export default function SystemMetrics({ auth }: Props) {
                         </p>
                     </div>
 
-                    <div className="flex items-center space-x-2">
-                        <div className="flex items-center space-x-2 mr-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-2">
                             <input
                                 type="checkbox"
                                 id="auto-refresh"

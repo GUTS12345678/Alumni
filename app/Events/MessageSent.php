@@ -7,11 +7,11 @@ use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class MessageSent implements ShouldBroadcast
+class MessageSent implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
@@ -51,7 +51,7 @@ class MessageSent implements ShouldBroadcast
                 'conversation_id' => $this->message->conversation_id,
                 'sender_id' => $this->message->sender_id,
                 'content' => $this->message->content,
-                'message_type' => $this->message->message_type,
+                'type' => $this->message->type,
                 'attachments' => $this->message->attachments,
                 'is_edited' => $this->message->is_edited,
                 'created_at' => $this->message->created_at->toISOString(),

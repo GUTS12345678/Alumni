@@ -15,7 +15,7 @@ interface JobPosting {
     location: string;
     job_type: string;
     experience_level: string;
-    description: string;
+    content: string;
     requirements?: string;
     formatted_salary: string;
     application_deadline?: string;
@@ -202,7 +202,7 @@ export default function Jobs({ jobs, filters }: Props) {
                                                         </div>
                                                         <div
                                                             className="text-gray-600 dark:text-gray-400 line-clamp-2 prose prose-sm max-w-none dark:prose-invert"
-                                                            dangerouslySetInnerHTML={{ __html: job.description }}
+                                                            dangerouslySetInnerHTML={{ __html: job.content }}
                                                         />
                                                     </div>
                                                 </div>
@@ -255,7 +255,7 @@ export default function Jobs({ jobs, filters }: Props) {
                 {/* Job Details Modal */}
                 {selectedJob && (
                     <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-                        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-gray-800">
+                        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-gray-800">
                             <DialogHeader>
                                 <DialogTitle className="text-2xl text-maroon-800 dark:text-gray-200">{selectedJob.title}</DialogTitle>
                                 <DialogDescription className="text-lg">{selectedJob.company_name}</DialogDescription>
@@ -295,7 +295,7 @@ export default function Jobs({ jobs, filters }: Props) {
                                     <h3 className="font-semibold text-lg mb-2 text-maroon-800 dark:text-gray-200">Job Description</h3>
                                     <div
                                         className="text-gray-700 dark:text-gray-300 prose prose-sm max-w-none dark:prose-invert"
-                                        dangerouslySetInnerHTML={{ __html: selectedJob.description }}
+                                        dangerouslySetInnerHTML={{ __html: selectedJob.content }}
                                     />
                                 </div>
 

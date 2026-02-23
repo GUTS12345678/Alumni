@@ -28,6 +28,8 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface Question {
     id: string;
@@ -62,6 +64,7 @@ const questionTypes = [
 export default function QuestionsManager({ surveyId, onClose, onQuestionsUpdated }: Props) {
     const [questions, setQuestions] = useState<Question[]>([]);
     const [loading, setLoading] = useState(true);
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
     const [error, setError] = useState<string | null>(null);
     const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -139,7 +142,8 @@ export default function QuestionsManager({ surveyId, onClose, onQuestionsUpdated
     };
 
     const handleDeleteQuestion = async (questionId: string) => {
-        if (!confirm('Are you sure you want to delete this question?')) {
+        const ok = await confirm({ title: 'Delete Question', message: 'Are you sure you want to delete this question?', variant: 'destructive', confirmLabel: 'Delete' });
+        if (!ok) {
             return;
         }
 
@@ -321,7 +325,7 @@ export default function QuestionsManager({ surveyId, onClose, onQuestionsUpdated
                                                     <TypeIcon className="h-4 w-4 text-maroon-600" />
                                                     <span className="text-sm font-medium text-gray-700">{typeInfo.label}</span>
                                                 </div>
-                                                
+
                                                 {question.is_required ? (
                                                     <Badge className="bg-red-100 text-red-800 px-3 py-1">Required</Badge>
                                                 ) : (
@@ -363,7 +367,7 @@ export default function QuestionsManager({ surveyId, onClose, onQuestionsUpdated
 
             {/* Edit Question Modal */}
             <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="sm:max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>Edit Question</DialogTitle>
                     </DialogHeader>
@@ -527,6 +531,7 @@ function QuestionEditor({ question, onSave, onCancel }: QuestionEditorProps) {
                     Save Changes
                 </Button>
             </div>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </div>
     );
 }

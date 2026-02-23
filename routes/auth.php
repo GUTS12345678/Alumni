@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\EmailVerificationPromptController;
+use App\Http\Controllers\Auth\ForcePasswordChangeController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
@@ -42,6 +43,13 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    // Force password change for imported alumni
+    Route::get('force-change-password', [ForcePasswordChangeController::class, 'show'])
+        ->name('force-change-password');
+
+    Route::post('force-change-password', [ForcePasswordChangeController::class, 'update'])
+        ->name('force-change-password.update');
+
     Route::get('verify-email', EmailVerificationPromptController::class)
         ->name('verification.notice');
 

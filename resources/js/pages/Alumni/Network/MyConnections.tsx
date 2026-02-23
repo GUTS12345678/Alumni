@@ -254,7 +254,7 @@ export default function MyConnections({ connections: initialConnections }: Props
                                             >
                                                 <div className="flex items-center space-x-3 min-w-0 flex-1">
                                                     <Avatar className="h-12 w-12 flex-shrink-0">
-                                                        <AvatarImage src={conn.user.profile_picture_path ? `/storage/${conn.user.profile_picture_path}` : undefined} />
+                                                        <AvatarImage src={conn.user.profile_picture_url || (conn.user.profile_picture_path ? `/api/v1/files/${conn.user.profile_picture_path}` : undefined)} />
                                                         <AvatarFallback className="bg-maroon-100 text-maroon-700 dark:bg-maroon-900 dark:text-maroon-300">
                                                             {getInitials(conn.user)}
                                                         </AvatarFallback>

@@ -17,6 +17,8 @@ import {
     Shield
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface BackupFile {
     id: string;
@@ -51,6 +53,7 @@ interface Props {
 export default function BackupManagement({ user }: Props) {
     const [backups, setBackups] = useState<BackupFile[]>([]);
     const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
     const [loading, setLoading] = useState(true);
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -185,7 +188,8 @@ export default function BackupManagement({ user }: Props) {
     };
 
     const deleteBackup = async (backupId: string) => {
-        if (!confirm('Are you sure you want to delete this backup? This action cannot be undone.')) {
+        const ok = await confirm({ title: 'Delete Backup', message: 'Are you sure you want to delete this backup? This action cannot be undone.', variant: 'destructive', confirmLabel: 'Delete' });
+        if (!ok) {
             return;
         }
 
@@ -526,6 +530,7 @@ export default function BackupManagement({ user }: Props) {
                     </CardContent>
                 </Card>
             </div>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AdminBaseLayout>
     );
 }

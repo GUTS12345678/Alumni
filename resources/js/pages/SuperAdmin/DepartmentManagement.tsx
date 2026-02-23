@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import { useCampus } from '@/contexts/CampusContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
     Building,
@@ -31,6 +32,7 @@ interface Department {
     code: string;
     description: string | null;
     status: 'active' | 'inactive';
+    campus_id?: number;
     logo_path?: string | null;
     background_image_path?: string | null;
     primary_color?: string;
@@ -112,12 +114,16 @@ export default function DepartmentManagement({ auth }: PageProps) {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
 
+    // Campus context
+    const { campuses, selectedCampus } = useCampus();
+
     // Form states
     const [formData, setFormData] = useState({
         name: '',
         code: '',
         description: '',
-        status: 'active' as 'active' | 'inactive'
+        status: 'active' as 'active' | 'inactive',
+        campus_id: '' as string
     });
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
     const [submitting, setSubmitting] = useState(false);
@@ -130,9 +136,9 @@ export default function DepartmentManagement({ auth }: PageProps) {
     // Helper function to get the correct image URL
     const getImageUrl = (path: string | null | undefined): string | undefined => {
         if (!path) return undefined;
-        if (path.startsWith('/storage')) return path;
-        if (path.startsWith('http')) return path;
-        return `/storage/${path}`;
+        if (path.startsWith('http') || path.startsWith('/')) return path;
+        // Department images are served via the public asset route (no auth required)
+        return `/api/v1/assets/${path}`;
     };
 
     const fetchDepartments = useCallback(async () => {
@@ -200,7 +206,10 @@ export default function DepartmentManagement({ auth }: PageProps) {
                     'X-CSRF-TOKEN': getCsrfToken()
                 },
                 credentials: 'same-origin',
-                body: JSON.stringify(formData)
+                body: JSON.stringify({
+                    ...formData,
+                    campus_id: formData.campus_id ? Number(formData.campus_id) : undefined
+                })
             });
 
             const data = await response.json();
@@ -243,7 +252,10 @@ export default function DepartmentManagement({ auth }: PageProps) {
                     'X-CSRF-TOKEN': getCsrfToken()
                 },
                 credentials: 'same-origin',
-                body: JSON.stringify(formData)
+                body: JSON.stringify({
+                    ...formData,
+                    campus_id: formData.campus_id ? Number(formData.campus_id) : undefined
+                })
             });
 
             const data = await response.json();
@@ -374,6 +386,12 @@ export default function DepartmentManagement({ auth }: PageProps) {
 
     const openCreateModal = () => {
         resetForm();
+        // Pre-select the currently selected campus from the header selector
+        if (selectedCampus) {
+            setFormData(prev => ({ ...prev, campus_id: selectedCampus.id.toString() }));
+        } else if (campuses.length > 0) {
+            setFormData(prev => ({ ...prev, campus_id: campuses[0].id.toString() }));
+        }
         setShowCreateModal(true);
     };
 
@@ -383,7 +401,8 @@ export default function DepartmentManagement({ auth }: PageProps) {
             name: department.name,
             code: department.code,
             description: department.description || '',
-            status: department.status
+            status: department.status,
+            campus_id: department.campus_id?.toString() || '1'
         });
         setShowEditModal(true);
     };
@@ -398,7 +417,8 @@ export default function DepartmentManagement({ auth }: PageProps) {
             name: '',
             code: '',
             description: '',
-            status: 'active'
+            status: 'active',
+            campus_id: selectedCampus?.id.toString() || (campuses[0]?.id.toString() || '1')
         });
         setFormErrors({});
         setSelectedDepartment(null);
@@ -905,6 +925,28 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                 </select>
                             </div>
 
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Campus *
+                                </label>
+                                <select
+                                    value={formData.campus_id}
+                                    onChange={(e) => setFormData({ ...formData, campus_id: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
+                                    required
+                                >
+                                    <option value="">Select Campus</option>
+                                    {campuses.map((campus) => (
+                                        <option key={campus.id} value={campus.id.toString()}>
+                                            {campus.display_name || campus.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                {formErrors.campus_id && (
+                                    <p className="mt-1 text-sm text-red-600">{formErrors.campus_id}</p>
+                                )}
+                            </div>
+
                             <div className="flex gap-3 pt-4">
                                 <button
                                     type="button"
@@ -993,6 +1035,28 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                     <option value="active">Active</option>
                                     <option value="inactive">Inactive</option>
                                 </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Campus *
+                                </label>
+                                <select
+                                    value={formData.campus_id}
+                                    onChange={(e) => setFormData({ ...formData, campus_id: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-maroon-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100"
+                                    required
+                                >
+                                    <option value="">Select Campus</option>
+                                    {campuses.map((campus) => (
+                                        <option key={campus.id} value={campus.id.toString()}>
+                                            {campus.display_name || campus.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                {formErrors.campus_id && (
+                                    <p className="mt-1 text-sm text-red-600">{formErrors.campus_id}</p>
+                                )}
                             </div>
 
                             <div className="flex gap-3 pt-4">

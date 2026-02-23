@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
+import { useSessionGuard } from '@/hooks/useSessionGuard';
 import {
     LayoutDashboard,
     TrendingUp,
@@ -12,6 +13,7 @@ import {
     Shield,
     Key,
     Activity,
+    Monitor,
     Mail,
     Settings,
     Download,
@@ -30,7 +32,9 @@ import {
     Briefcase,
     Bell,
     MessageCircle,
-    Archive
+    Archive,
+    Layers,
+    History
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -43,6 +47,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 import { CampusSelector } from '@/components/CampusSelector';
+import { SectionErrorBoundary } from '@/components/ErrorBoundary';
 
 interface User {
     id: number;
@@ -84,9 +89,9 @@ const adminNavigation = [
     {
         section: "Content & Communication",
         items: [
-            { name: "Job Board", href: "/admin/job-board", icon: Briefcase },
-            { name: "Announcements", href: "/admin/announcements", icon: Bell },
-            { name: "Messages", href: "/admin/messages", icon: MessageCircle }
+            { name: "Content Management", href: "/admin/content", icon: Layers },
+            { name: "Messages", href: "/admin/messages", icon: MessageCircle },
+            { name: "Message Archives", href: "/admin/message-archives", icon: History }
         ]
     },
     {
@@ -94,7 +99,8 @@ const adminNavigation = [
         items: [
             { name: "Admin Users", href: "/admin/users", icon: Shield },
             { name: "Role Management", href: "/admin/roles", icon: Key },
-            { name: "Activity Logs", href: "/admin/activity", icon: Activity }
+            { name: "Activity Logs", href: "/admin/activity", icon: Activity },
+            { name: "Session Management", href: "/admin/sessions", icon: Monitor }
         ]
     },
     {
@@ -118,6 +124,17 @@ const adminNavigation = [
     }
 ];
 
+const getLogoUrl = (path: string | null): string => {
+    if (!path) return '';
+    if (path.startsWith('http') || path.startsWith('/')) return path;
+    return `/api/v1/assets/${path}`;
+};
+
+const getFileUrl = (path: string): string => {
+    if (path.startsWith('http') || path.startsWith('/')) return path;
+    return `/api/v1/files/${path}`;
+};
+
 export default function AdminBaseLayout({ children, title = "Admin Panel", user }: AdminBaseLayoutProps) {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -127,6 +144,9 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
         logoLight: string | null;
         logoDark: string | null;
     }>({ logoLight: null, logoDark: null });
+
+    // Guard against stale sessions after standby/sleep
+    useSessionGuard();
 
     const checkSessionAuth = useCallback(async () => {
         try {
@@ -297,7 +317,7 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                 {appearanceSettings.logoLight || appearanceSettings.logoDark ? (
                     <div className="flex items-center">
                         <img
-                            src={`/storage/${document.documentElement.classList.contains('dark') && appearanceSettings.logoDark ? appearanceSettings.logoDark : appearanceSettings.logoLight || appearanceSettings.logoDark}`}
+                            src={getLogoUrl(document.documentElement.classList.contains('dark') && appearanceSettings.logoDark ? appearanceSettings.logoDark : appearanceSettings.logoLight || appearanceSettings.logoDark)}
                             alt="Logo"
                             className="h-8 w-8 object-contain flex-shrink-0"
                         />
@@ -380,7 +400,7 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                         <div className="h-8 w-8 bg-maroon-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
                             {currentUser.profile_picture_path ? (
                                 <img
-                                    src={currentUser.profile_picture_path.startsWith('/storage') ? currentUser.profile_picture_path : `/storage/${currentUser.profile_picture_path}`}
+                                    src={getFileUrl(currentUser.profile_picture_path)}
                                     alt="Profile"
                                     className="w-full h-full object-cover"
                                 />
@@ -481,7 +501,7 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                             <div className="h-8 w-8 bg-maroon-600 dark:bg-maroon-700 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
                                 {currentUser.profile_picture_path ? (
                                     <img
-                                        src={currentUser.profile_picture_path.startsWith('/storage') ? currentUser.profile_picture_path : `/storage/${currentUser.profile_picture_path}`}
+                                        src={getFileUrl(currentUser.profile_picture_path)}
                                         alt="Profile"
                                         className="w-full h-full object-cover"
                                     />
@@ -547,7 +567,7 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
             <div className="md:flex bg-beige-50 dark:bg-gray-950 min-h-screen md:h-screen w-full overflow-x-hidden md:overflow-hidden">
                 {/* Desktop Sidebar - Fixed Position */}
                 <div className={cn(
-                    "hidden md:flex md:flex-col bg-white dark:bg-gray-900 border-r border-beige-200 dark:border-gray-800 transition-all duration-300 fixed left-0 top-0 bottom-0 z-20",
+                    "hidden md:flex md:flex-col bg-white dark:bg-gray-900 border-r border-beige-200 dark:border-gray-800 transition-[width] duration-200 ease-out fixed left-0 top-0 bottom-0 z-20 will-change-[width]",
                     sidebarCollapsed ? "md:w-16" : "md:w-64"
                 )}>
                     <DesktopSidebarContent />
@@ -567,56 +587,62 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                     </Button>
                 </div>
 
-                {/* Mobile Sidebar Overlay - Only show on mobile when menu is open */}
-                {mobileMenuOpen && (
-                    <div className="fixed inset-0 z-[9999] md:hidden">
-                        {/* Backdrop */}
-                        <div
-                            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-                            onClick={() => setMobileMenuOpen(false)}
-                        />
-                        {/* Sidebar */}
-                        <div className="fixed left-0 top-0 bottom-0 w-64 bg-white dark:bg-gray-900 shadow-2xl z-[10000]">
-                            <div className="flex flex-col h-full">
-                                {/* Mobile Header with Close Button */}
-                                <div className="flex items-center justify-between p-4 border-b border-beige-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-                                    <div className="flex items-center">
-                                        {appearanceSettings.logoLight || appearanceSettings.logoDark ? (
-                                            <img
-                                                src={`/storage/${document.documentElement.classList.contains('dark') && appearanceSettings.logoDark ? appearanceSettings.logoDark : appearanceSettings.logoLight || appearanceSettings.logoDark}`}
-                                                alt="Logo"
-                                                className="h-8 w-8 object-contain"
-                                            />
-                                        ) : (
-                                            <GraduationCap className="h-8 w-8 text-maroon-600 dark:text-maroon-300" />
-                                        )}
-                                        <div className="ml-3">
-                                            <h1 className="text-lg font-bold text-maroon-800 dark:text-maroon-300">Alumni Tracer</h1>
-                                            <p className="text-xs text-maroon-600 dark:text-maroon-400">Admin Panel</p>
-                                        </div>
+                {/* Mobile Sidebar Overlay - Always rendered, animated with CSS transforms */}
+                <div
+                    className={cn(
+                        "fixed inset-0 z-[9999] md:hidden transition-opacity duration-200 ease-out",
+                        mobileMenuOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+                    )}
+                >
+                    {/* Backdrop */}
+                    <div
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+                        onClick={() => setMobileMenuOpen(false)}
+                    />
+                    {/* Sidebar */}
+                    <div className={cn(
+                        "fixed left-0 top-0 bottom-0 w-64 bg-white dark:bg-gray-900 shadow-2xl z-[10000] transition-transform duration-200 ease-out will-change-transform",
+                        mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+                    )}>
+                        <div className="flex flex-col h-full">
+                            {/* Mobile Header with Close Button */}
+                            <div className="flex items-center justify-between p-4 border-b border-beige-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+                                <div className="flex items-center">
+                                    {appearanceSettings.logoLight || appearanceSettings.logoDark ? (
+                                        <img
+                                            src={getLogoUrl(document.documentElement.classList.contains('dark') && appearanceSettings.logoDark ? appearanceSettings.logoDark : appearanceSettings.logoLight || appearanceSettings.logoDark)}
+                                            alt="Logo"
+                                            className="h-8 w-8 object-contain"
+                                        />
+                                    ) : (
+                                        <GraduationCap className="h-8 w-8 text-maroon-600 dark:text-maroon-300" />
+                                    )}
+                                    <div className="ml-3">
+                                        <h1 className="text-lg font-bold text-maroon-800 dark:text-maroon-300">Alumni Tracer</h1>
+                                        <p className="text-xs text-maroon-600 dark:text-maroon-400">Admin Panel</p>
                                     </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => setMobileMenuOpen(false)}
-                                        className="text-gray-500 dark:text-gray-300 hover:text-maroon-700 dark:hover:text-maroon-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-                                    >
-                                        <ChevronLeft className="h-5 w-5" />
-                                    </Button>
                                 </div>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setMobileMenuOpen(false)}
+                                    className="text-gray-500 dark:text-gray-300 hover:text-maroon-700 dark:hover:text-maroon-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                >
+                                    <ChevronLeft className="h-5 w-5" />
+                                </Button>
+                            </div>
 
-                                {/* Mobile Navigation Content */}
-                                <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-900 scrollbar-thin scrollbar-thumb-maroon-300 scrollbar-track-beige-100 dark:scrollbar-track-gray-800">
-                                    <MobileSidebarContent />
-                                </div>
+                            {/* Mobile Navigation Content */}
+                            <div className="flex-1 overflow-y-auto bg-white dark:bg-gray-900 scrollbar-thin scrollbar-thumb-maroon-300 scrollbar-track-beige-100 dark:scrollbar-track-gray-800">
+                                <MobileSidebarContent />
                             </div>
                         </div>
                     </div>
-                )}
+                </div>
 
                 {/* Main Content - Add margin to account for fixed sidebar */}
                 <div className={cn(
-                    "flex-1 min-w-0 flex flex-col transition-all duration-300",
+                    "flex-1 min-w-0 flex flex-col transition-[margin-left] duration-200 ease-out",
                     sidebarCollapsed ? "md:ml-16" : "md:ml-64"
                 )}>
                     {/* Header - Fixed at top */}
@@ -636,7 +662,11 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
 
                             <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0 ml-4">
                                 {/* Campus Selector */}
-                                <CampusSelector variant="compact" showLabel={false} />
+                                <SectionErrorBoundary fallback={<span className="text-xs text-red-500">Campus error</span>}>
+                                    <div className="hidden sm:block">
+                                        <CampusSelector variant="compact" showLabel={false} />
+                                    </div>
+                                </SectionErrorBoundary>
 
                                 {/* Theme Toggle */}
                                 <AppearanceToggleDropdown />
@@ -648,7 +678,7 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                                             <div className="h-8 w-8 bg-maroon-600 dark:bg-maroon-700 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
                                                 {currentUser?.profile_picture_path ? (
                                                     <img
-                                                        src={currentUser.profile_picture_path.startsWith('/storage') ? currentUser.profile_picture_path : `/storage/${currentUser.profile_picture_path}`}
+                                                        src={getFileUrl(currentUser.profile_picture_path)}
                                                         alt="Profile"
                                                         className="w-full h-full object-cover"
                                                     />
@@ -696,7 +726,7 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
 
                     {/* Page Content - Scrollable content area */}
                     <main className="bg-beige-50 dark:bg-gray-950 flex-1 overflow-y-auto">
-                        <div className="px-4 py-6 max-w-full">
+                        <div className="px-4 py-6 max-w-full animate-fade-in-up">
                             {children}
                         </div>
                     </main>

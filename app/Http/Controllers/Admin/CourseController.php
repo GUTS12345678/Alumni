@@ -92,6 +92,7 @@ class CourseController extends Controller
                 'majors' => 'nullable|string',
                 'duration_years' => 'required|integer|min:1|max:10',
                 'status' => 'required|in:active,inactive',
+                'campus_id' => 'nullable|integer|exists:campuses,id',
             ]);
 
             $course = Course::create($validated);
@@ -170,6 +171,7 @@ class CourseController extends Controller
             'majors' => 'nullable|string',
             'duration_years' => 'required|integer|min:1|max:10',
             'status' => 'required|in:active,inactive',
+            'campus_id' => 'nullable|integer|exists:campuses,id',
         ]);
 
         $oldData = $course->toArray();
@@ -328,6 +330,7 @@ class CourseController extends Controller
             'inactive_courses' => Course::where('status', 'inactive')->count(),
             'deleted_courses' => Course::onlyTrashed()->count(),
             'courses_with_alumni' => Course::has('alumniProfiles')->count(),
+            'total_alumni' => \App\Models\AlumniProfile::whereNotNull('course_id')->count(),
             'total_departments' => Course::distinct('department_id')->count('department_id')
         ];
 

@@ -118,11 +118,11 @@ class DepartmentAppearanceController extends Controller
         // Generate unique filename
         $filename = 'dept_' . $departmentId . '_' . $type . '_' . time() . '.' . $file->getClientOriginalExtension();
         
-        // Store in public storage
-        $path = $file->storeAs('departments', $filename, 'public');
+        // Store in private uploads disk (served via public asset route)
+        $path = $file->storeAs('departments', $filename, 'uploads');
         
-        // Get full URL
-        $url = Storage::url($path);
+        // Get full URL via public asset route
+        $url = public_file_url($path);
 
         return response()->json([
             'success' => true,
@@ -164,9 +164,9 @@ class DepartmentAppearanceController extends Controller
         $path = $request->input('path');
         $type = $request->input('type');
 
-        // Delete file from storage
-        if (Storage::disk('public')->exists($path)) {
-            Storage::disk('public')->delete($path);
+        // Delete file from private storage
+        if (Storage::disk('uploads')->exists($path)) {
+            Storage::disk('uploads')->delete($path);
         }
 
         // Update database to remove path

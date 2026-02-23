@@ -6,6 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
     Table,
     TableBody,
     TableCell,
@@ -37,9 +43,14 @@ import {
     Users,
     Calendar,
     RefreshCw,
-    BarChart3
+    BarChart3,
+    Download,
+    ChevronDown,
+    FileText
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface Batch {
     id: number;
@@ -75,6 +86,7 @@ interface Props {
 export default function Batches({ user }: Props) {
     // Campus context for filtering
     const { selectedCampus } = useCampus();
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
 
     const [batches, setBatches] = useState<Batch[]>([]);
     const [loading, setLoading] = useState(true);
@@ -154,6 +166,50 @@ export default function Batches({ user }: Props) {
         }
     }, [currentPage, debouncedSearchTerm, selectedCampus?.id]);
 
+    const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
+        try {
+            const params = new URLSearchParams();
+            params.append('format', format);
+            if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
+            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
+
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            const response = await fetch(`/api/v1/admin/batches/export?${params}`, {
+                credentials: 'include',
+                headers: {
+                    'Accept': 'application/octet-stream',
+                    'Authorization': `Bearer ${token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                const extension = format === 'excel' ? 'xlsx' : format;
+                a.download = `batches-${new Date().toISOString().split('T')[0]}.${extension}`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            } else {
+                console.error('Export failed:', response.status);
+                alert('Failed to export batches. Please try again.');
+            }
+        } catch (err) {
+            console.error('Export error:', err);
+            alert('An error occurred while exporting. Please try again.');
+        }
+    };
+
     // Debounce search term
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -217,7 +273,8 @@ export default function Batches({ user }: Props) {
     };
 
     const handleDeleteBatch = async (batch: Batch) => {
-        if (!confirm(`Are you sure you want to delete "${batch.name}"? This action cannot be undone.`)) {
+        const ok = await confirm({ title: 'Delete Batch', message: `Are you sure you want to delete "${batch.name}"? This action cannot be undone.`, variant: 'destructive', confirmLabel: 'Delete' });
+        if (!ok) {
             return;
         }
 
@@ -351,7 +408,7 @@ export default function Batches({ user }: Props) {
                         <p className="text-maroon-600 dark:text-gray-400">Manage graduation year cohorts and alumni batches</p>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Button
                             onClick={() => fetchBatches()}
                             variant="outline"
@@ -359,17 +416,45 @@ export default function Batches({ user }: Props) {
                             disabled={refreshing}
                             className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                         >
-                            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                            Refresh
+                            <RefreshCw className={`h-4 w-4 sm:mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                            <span className="hidden sm:inline">Refresh</span>
                         </Button>
+
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-green-300 text-green-700 hover:bg-green-50"
+                                >
+                                    <Download className="h-4 w-4 sm:mr-2" />
+                                    <span className="hidden sm:inline">Export</span>
+                                    <ChevronDown className="h-4 w-4 sm:ml-2" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleExport('csv')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as CSV
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('excel')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as Excel
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as PDF
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
                         <Button
                             onClick={handleAddBatch}
                             className="bg-maroon-700 hover:bg-maroon-800 text-white"
                             size="sm"
                         >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add Batch
+                            <Plus className="h-4 w-4 sm:mr-2" />
+                            <span className="hidden sm:inline">Add Batch</span>
                         </Button>
                     </div>
                 </div>
@@ -793,7 +878,7 @@ export default function Batches({ user }: Props) {
 
                 {/* View Batch Modal */}
                 <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-                    <DialogContent className="max-w-2xl dark:bg-gray-800">
+                    <DialogContent className="sm:max-w-2xl dark:bg-gray-800">
                         <DialogHeader>
                             <DialogTitle className="text-xl text-maroon-800 dark:text-gray-200 flex items-center">
                                 <Eye className="h-5 w-5 mr-2" />
@@ -878,6 +963,7 @@ export default function Batches({ user }: Props) {
                     </DialogContent>
                 </Dialog>
             </div>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AdminBaseLayout >
     );
 }

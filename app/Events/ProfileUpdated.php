@@ -2,35 +2,48 @@
 
 namespace App\Events;
 
-use Illuminate\Broadcasting\Channel;
+use App\Models\User;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PresenceChannel;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class ProfileUpdated
+/**
+ * Broadcast when an alumni updates their profile.
+ * Notifies admin dashboard of the change.
+ */
+class ProfileUpdated implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    /**
-     * Create a new event instance.
-     */
-    public function __construct()
+    public int $userId;
+    public string $userName;
+
+    public function __construct(int $userId, string $userName)
     {
-        //
+        $this->userId = $userId;
+        $this->userName = $userName;
     }
 
-    /**
-     * Get the channels the event should broadcast on.
-     *
-     * @return array<int, \Illuminate\Broadcasting\Channel>
-     */
     public function broadcastOn(): array
     {
         return [
-            new PrivateChannel('channel-name'),
+            new PrivateChannel('admin.dashboard'),
         ];
+    }
+
+    public function broadcastWith(): array
+    {
+        return [
+            'user_id' => $this->userId,
+            'user_name' => $this->userName,
+            'timestamp' => now()->toISOString(),
+        ];
+    }
+
+    public function broadcastAs(): string
+    {
+        return 'profile.updated';
     }
 }

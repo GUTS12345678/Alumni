@@ -24,6 +24,8 @@ import {
     Type,
     Paintbrush
 } from 'lucide-react';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface PageProps {
     auth: {
@@ -53,6 +55,7 @@ interface PageProps {
 export default function SystemSettings({ auth, appearance }: PageProps) {
     const [activeTab, setActiveTab] = useState<'general' | 'appearance' | 'email' | 'security' | 'maintenance'>('general');
     const [saving, setSaving] = useState(false);
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
     const [showSuccess, setShowSuccess] = useState(false);
 
     // Get CSRF token from meta tag
@@ -219,7 +222,8 @@ export default function SystemSettings({ auth, appearance }: PageProps) {
         const path = appearanceSettings[pathKey];
         if (!path) return;
 
-        if (!confirm('Are you sure you want to delete this image?')) return;
+        const ok = await confirm({ title: 'Delete Image', message: 'Are you sure you want to delete this image?', variant: 'destructive', confirmLabel: 'Delete' });
+        if (!ok) return;
 
         try {
             const response = await fetch('/api/v1/admin/appearance/delete', {
@@ -317,7 +321,7 @@ export default function SystemSettings({ auth, appearance }: PageProps) {
             <div className="space-y-6">
                 {/* Header */}
                 <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-beige-200 dark:border-gray-800 p-6">
-                    <div className="flex items-start justify-between">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-50 mb-2">System Settings</h1>
                             <p className="text-gray-600 dark:text-gray-300">
@@ -469,7 +473,7 @@ export default function SystemSettings({ auth, appearance }: PageProps) {
                                             <CardContent>
                                                 {appearanceSettings.logoLight ? (
                                                     <div className="relative">
-                                                        <img src={`/storage/${appearanceSettings.logoLight}`} alt="Light Logo" className="w-full h-32 object-contain bg-gray-50 rounded-lg" />
+                                                        <img src={`/api/v1/assets/${appearanceSettings.logoLight}`} alt="Light Logo" className="w-full h-32 object-contain bg-gray-50 rounded-lg" />
                                                         <Button
                                                             size="sm"
                                                             variant="destructive"
@@ -502,7 +506,7 @@ export default function SystemSettings({ auth, appearance }: PageProps) {
                                             <CardContent>
                                                 {appearanceSettings.logoDark ? (
                                                     <div className="relative">
-                                                        <img src={`/storage/${appearanceSettings.logoDark}`} alt="Dark Logo" className="w-full h-32 object-contain bg-gray-800 rounded-lg" />
+                                                        <img src={`/api/v1/assets/${appearanceSettings.logoDark}`} alt="Dark Logo" className="w-full h-32 object-contain bg-gray-800 rounded-lg" />
                                                         <Button
                                                             size="sm"
                                                             variant="destructive"
@@ -535,7 +539,7 @@ export default function SystemSettings({ auth, appearance }: PageProps) {
                                             <CardContent>
                                                 {appearanceSettings.favicon ? (
                                                     <div className="relative">
-                                                        <img src={`/storage/${appearanceSettings.favicon}`} alt="Favicon" className="w-full h-32 object-contain bg-gray-50 rounded-lg" />
+                                                        <img src={`/api/v1/assets/${appearanceSettings.favicon}`} alt="Favicon" className="w-full h-32 object-contain bg-gray-50 rounded-lg" />
                                                         <Button
                                                             size="sm"
                                                             variant="destructive"
@@ -972,6 +976,7 @@ export default function SystemSettings({ auth, appearance }: PageProps) {
                     </div>
                 </div>
             </div>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AdminBaseLayout>
     );
 }

@@ -79,6 +79,43 @@ Broadcast::channel('announcements.{userId}', function ($user, $userId) {
 });
 
 /**
+ * Global announcements channel (all alumni)
+ */
+Broadcast::channel('announcements.all', function ($user) {
+    return $user !== null;
+});
+
+/**
+ * Batch-specific announcements channel
+ */
+Broadcast::channel('announcements.batch.{year}', function ($user) {
+    return $user !== null;
+});
+
+/**
+ * Department-specific announcements channel
+ */
+Broadcast::channel('announcements.department.{departmentId}', function ($user) {
+    return $user !== null;
+});
+
+/**
+ * Admin dashboard channel for real-time updates
+ * Only admins can listen to this channel
+ */
+Broadcast::channel('admin.dashboard', function ($user) {
+    return $user->hasAdminPrivileges();
+});
+
+/**
+ * Admin-specific content channel for job board, surveys, etc.
+ * Only admins can listen
+ */
+Broadcast::channel('admin.content', function ($user) {
+    return $user->hasAdminPrivileges();
+});
+
+/**
  * Online status channel - presence channel for all users
  * Used to track who is online in the system
  */

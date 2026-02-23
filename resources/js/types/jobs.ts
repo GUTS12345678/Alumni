@@ -40,10 +40,13 @@ export interface JobPosting {
     slug: string;
     company_name: string;
     company_logo?: string;
+    company_logo_url?: string; // Accessor via /api/v1/files/ route
     company_website?: string;
     poster_image?: string;
+    poster_image_url?: string; // Accessor via /api/v1/files/ route
     background_image?: string;
-    description: string;
+    background_image_url?: string; // Accessor via /api/v1/files/ route
+    content: string;
     pages?: ContentPage[];
     use_pages?: boolean;
 
@@ -115,7 +118,7 @@ export interface JobFormData {
     company_name: string;
     company_logo?: string;
     company_website?: string;
-    description: string;
+    content: string;
     pages?: ContentPage[];
     use_pages?: boolean;
     category_id?: number | string;

@@ -35,6 +35,9 @@ import {
     XCircle,
     ChevronRight,
     Users,
+    Download,
+    ChevronDown,
+    FileText,
 } from 'lucide-react';
 import {
     Dialog,
@@ -51,8 +54,17 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useAdminChannel } from '@/hooks/useAdminChannel';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 // Helper function to get CSRF token
 const getCsrfToken = (): string => {
@@ -66,6 +78,7 @@ interface Announcement {
     pages?: ContentPage[];
     use_pages?: boolean;
     featured_image?: string;
+    featured_image_url?: string; // Accessor via /api/v1/files/ route
     priority: 'low' | 'normal' | 'high' | 'urgent';
     target_type: 'all' | 'batch' | 'department';
     target_batch_years?: string[];
@@ -88,6 +101,7 @@ interface Department {
 
 export default function Announcements() {
     const { toast } = useToast();
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
     // Campus context for filtering
     const { selectedCampus } = useCampus();
 
@@ -184,6 +198,48 @@ export default function Announcements() {
         return () => clearTimeout(timer);
     }, [search]);
 
+    const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
+        try {
+            const params = new URLSearchParams();
+            params.append('format', format);
+            if (debouncedSearch) params.append('search', debouncedSearch);
+            if (statusFilter) params.append('is_published', statusFilter);
+            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
+
+            const response = await fetch(`/api/v1/announcements/admin/export?${params.toString()}`, {
+                headers: {
+                    'Accept': 'application/octet-stream',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'include',
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const extension = format === 'excel' ? 'xlsx' : format;
+                a.download = `announcements_${new Date().toISOString().split('T')[0]}.${extension}`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                toast({
+                    title: 'Export Successful',
+                    description: `Announcements exported as ${format.toUpperCase()}.`,
+                });
+            } else {
+                console.error('Export failed:', response.statusText);
+                alert('Export failed. Please try again.');
+            }
+        } catch (error) {
+            console.error('Export error:', error);
+            alert('Export failed. Please try again.');
+        }
+    };
+
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
@@ -196,6 +252,15 @@ export default function Announcements() {
         };
         fetchData();
     }, [statusFilter, fetchAnnouncements]);
+
+    // Real-time: refresh when announcements change
+    useAdminChannel({
+        onContentChange: (data) => {
+            if (data.content_type === 'announcement') {
+                fetchAnnouncements();
+            }
+        },
+    });
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
@@ -319,7 +384,8 @@ export default function Announcements() {
     };
 
     const deleteAnnouncement = async (announcement: Announcement) => {
-        if (!confirm(`Are you sure you want to delete "${announcement.title}"?`)) return;
+        const ok = await confirm({ title: 'Delete Announcement', message: `Are you sure you want to delete "${announcement.title}"?`, variant: 'destructive', confirmLabel: 'Delete' });
+        if (!ok) return;
 
         try {
             const response = await fetch(`/api/v1/announcements/admin/${announcement.id}`, {
@@ -457,10 +523,35 @@ export default function Announcements() {
                             Manage announcements and broadcasts to alumni
                         </p>
                     </div>
-                    <Button onClick={() => openForm()}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        New Announcement
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline">
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Export
+                                    <ChevronDown className="h-4 w-4 ml-2" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleExport('csv')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as CSV
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('excel')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as Excel
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as PDF
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <Button onClick={() => openForm()}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            New Announcement
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Filters */}
@@ -521,10 +612,10 @@ export default function Announcements() {
                                 className="group bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1 hover:border-maroon-300"
                             >
                                 {/* Image Section */}
-                                {announcement.featured_image ? (
+                                {announcement.featured_image_url ? (
                                     <div className="h-48 overflow-hidden relative">
                                         <img
-                                            src={announcement.featured_image}
+                                            src={announcement.featured_image_url}
                                             alt={announcement.title}
                                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                                         />
@@ -889,10 +980,10 @@ export default function Announcements() {
                     {viewingAnnouncement && (
                         <>
                             {/* Featured Image Banner */}
-                            {viewingAnnouncement.featured_image && (
+                            {viewingAnnouncement.featured_image_url && (
                                 <div className="w-full h-48 -mt-6 -mx-6 mb-4 overflow-hidden rounded-t-lg" style={{ width: 'calc(100% + 3rem)' }}>
                                     <img
-                                        src={viewingAnnouncement.featured_image}
+                                        src={viewingAnnouncement.featured_image_url}
                                         alt={viewingAnnouncement.title}
                                         className="w-full h-full object-cover"
                                     />
@@ -928,7 +1019,7 @@ export default function Announcements() {
 
                             <div className="space-y-6 mt-4">
                                 {/* Meta Info */}
-                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                                     <div className="flex items-center gap-2">
                                         <Calendar className="h-4 w-4 text-muted-foreground" />
                                         <span>Created: {formatDate(viewingAnnouncement.created_at)}</span>
@@ -991,6 +1082,7 @@ export default function Announcements() {
                     )}
                 </DialogContent>
             </Dialog>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AdminBaseLayout>
     );
 }

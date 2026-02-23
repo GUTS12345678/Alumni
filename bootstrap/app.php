@@ -13,6 +13,8 @@ use App\Http\Middleware\SqlInjectionPrevention;
 use App\Http\Middleware\XssPrevention;
 use App\Http\Middleware\SecureFileUpload;
 use App\Http\Middleware\SensitiveDataProtection;
+use App\Http\Middleware\TrackActivity;
+use App\Http\Middleware\EnsurePasswordChanged;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -28,9 +30,14 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
-        // Use custom CSRF middleware with logout exemption
+        // Exclude API routes from CSRF verification.
+        // API routes are already protected by Sanctum token authentication.
+        // Public registration/survey routes also need exemption since
+        // they are accessed without a prior session/CSRF cookie.
         $middleware->validateCsrfTokens(except: [
             '/logout',
+            'api/*',
+            'api/v1/*',
         ]);
 
         // Security middleware applied globally
@@ -43,6 +50,8 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            TrackActivity::class,
+            EnsurePasswordChanged::class,
         ]);
 
         // Enable stateful middleware for session and token authentication

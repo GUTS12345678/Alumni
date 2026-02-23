@@ -4,6 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
     Search,
     RefreshCw,
     Download,
@@ -18,6 +24,7 @@ import {
     AlertTriangle,
     ChevronLeft,
     ChevronRight,
+    ChevronDown,
     Eye,
     X,
     User,
@@ -60,7 +67,7 @@ interface QuestionAnalytic {
     question_type: string;
     total_responses: number;
     skip_rate: number;
-    response_distribution: Record<string, unknown>;
+    response_distribution: Array<{ option: string; count: number; percentage: number }>;
     avg_response_time: number;
 }
 
@@ -352,7 +359,7 @@ export default function SurveyAnalytics({ user }: Props) {
         setShowResponseModal(true);
     };
 
-    const exportAnalytics = async () => {
+    const exportAnalytics = async (format: 'csv' | 'excel' | 'pdf' = 'excel') => {
         if (!selectedSurvey) return;
 
         try {
@@ -362,10 +369,10 @@ export default function SurveyAnalytics({ user }: Props) {
                 return;
             }
 
-            const response = await fetch(`/api/v1/admin/analytics/surveys/${selectedSurvey}/export`, {
+            const response = await fetch(`/api/v1/admin/analytics/surveys/${selectedSurvey}/export?format=${format}`, {
                 method: 'POST',
                 headers: {
-                    'Accept': 'application/json',
+                    'Accept': 'application/octet-stream',
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`,
                     'X-Requested-With': 'XMLHttpRequest',
@@ -381,7 +388,8 @@ export default function SurveyAnalytics({ user }: Props) {
                 const a = document.createElement('a');
                 a.style.display = 'none';
                 a.href = url;
-                a.download = `survey_analytics_${selectedSurvey}_${new Date().toISOString().split('T')[0]}.xlsx`;
+                const extension = format === 'excel' ? 'xlsx' : format;
+                a.download = `survey_analytics_${selectedSurvey}_${new Date().toISOString().split('T')[0]}.${extension}`;
                 document.body.appendChild(a);
                 a.click();
                 window.URL.revokeObjectURL(url);
@@ -631,8 +639,8 @@ export default function SurveyAnalytics({ user }: Props) {
                         </p>
                     </div>
 
-                    <div className="flex items-center space-x-2">
-                        <div className="flex items-center space-x-2 mr-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center gap-2">
                             <input
                                 type="checkbox"
                                 id="auto-refresh"
@@ -646,15 +654,33 @@ export default function SurveyAnalytics({ user }: Props) {
                         </div>
 
                         {selectedSurvey && (
-                            <Button
-                                onClick={exportAnalytics}
-                                variant="outline"
-                                size="sm"
-                                className="border-green-300 text-green-700 hover:bg-green-50"
-                            >
-                                <Download className="h-4 w-4 mr-2" />
-                                Export
-                            </Button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-green-300 text-green-700 hover:bg-green-50"
+                                    >
+                                        <Download className="h-4 w-4 mr-2" />
+                                        Export
+                                        <ChevronDown className="h-4 w-4 ml-2" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent>
+                                    <DropdownMenuItem onClick={() => exportAnalytics('csv')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as CSV
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => exportAnalytics('excel')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as Excel
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => exportAnalytics('pdf')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as PDF
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         )}
 
                         <Button
@@ -1105,56 +1131,141 @@ export default function SurveyAnalytics({ user }: Props) {
 
                         {/* Question Analysis Tab */}
                         {activeTab === 'questions' && (
-                            <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                                <CardHeader>
-                                    <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Question Performance</CardTitle>
-                                    <CardDescription>Response rates and statistics by question</CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    {analytics.question_analytics.length === 0 ? (
-                                        <div className="text-center py-12">
-                                            <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                                            <p className="text-gray-600 dark:text-gray-400">No question analytics available</p>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-4">
-                                            {analytics.question_analytics.map((question, index) => (
-                                                <div
-                                                    key={index}
-                                                    className="bg-white dark:bg-gray-800 border border-beige-200 dark:border-gray-700 rounded-xl p-5 hover:shadow-md transition-shadow"
-                                                >
-                                                    <div className="flex items-start justify-between mb-4">
-                                                        <div className="flex items-start gap-3">
-                                                            <span className="bg-maroon-700 text-white text-sm font-bold px-3 py-1 rounded-lg">
-                                                                Q{index + 1}
-                                                            </span>
-                                                            <h4 className="font-medium text-gray-800 dark:text-gray-200 text-lg">{question.question_text}</h4>
-                                                        </div>
-                                                        <Badge className={getQuestionTypeBadge(question.question_type)}>
-                                                            {question.question_type}
-                                                        </Badge>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                                        <div className="bg-blue-50 rounded-lg p-4 text-center">
-                                                            <div className="text-2xl font-bold text-blue-600">{question.total_responses ?? 0}</div>
-                                                            <p className="text-sm text-blue-700">Responses</p>
-                                                        </div>
-                                                        <div className="bg-orange-50 rounded-lg p-4 text-center">
-                                                            <div className="text-2xl font-bold text-orange-600">{(question.skip_rate ?? 0).toFixed(1)}%</div>
-                                                            <p className="text-sm text-orange-700">Skip Rate</p>
-                                                        </div>
-                                                        <div className="bg-purple-50 rounded-lg p-4 text-center">
-                                                            <div className="text-2xl font-bold text-purple-600">{formatTime(question.avg_response_time)}</div>
-                                                            <p className="text-sm text-purple-700">Avg Time</p>
-                                                        </div>
-                                                    </div>
+                            <div className="space-y-6">
+                                {/* Question Summary Stats */}
+                                {analytics.question_analytics.length > 0 && (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900">
+                                            <CardContent className="p-5 text-center">
+                                                <ListChecks className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                                                <div className="text-3xl font-bold text-blue-800 dark:text-blue-200">{analytics.question_analytics.length}</div>
+                                                <p className="text-sm text-blue-600 dark:text-blue-400">Total Questions</p>
+                                            </CardContent>
+                                        </Card>
+                                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-green-50 to-white dark:from-gray-800 dark:to-gray-900">
+                                            <CardContent className="p-5 text-center">
+                                                <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                                                <div className="text-3xl font-bold text-green-800 dark:text-green-200">
+                                                    {analytics.question_analytics.filter(q => q.response_distribution.length > 0).length}
                                                 </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
+                                                <p className="text-sm text-green-600 dark:text-green-400">With Distribution Data</p>
+                                            </CardContent>
+                                        </Card>
+                                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-orange-50 to-white dark:from-gray-800 dark:to-gray-900">
+                                            <CardContent className="p-5 text-center">
+                                                <AlertTriangle className="h-8 w-8 text-orange-600 mx-auto mb-2" />
+                                                <div className="text-3xl font-bold text-orange-800 dark:text-orange-200">
+                                                    {(analytics.question_analytics.reduce((sum, q) => sum + (q.skip_rate ?? 0), 0) / Math.max(analytics.question_analytics.length, 1)).toFixed(1)}%
+                                                </div>
+                                                <p className="text-sm text-orange-600 dark:text-orange-400">Avg Skip Rate</p>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                )}
+
+                                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                                    <CardHeader>
+                                        <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Question Performance</CardTitle>
+                                        <CardDescription>Response rates, answer distributions, and statistics by question</CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        {analytics.question_analytics.length === 0 ? (
+                                            <div className="text-center py-12">
+                                                <FileText className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                                                <p className="text-gray-600 dark:text-gray-400">No question analytics available</p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-6">
+                                                {analytics.question_analytics.map((question, index) => (
+                                                    <div
+                                                        key={index}
+                                                        className="bg-white dark:bg-gray-800 border border-beige-200 dark:border-gray-700 rounded-xl p-5 hover:shadow-md transition-shadow"
+                                                    >
+                                                        <div className="flex items-start justify-between mb-4">
+                                                            <div className="flex items-start gap-3">
+                                                                <span className="bg-maroon-700 text-white text-sm font-bold px-3 py-1 rounded-lg shrink-0">
+                                                                    Q{index + 1}
+                                                                </span>
+                                                                <h4 className="font-medium text-gray-800 dark:text-gray-200 text-lg">{question.question_text}</h4>
+                                                            </div>
+                                                            <Badge className={getQuestionTypeBadge(question.question_type)}>
+                                                                {question.question_type}
+                                                            </Badge>
+                                                        </div>
+
+                                                        {/* Stats Row */}
+                                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+                                                            <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 text-center">
+                                                                <div className="text-xl font-bold text-blue-600 dark:text-blue-400">{question.total_responses ?? 0}</div>
+                                                                <p className="text-xs text-blue-700 dark:text-blue-300">Responses</p>
+                                                            </div>
+                                                            <div className="bg-orange-50 dark:bg-orange-950/30 rounded-lg p-3 text-center">
+                                                                <div className="text-xl font-bold text-orange-600 dark:text-orange-400">{(question.skip_rate ?? 0).toFixed(1)}%</div>
+                                                                <p className="text-xs text-orange-700 dark:text-orange-300">Skip Rate</p>
+                                                            </div>
+                                                            <div className="bg-purple-50 dark:bg-purple-950/30 rounded-lg p-3 text-center hidden sm:block">
+                                                                <div className="text-xl font-bold text-purple-600 dark:text-purple-400">{formatTime(question.avg_response_time)}</div>
+                                                                <p className="text-xs text-purple-700 dark:text-purple-300">Avg Time</p>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Response Distribution Chart */}
+                                                        {question.response_distribution && question.response_distribution.length > 0 && (
+                                                            <div className="border-t border-beige-200 dark:border-gray-700 pt-4">
+                                                                <h5 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                                                                    <BarChart3 className="h-4 w-4" />
+                                                                    Answer Distribution
+                                                                    <span className="text-xs font-normal text-gray-400">
+                                                                        ({question.response_distribution.reduce((s, d) => s + d.count, 0)} total answers)
+                                                                    </span>
+                                                                </h5>
+                                                                <div className="space-y-2">
+                                                                    {question.response_distribution.map((dist, dIdx) => {
+                                                                        const barColors = [
+                                                                            'bg-maroon-500', 'bg-blue-500', 'bg-green-500', 'bg-purple-500',
+                                                                            'bg-amber-500', 'bg-cyan-500', 'bg-pink-500', 'bg-indigo-500',
+                                                                            'bg-teal-500', 'bg-orange-500'
+                                                                        ];
+                                                                        const barColor = barColors[dIdx % barColors.length];
+                                                                        return (
+                                                                            <div key={dIdx} className="flex items-center gap-3 group">
+                                                                                <span className="text-sm text-gray-700 dark:text-gray-300 w-40 truncate shrink-0" title={dist.option}>
+                                                                                    {dist.option}
+                                                                                </span>
+                                                                                <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-6 overflow-hidden relative">
+                                                                                    <div
+                                                                                        className={`${barColor} h-6 rounded-full transition-all duration-500 flex items-center justify-end pr-2`}
+                                                                                        style={{ width: `${Math.max(dist.percentage, 3)}%` }}
+                                                                                    >
+                                                                                        {dist.percentage > 15 && (
+                                                                                            <span className="text-[10px] font-bold text-white">{dist.percentage}%</span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    {dist.percentage <= 15 && (
+                                                                                        <span className="absolute left-auto text-[10px] font-bold text-gray-600 dark:text-gray-400 ml-2" style={{ left: `${Math.max(dist.percentage, 3)}%` }}>
+                                                                                            {dist.percentage}%
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                                <span className="text-sm font-bold text-gray-700 dark:text-gray-300 w-8 text-right shrink-0">{dist.count}</span>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                                {['text', 'textarea'].includes(question.question_type) && (
+                                                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 italic">
+                                                                        Showing top {question.response_distribution.length} most common answers
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            </div>
                         )}
                     </div>
                 )}

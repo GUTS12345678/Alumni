@@ -4,6 +4,8 @@ namespace App\Observers;
 
 use App\Models\AlumniProfile;
 use App\Services\JobClassifierService;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class AlumniProfileObserver
 {
@@ -42,6 +44,47 @@ class AlumniProfileObserver
                 static::$classifying = false;
             }
         }
+        
+        // Clear dashboard cache whenever alumni data changes
+        $this->clearDashboardCache($alumniProfile->campus_id);
+    }
+
+    /**
+     * Handle the AlumniProfile "deleted" event.
+     */
+    public function deleted(AlumniProfile $alumniProfile): void
+    {
+        $this->clearDashboardCache($alumniProfile->campus_id);
+    }
+
+    /**
+     * Clear dashboard cache for specific campus and all campuses
+     */
+    private function clearDashboardCache(?int $campusId): void
+    {
+        // Clear specific campus cache
+        if ($campusId) {
+            Cache::forget('dashboard_metrics_' . $campusId);
+            Cache::forget('alumni_stats_' . $campusId);
+        }
+        
+        // Always clear "all campuses" cache
+        Cache::forget('dashboard_metrics_all');
+        Cache::forget('alumni_stats_all');
+        
+        // Clear analytics cache if it exists
+        if ($campusId) {
+            Cache::forget('analytics_overview_' . $campusId);
+            Cache::forget('analytics_employment_' . $campusId);
+            Cache::forget('analytics_batch_' . $campusId);
+            Cache::forget('analytics_time_to_job_' . $campusId . '_all');
+            Cache::forget('analytics_comprehensive_' . $campusId);
+        }
+        Cache::forget('analytics_overview_all');
+        Cache::forget('analytics_employment_all');
+        Cache::forget('analytics_batch_all');
+        Cache::forget('analytics_time_to_job_all_all');
+        Cache::forget('analytics_comprehensive_all');
     }
 
     /**

@@ -93,6 +93,7 @@ return [
             'validate_ip' => env('SESSION_VALIDATE_IP', false), // Can break mobile users
             'single_session' => env('SESSION_SINGLE_SESSION', false), // Only allow one active session
             'regenerate_on_login' => env('SESSION_REGENERATE_ON_LOGIN', true),
+            'max_devices' => env('SESSION_MAX_DEVICES', 5), // Maximum concurrent devices per account
         ],
     ],
 

@@ -17,7 +17,10 @@ import {
     CheckCircle,
     XCircle,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    Plus,
+    Trash2,
+    Edit
 } from 'lucide-react';
 import axios from 'axios';
 
@@ -82,6 +85,12 @@ export default function PermissionMatrix({ auth }: PageProps) {
     const [loadingUsers, setLoadingUsers] = useState(false);
     const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
     const [selectedRole, setSelectedRole] = useState<number | null>(null);
+    const [showAddRoleModal, setShowAddRoleModal] = useState(false);
+    const [newRoleName, setNewRoleName] = useState('');
+    const [newRoleDisplayName, setNewRoleDisplayName] = useState('');
+    const [newRoleDescription, setNewRoleDescription] = useState('');
+    const [creatingRole, setCreatingRole] = useState(false);
+    const [deleteConfirmRole, setDeleteConfirmRole] = useState<Role | null>(null);
 
     // Group permissions by category
     const permissionsByCategory = permissions.reduce((acc, permission) => {
@@ -212,6 +221,42 @@ export default function PermissionMatrix({ auth }: PageProps) {
         }
     };
 
+    const handleAddRole = async () => {
+        if (!newRoleDisplayName.trim()) return;
+        setCreatingRole(true);
+        try {
+            const slug = newRoleName.trim() || newRoleDisplayName.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+            await axios.post('/api/v1/admin/roles', {
+                name: slug,
+                display_name: newRoleDisplayName.trim(),
+                description: newRoleDescription.trim() || `Custom role: ${newRoleDisplayName.trim()}`,
+                permission_ids: []
+            });
+            setShowAddRoleModal(false);
+            setNewRoleName('');
+            setNewRoleDisplayName('');
+            setNewRoleDescription('');
+            fetchData();
+        } catch (error: any) {
+            const msg = error?.response?.data?.message || 'Failed to create role';
+            alert(msg);
+        } finally {
+            setCreatingRole(false);
+        }
+    };
+
+    const handleDeleteRole = async (role: Role) => {
+        try {
+            await axios.delete(`/api/v1/admin/roles/${role.id}`);
+            setDeleteConfirmRole(null);
+            if (selectedRole === role.id) setSelectedRole(null);
+            fetchData();
+        } catch (error: any) {
+            const msg = error?.response?.data?.message || 'Failed to delete role';
+            alert(msg);
+        }
+    };
+
     const getRoleIcon = (roleName: string) => {
         switch (roleName) {
             case 'super_admin':
@@ -321,7 +366,10 @@ export default function PermissionMatrix({ auth }: PageProps) {
 
                 {/* Role Selector */}
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Select Role to Configure</h2>
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Select Role to Configure</h2>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">{roles.length} role{roles.length !== 1 ? 's' : ''}</span>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         {roles.map(role => {
                             const isSelected = selectedRole === role.id;
@@ -342,16 +390,33 @@ export default function PermissionMatrix({ auth }: PageProps) {
                                         ${isLocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                                     `}
                                 >
+                                    {/* System/Custom Badge */}
+                                    {!role.is_system_role && (
+                                        <span className="absolute top-2 right-2 px-2 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-700 border border-purple-200">
+                                            Custom
+                                        </span>
+                                    )}
                                     <div className="flex items-start justify-between mb-3">
                                         <div className={`p-3 rounded-lg ${getRoleColor(role.name)}`}>
                                             {getRoleIcon(role.name)}
                                         </div>
-                                        {isSelected && !isLocked && (
-                                            <CheckCircle className="h-6 w-6 text-maroon-600" />
-                                        )}
-                                        {isLocked && (
-                                            <Lock className="h-5 w-5 text-gray-400" />
-                                        )}
+                                        <div className="flex items-center gap-1">
+                                            {!role.is_system_role && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setDeleteConfirmRole(role); }}
+                                                    className="p-1 text-gray-400 hover:text-red-500 transition-colors rounded"
+                                                    title="Delete role"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                            {isSelected && !isLocked && (
+                                                <CheckCircle className="h-6 w-6 text-maroon-600" />
+                                            )}
+                                            {isLocked && (
+                                                <Lock className="h-5 w-5 text-gray-400" />
+                                            )}
+                                        </div>
                                     </div>
                                     <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg mb-1">{role.display_name}</h3>
                                     <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -360,6 +425,19 @@ export default function PermissionMatrix({ auth }: PageProps) {
                                 </button>
                             );
                         })}
+
+                        {/* Add New Role Card */}
+                        <button
+                            onClick={() => setShowAddRoleModal(true)}
+                            className="p-5 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-maroon-400 dark:hover:border-maroon-500 bg-gray-50/50 dark:bg-gray-800/50 hover:bg-maroon-50/50 dark:hover:bg-maroon-900/20 transition-all text-left cursor-pointer group"
+                        >
+                            <div className="flex flex-col items-center justify-center h-full min-h-[120px] gap-3">
+                                <div className="p-3 rounded-lg bg-gray-100 dark:bg-gray-700 group-hover:bg-maroon-100 dark:group-hover:bg-maroon-900/40 transition-colors">
+                                    <Plus className="h-6 w-6 text-gray-400 group-hover:text-maroon-600 transition-colors" />
+                                </div>
+                                <span className="text-sm font-semibold text-gray-500 dark:text-gray-400 group-hover:text-maroon-600 transition-colors">Add New Role</span>
+                            </div>
+                        </button>
                     </div>
                 </div>
 
@@ -571,6 +649,108 @@ export default function PermissionMatrix({ auth }: PageProps) {
                             >
                                 Close
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add New Role Modal */}
+            {showAddRoleModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-lg w-full border border-gray-200 dark:border-gray-700">
+                        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Create New Role</h3>
+                                <button onClick={() => setShowAddRoleModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                                    <X className="h-6 w-6" />
+                                </button>
+                            </div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Add a custom role to assign specific permissions</p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Display Name *</label>
+                                <input
+                                    type="text"
+                                    value={newRoleDisplayName}
+                                    onChange={(e) => {
+                                        setNewRoleDisplayName(e.target.value);
+                                        setNewRoleName(e.target.value.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''));
+                                    }}
+                                    placeholder="e.g. Department Head"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Slug (auto-generated)</label>
+                                <input
+                                    type="text"
+                                    value={newRoleName}
+                                    onChange={(e) => setNewRoleName(e.target.value)}
+                                    placeholder="department_head"
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                                <textarea
+                                    value={newRoleDescription}
+                                    onChange={(e) => setNewRoleDescription(e.target.value)}
+                                    placeholder="Brief description of this role's purpose..."
+                                    rows={3}
+                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500"
+                                />
+                            </div>
+                        </div>
+                        <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowAddRoleModal(false)}
+                                className="px-4 py-2 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleAddRole}
+                                disabled={!newRoleDisplayName.trim() || creatingRole}
+                                className="px-6 py-2 bg-maroon-600 text-white rounded-lg hover:bg-maroon-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                            >
+                                <Plus className="h-4 w-4" />
+                                {creatingRole ? 'Creating...' : 'Create Role'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Role Confirm Modal */}
+            {deleteConfirmRole && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full border border-gray-200 dark:border-gray-700">
+                        <div className="p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-3 bg-red-100 rounded-full">
+                                    <AlertCircle className="h-6 w-6 text-red-600" />
+                                </div>
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Delete Role</h3>
+                            </div>
+                            <p className="text-gray-600 dark:text-gray-400 mb-6">
+                                Are you sure you want to delete the role <strong>"{deleteConfirmRole.display_name}"</strong>? This action cannot be undone. Any users assigned this role will lose their permissions.
+                            </p>
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    onClick={() => setDeleteConfirmRole(null)}
+                                    className="px-4 py-2 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={() => handleDeleteRole(deleteConfirmRole)}
+                                    className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                    Delete
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import { router } from '@inertiajs/react';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface Permission {
     id: string;
@@ -45,6 +47,7 @@ export default function RoleView({ roleId }: Props) {
     const [role, setRole] = useState<Role | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
 
     const fetchRole = async () => {
         try {
@@ -105,9 +108,8 @@ export default function RoleView({ roleId }: Props) {
             return;
         }
 
-        if (!confirm(`Are you sure you want to delete the "${role.display_name}" role? This action cannot be undone.`)) {
-            return;
-        }
+        const ok = await confirm({ title: 'Delete Role', message: `Are you sure you want to delete the "${role.display_name}" role? This action cannot be undone.`, variant: 'destructive', confirmLabel: 'Delete' });
+        if (!ok) return;
 
         try {
             const token = localStorage.getItem('auth_token');
@@ -147,14 +149,14 @@ export default function RoleView({ roleId }: Props) {
 
     const groupPermissionsByCategory = (permissions: Permission[]) => {
         const grouped: { [key: string]: Permission[] } = {};
-        
+
         permissions.forEach(permission => {
             if (!grouped[permission.category]) {
                 grouped[permission.category] = [];
             }
             grouped[permission.category].push(permission);
         });
-        
+
         return grouped;
     };
 
@@ -226,7 +228,7 @@ export default function RoleView({ roleId }: Props) {
                         </div>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Button
                             onClick={handleEdit}
                             className="bg-maroon-700 hover:bg-maroon-800 text-white"
@@ -388,6 +390,7 @@ export default function RoleView({ roleId }: Props) {
                     </CardContent>
                 </Card>
             </div>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AdminBaseLayout>
     );
 }

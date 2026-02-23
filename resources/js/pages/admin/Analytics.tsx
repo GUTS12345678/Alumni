@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,9 +39,18 @@ import {
     Award,
     Globe,
     MapPin,
+    ChevronDown,
+    FileText,
 } from 'lucide-react';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import { useCampus } from '@/contexts/CampusContext';
+import { useAdminChannel } from '@/hooks/useAdminChannel';
 
 interface User {
     id: number;
@@ -255,6 +264,41 @@ const COLORS = {
 export default function Analytics({ user }: Props) {
     const { selectedCampus } = useCampus();
 
+    // Animation state
+    const [animated, setAnimated] = useState(false);
+
+    const sectionStyle = (delay: number): React.CSSProperties => ({
+        opacity: animated ? 1 : 0,
+        transform: animated ? 'translateY(0)' : 'translateY(24px)',
+        transition: `opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1) ${delay}ms, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) ${delay}ms`,
+    });
+
+    // Animated counter component
+    const CountUp = ({ end, decimals = 0, duration = 1500, prefix = '', suffix = '' }: {
+        end: number; decimals?: number; duration?: number; prefix?: string; suffix?: string;
+    }) => {
+        const [value, setValue] = useState(0);
+        const ref = useRef<number>(0);
+        const started = useRef(false);
+
+        useEffect(() => {
+            if (!animated) { setValue(0); return; }
+            if (started.current) { setValue(end); return; }
+            started.current = true;
+            const t0 = performance.now();
+            const step = (now: number) => {
+                const p = Math.min((now - t0) / duration, 1);
+                const eased = 1 - Math.pow(1 - p, 3);
+                setValue(eased * end);
+                if (p < 1) ref.current = requestAnimationFrame(step);
+            };
+            ref.current = requestAnimationFrame(step);
+            return () => cancelAnimationFrame(ref.current);
+        }, [end, animated, duration]);
+
+        return <>{prefix}{decimals > 0 ? value.toFixed(decimals) : Math.round(value)}{suffix}</>;
+    };
+
     // Dashboard Stats State
     const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
     const [dashboardLoading, setDashboardLoading] = useState(true);
@@ -272,22 +316,32 @@ export default function Analytics({ user }: Props) {
     const [error, setError] = useState<string | null>(null);
     const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
+    // Helper to build headers for API calls — uses cookie auth (credentials: include)
+    // and adds Bearer token only if one exists in localStorage
+    const getApiHeaders = (): Record<string, string> => {
+        const headers: Record<string, string> = {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        };
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        return headers;
+    };
+
     // Fetch Dashboard Stats
     const fetchDashboardStats = useCallback(async () => {
         try {
             setDashboardLoading(true);
-            const token = localStorage.getItem('auth_token');
             const params = new URLSearchParams();
             if (selectedCampus?.id) {
                 params.append('campus_id', selectedCampus.id.toString());
             }
             const response = await fetch(`/api/v1/admin/dashboard?${params}`, {
                 credentials: 'include',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
+                headers: getApiHeaders(),
             });
 
             if (!response.ok) throw new Error('Failed to fetch dashboard data');
@@ -308,7 +362,6 @@ export default function Analytics({ user }: Props) {
     const fetchTimeToJobAnalytics = useCallback(async () => {
         try {
             setTimeToJobLoading(true);
-            const token = localStorage.getItem('auth_token');
             const queryParams = new URLSearchParams();
             if (selectedCampus?.id) {
                 queryParams.append('campus_id', selectedCampus.id.toString());
@@ -316,11 +369,7 @@ export default function Analytics({ user }: Props) {
 
             const response = await fetch(`/api/v1/admin/analytics/time-to-job?${queryParams}`, {
                 credentials: 'include',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
+                headers: getApiHeaders(),
             });
 
             if (!response.ok) throw new Error('Failed to fetch time-to-job analytics');
@@ -343,7 +392,6 @@ export default function Analytics({ user }: Props) {
     const fetchComprehensiveAnalytics = useCallback(async () => {
         try {
             setComprehensiveLoading(true);
-            const token = localStorage.getItem('auth_token');
             const queryParams = new URLSearchParams();
             if (selectedCampus?.id) {
                 queryParams.append('campus_id', selectedCampus.id.toString());
@@ -351,11 +399,7 @@ export default function Analytics({ user }: Props) {
 
             const response = await fetch(`/api/v1/admin/analytics/comprehensive?${queryParams}`, {
                 credentials: 'include',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
+                headers: getApiHeaders(),
             });
 
             if (!response.ok) throw new Error('Failed to fetch comprehensive analytics');
@@ -388,6 +432,13 @@ export default function Analytics({ user }: Props) {
         return () => clearInterval(interval);
     }, [fetchDashboardStats, fetchTimeToJobAnalytics, fetchComprehensiveAnalytics]);
 
+    // Real-time: instant refresh on any data change
+    useAdminChannel({
+        onDashboardUpdate: () => handleRefresh(),
+        onContentChange: () => handleRefresh(),
+        onSurveyResponse: () => handleRefresh(),
+    });
+
     const handleRefresh = () => {
         fetchDashboardStats();
         fetchTimeToJobAnalytics();
@@ -397,15 +448,16 @@ export default function Analytics({ user }: Props) {
 
     const handleExport = async (format: 'csv' | 'excel' | 'pdf') => {
         try {
-            const token = localStorage.getItem('auth_token');
-            const campusParam = selectedCampus?.id ? `&campus_id=${selectedCampus.id}` : '';
-            const response = await fetch(`/api/v1/admin/analytics/comprehensive/export?format=${format}${campusParam}`, {
+            const params = new URLSearchParams();
+            params.append('format', format);
+            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
+
+            const exportHeaders = getApiHeaders();
+            exportHeaders['Accept'] = 'application/octet-stream';
+
+            const response = await fetch(`/api/v1/admin/analytics/comprehensive/export?${params.toString()}`, {
                 credentials: 'include',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
+                headers: exportHeaders,
             });
 
             if (response.ok) {
@@ -414,14 +466,19 @@ export default function Analytics({ user }: Props) {
                 const a = document.createElement('a');
                 a.style.display = 'none';
                 a.href = url;
-                a.download = `comprehensive-analytics-report.${format}`;
+                const extension = format === 'excel' ? 'xlsx' : format;
+                a.download = `comprehensive-analytics-${new Date().toISOString().split('T')[0]}.${extension}`;
                 document.body.appendChild(a);
                 a.click();
                 window.URL.revokeObjectURL(url);
                 document.body.removeChild(a);
+            } else {
+                console.error('Export failed:', response.status);
+                alert('Failed to export analytics. Please try again.');
             }
         } catch (error) {
             console.error('Export error:', error);
+            alert('An error occurred while exporting. Please try again.');
         }
     };
 
@@ -448,6 +505,14 @@ export default function Analytics({ user }: Props) {
     };
 
     const loading = dashboardLoading || timeToJobLoading || comprehensiveLoading;
+
+    // Trigger animations after data loads
+    useEffect(() => {
+        if (!loading) {
+            const timer = setTimeout(() => setAnimated(true), 150);
+            return () => clearTimeout(timer);
+        }
+    }, [loading]);
 
     if (loading) {
         return (
@@ -490,7 +555,7 @@ export default function Analytics({ user }: Props) {
                         <p className="text-maroon-600 dark:text-gray-400">Comprehensive alumni tracking and performance metrics</p>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline" className="text-xs">
                             <Clock className="h-3 w-3 mr-1" />
                             Last updated: {lastRefresh.toLocaleTimeString()}
@@ -507,21 +572,39 @@ export default function Analytics({ user }: Props) {
                         </Button>
 
                         <div className="flex flex-wrap gap-1">
-                            <Button
-                                onClick={() => handleExport('csv')}
-                                variant="outline"
-                                size="sm"
-                                className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
-                            >
-                                <Download className="h-4 w-4 mr-1" />
-                                Export All Analytics
-                            </Button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
+                                    >
+                                        <Download className="h-4 w-4 mr-1" />
+                                        Export All Analytics
+                                        <ChevronDown className="h-4 w-4 ml-1" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                    <DropdownMenuItem onClick={() => handleExport('csv')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as CSV
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExport('excel')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as Excel
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as PDF
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </div>
                 </div>
 
                 {/* Section 1: Key Performance Indicators */}
-                <div className="space-y-4">
+                <div className="space-y-4" style={sectionStyle(0)}>
                     <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
                         <Target className="h-5 w-5 mr-2" />
                         Key Performance Indicators
@@ -538,7 +621,7 @@ export default function Analytics({ user }: Props) {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-3xl font-bold text-maroon-800 dark:text-gray-200">
-                                    {dashboardStats?.overview.total_alumni || 0}
+                                    <CountUp end={dashboardStats?.overview.total_alumni || 0} />
                                 </div>
                                 <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Registered in system</p>
                             </CardContent>
@@ -554,7 +637,7 @@ export default function Analytics({ user }: Props) {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-3xl font-bold text-green-700">
-                                    {comprehensiveData?.performance_indicator.performance_rate || 0}%
+                                    <CountUp end={comprehensiveData?.performance_indicator.performance_rate || 0} suffix="%" />
                                 </div>
                                 <p className="text-xs text-green-600 mt-1">Employed within 2 years</p>
                                 <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
@@ -573,7 +656,7 @@ export default function Analytics({ user }: Props) {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-3xl font-bold text-blue-700">
-                                    {comprehensiveData?.job_alignment.alignment_rate || 0}%
+                                    <CountUp end={comprehensiveData?.job_alignment.alignment_rate || 0} suffix="%" />
                                 </div>
                                 <p className="text-xs text-blue-600 mt-1">Working in related field</p>
                                 <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
@@ -592,9 +675,9 @@ export default function Analytics({ user }: Props) {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-3xl font-bold text-purple-700">
-                                    {dashboardStats?.overview.total_alumni && dashboardStats.overview.total_alumni > 0
+                                    <CountUp end={dashboardStats?.overview.total_alumni && dashboardStats.overview.total_alumni > 0
                                         ? Math.round(((comprehensiveData?.job_alignment.total_employed || 0) / dashboardStats.overview.total_alumni) * 100)
-                                        : 0}%
+                                        : 0} suffix="%" />
                                 </div>
                                 <p className="text-xs text-purple-600 mt-1">Of all alumni</p>
                                 <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
@@ -613,7 +696,7 @@ export default function Analytics({ user }: Props) {
                             </CardHeader>
                             <CardContent>
                                 <div className="text-3xl font-bold text-red-700">
-                                    {comprehensiveData?.attrition_rate.summary.overall_attrition_rate || 0}%
+                                    <CountUp end={comprehensiveData?.attrition_rate.summary.overall_attrition_rate || 0} suffix="%" />
                                 </div>
                                 <p className="text-xs text-red-600 mt-1">Unemployed + Continuing Ed.</p>
                                 <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
@@ -625,7 +708,7 @@ export default function Analytics({ user }: Props) {
                 </div>
 
                 {/* Section 2: Employment Analytics */}
-                <div className="space-y-4">
+                <div className="space-y-4" style={sectionStyle(150)}>
                     <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
                         <Briefcase className="h-5 w-5 mr-2" />
                         Employment Analytics
@@ -808,7 +891,7 @@ export default function Analytics({ user }: Props) {
                 </div>
 
                 {/* Section 3: Enrollment & Attrition Analytics */}
-                <div className="space-y-4">
+                <div className="space-y-4" style={sectionStyle(300)}>
                     <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
                         <GraduationCap className="h-5 w-5 mr-2" />
                         Enrollment & Attrition Analytics
@@ -1025,7 +1108,7 @@ export default function Analytics({ user }: Props) {
                 </div>
 
                 {/* Section 4: Performance Trends */}
-                <div className="space-y-4">
+                <div className="space-y-4" style={sectionStyle(450)}>
                     <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
                         <TrendingUp className="h-5 w-5 mr-2" />
                         Performance Trends
@@ -1108,144 +1191,133 @@ export default function Analytics({ user }: Props) {
                 </div>
 
                 {/* Section 5: Program-wise Performance Table */}
-                <div className="space-y-4">
+                <div className="space-y-4" style={sectionStyle(550)}>
                     <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
                         <Building className="h-5 w-5 mr-2" />
                         Program-wise Performance
                     </h3>
 
-                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                        <CardHeader>
-                            <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Detailed Program Metrics</CardTitle>
-                            <CardDescription className="text-maroon-600 dark:text-gray-400">
-                                Employment and job alignment rates by degree program
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {/* Mobile Card View */}
-                            <div className="md:hidden space-y-3">
-                                {comprehensiveData?.program_performance.map((program, index) => (
-                                    <div key={index} className="border border-beige-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
-                                        <div className="flex items-center gap-2">
-                                            <GraduationCap className="h-4 w-4 text-maroon-600 dark:text-gray-400 flex-shrink-0" />
-                                            <span className="font-medium text-sm text-gray-900 dark:text-gray-100">{program.program}</span>
-                                        </div>
-                                        <div className="grid grid-cols-3 gap-2 text-sm">
-                                            <div className="bg-beige-50 dark:bg-gray-800 rounded p-2 text-center">
-                                                <span className="text-gray-500 dark:text-gray-400 text-xs block">Alumni</span>
-                                                <p className="font-semibold">{program.total_alumni}</p>
-                                            </div>
-                                            <div className="bg-beige-50 dark:bg-gray-800 rounded p-2 text-center">
-                                                <span className="text-gray-500 dark:text-gray-400 text-xs block">Employed</span>
-                                                <p className="font-semibold">{program.employed}</p>
-                                            </div>
-                                            <div className="bg-beige-50 dark:bg-gray-800 rounded p-2 text-center">
-                                                <span className="text-gray-500 dark:text-gray-400 text-xs block">Avg Days</span>
-                                                <p className="font-semibold text-xs">{program.avg_days_to_job > 0 ? formatDays(program.avg_days_to_job) : 'N/A'}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <Badge variant="outline" className={`text-xs ${program.employment_rate >= 75 ? 'bg-green-100 text-green-800 border-green-300' : program.employment_rate >= 50 ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : 'bg-red-100 text-red-800 border-red-300'}`}>
-                                                Emp: {program.employment_rate}%
-                                            </Badge>
-                                            <Badge variant="outline" className={`text-xs ${program.alignment_rate >= 50 ? 'bg-blue-100 text-blue-800 border-blue-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}>
-                                                Align: {program.alignment_rate}%
-                                            </Badge>
-                                            <span className="text-xs text-gray-500 dark:text-gray-400">Aligned: {program.aligned}</span>
-                                        </div>
-                                    </div>
-                                ))}
+                    {/* Summary row */}
+                    {comprehensiveData?.program_performance && comprehensiveData.program_performance.length > 0 && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div className="rounded-xl bg-gradient-to-br from-maroon-50 to-beige-50 dark:from-maroon-950/30 dark:to-gray-800 p-4 border border-maroon-100 dark:border-gray-700">
+                                <p className="text-xs font-medium text-maroon-600 dark:text-gray-400 mb-1">Total Programs</p>
+                                <p className="text-2xl font-bold text-maroon-800 dark:text-gray-200"><CountUp end={comprehensiveData.program_performance.length} duration={800} /></p>
                             </div>
+                            <div className="rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-gray-800 p-4 border border-green-100 dark:border-gray-700">
+                                <p className="text-xs font-medium text-green-600 dark:text-gray-400 mb-1">Best Employment</p>
+                                <p className="text-2xl font-bold text-green-700 dark:text-green-300"><CountUp end={Math.max(...comprehensiveData.program_performance.map(p => p.employment_rate))} suffix="%" duration={800} /></p>
+                            </div>
+                            <div className="rounded-xl bg-gradient-to-br from-blue-50 to-sky-50 dark:from-blue-950/30 dark:to-gray-800 p-4 border border-blue-100 dark:border-gray-700">
+                                <p className="text-xs font-medium text-blue-600 dark:text-gray-400 mb-1">Best Alignment</p>
+                                <p className="text-2xl font-bold text-blue-700 dark:text-blue-300"><CountUp end={Math.max(...comprehensiveData.program_performance.map(p => p.alignment_rate))} suffix="%" duration={800} /></p>
+                            </div>
+                            <div className="rounded-xl bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/30 dark:to-gray-800 p-4 border border-purple-100 dark:border-gray-700">
+                                <p className="text-xs font-medium text-purple-600 dark:text-gray-400 mb-1">Total Alumni</p>
+                                <p className="text-2xl font-bold text-purple-700 dark:text-purple-300"><CountUp end={comprehensiveData.program_performance.reduce((s, p) => s + p.total_alumni, 0)} duration={800} /></p>
+                            </div>
+                        </div>
+                    )}
 
-                            {/* Desktop Table View */}
-                            <div className="hidden md:block overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                    <thead className="bg-maroon-50 dark:bg-gray-800">
-                                        <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
-                                                Program
-                                            </th>
-                                            <th className="px-4 py-3 text-center text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
-                                                Alumni
-                                            </th>
-                                            <th className="px-4 py-3 text-center text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
-                                                Employed
-                                            </th>
-                                            <th className="px-4 py-3 text-center text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
-                                                Employment Rate
-                                            </th>
-                                            <th className="px-4 py-3 text-center text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
-                                                Job Aligned
-                                            </th>
-                                            <th className="px-4 py-3 text-center text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
-                                                Alignment Rate
-                                            </th>
-                                            <th className="px-4 py-3 text-center text-xs font-medium text-maroon-800 dark:text-gray-200 uppercase tracking-wider">
-                                                Avg Days to Job
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                                        {comprehensiveData?.program_performance.map((program, index) => (
-                                            <tr key={index} className="hover:bg-maroon-50 dark:hover:bg-gray-800 transition-colors">
-                                                <td className="px-4 py-3 whitespace-nowrap">
-                                                    <div className="flex items-center">
-                                                        <GraduationCap className="h-4 w-4 text-maroon-600 dark:text-gray-400 mr-2" />
-                                                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100 max-w-xs truncate">
-                                                            {program.program}
-                                                        </span>
+                    {/* Program Cards Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        {comprehensiveData?.program_performance
+                            .sort((a, b) => b.employment_rate - a.employment_rate)
+                            .map((program, index) => {
+                                const empColor = program.employment_rate >= 75 ? 'green' : program.employment_rate >= 50 ? 'yellow' : 'red';
+                                const alignColor = program.alignment_rate >= 50 ? 'blue' : 'gray';
+                                const empColorMap: Record<string, string> = { green: 'bg-green-500', yellow: 'bg-yellow-500', red: 'bg-red-500' };
+                                const alignColorMap: Record<string, string> = { blue: 'bg-blue-500', gray: 'bg-gray-400' };
+                                const maxAlumni = Math.max(...(comprehensiveData?.program_performance.map(p => p.total_alumni) || [1]));
+                                return (
+                                    <Card
+                                        key={index}
+                                        className="border-none shadow-md hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-800/80 overflow-hidden group"
+                                        style={{
+                                            opacity: animated ? 1 : 0,
+                                            transform: animated ? 'translateY(0)' : 'translateY(16px)',
+                                            transition: `opacity 0.5s ease ${600 + index * 60}ms, transform 0.5s ease ${600 + index * 60}ms`,
+                                        }}
+                                    >
+                                        {/* Top accent bar showing relative size */}
+                                        <div className="h-1 bg-gray-100 dark:bg-gray-700">
+                                            <div
+                                                className="h-1 bg-gradient-to-r from-maroon-500 to-maroon-400 transition-all duration-1000 ease-out"
+                                                style={{ width: animated ? `${(program.total_alumni / maxAlumni) * 100}%` : '0%', transitionDelay: `${700 + index * 60}ms` }}
+                                            />
+                                        </div>
+                                        <CardContent className="p-4 space-y-3">
+                                            {/* Program name + alumni count */}
+                                            <div className="flex items-start justify-between gap-2">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <div className="p-1.5 bg-maroon-100 dark:bg-maroon-900/40 rounded-lg shrink-0">
+                                                        <GraduationCap className="h-4 w-4 text-maroon-600 dark:text-maroon-400" />
                                                     </div>
-                                                </td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-center">
-                                                    <span className="text-sm text-gray-900 dark:text-gray-100">{program.total_alumni}</span>
-                                                </td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-center">
-                                                    <span className="text-sm text-gray-900 dark:text-gray-100">{program.employed}</span>
-                                                </td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-center">
-                                                    <Badge
-                                                        variant="outline"
-                                                        className={`${program.employment_rate >= 75
-                                                            ? 'bg-green-100 text-green-800 border-green-300'
-                                                            : program.employment_rate >= 50
-                                                                ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
-                                                                : 'bg-red-100 text-red-800 border-red-300'
-                                                            }`}
-                                                    >
+                                                    <h4 className="text-sm font-bold text-gray-900 dark:text-gray-100 truncate" title={program.program}>
+                                                        {program.program}
+                                                    </h4>
+                                                </div>
+                                                <span className="text-xs font-bold text-maroon-600 dark:text-maroon-400 bg-maroon-50 dark:bg-maroon-950/40 px-2 py-0.5 rounded-full shrink-0">
+                                                    {program.total_alumni} alumni
+                                                </span>
+                                            </div>
+
+                                            {/* Employment Rate bar */}
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Employment</span>
+                                                    <span className={`text-xs font-bold ${empColor === 'green' ? 'text-green-600' : empColor === 'yellow' ? 'text-yellow-600' : 'text-red-600'}`}>
                                                         {program.employment_rate}%
-                                                    </Badge>
-                                                </td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-center">
-                                                    <span className="text-sm text-gray-900 dark:text-gray-100">{program.aligned}</span>
-                                                </td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-center">
-                                                    <Badge
-                                                        variant="outline"
-                                                        className={`${program.alignment_rate >= 50
-                                                            ? 'bg-blue-100 text-blue-800 border-blue-300'
-                                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'
-                                                            }`}
-                                                    >
-                                                        {program.alignment_rate}%
-                                                    </Badge>
-                                                </td>
-                                                <td className="px-4 py-3 whitespace-nowrap text-center">
-                                                    <span className="text-sm text-gray-600 dark:text-gray-400">
-                                                        {program.avg_days_to_job > 0 ? formatDays(program.avg_days_to_job) : 'N/A'}
                                                     </span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </CardContent>
-                    </Card>
+                                                </div>
+                                                <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                                                    <div
+                                                        className={`${empColorMap[empColor]} h-2 rounded-full transition-all duration-1000 ease-out`}
+                                                        style={{ width: animated ? `${program.employment_rate}%` : '0%', transitionDelay: `${700 + index * 60}ms` }}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Alignment Rate bar */}
+                                            <div className="space-y-1">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs font-medium text-gray-600 dark:text-gray-400">Job Alignment</span>
+                                                    <span className={`text-xs font-bold ${alignColor === 'blue' ? 'text-blue-600' : 'text-gray-500 dark:text-gray-400'}`}>
+                                                        {program.alignment_rate}%
+                                                    </span>
+                                                </div>
+                                                <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
+                                                    <div
+                                                        className={`${alignColorMap[alignColor]} h-2 rounded-full transition-all duration-1000 ease-out`}
+                                                        style={{ width: animated ? `${program.alignment_rate}%` : '0%', transitionDelay: `${750 + index * 60}ms` }}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Bottom stats */}
+                                            <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-700">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                        <span className="font-semibold text-gray-700 dark:text-gray-300">{program.employed}</span> employed
+                                                    </span>
+                                                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                        <span className="font-semibold text-gray-700 dark:text-gray-300">{program.aligned}</span> aligned
+                                                    </span>
+                                                </div>
+                                                <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500">
+                                                    {program.avg_days_to_job > 0 ? `⏱ ${formatDays(program.avg_days_to_job)}` : ''}
+                                                </span>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })}
+                    </div>
                 </div>
 
                 {/* Section 5.5: Employment Location Analytics */}
                 {comprehensiveData?.employment_location && (
-                    <div className="space-y-4">
+                    <div className="space-y-4" style={sectionStyle(650)}>
                         <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
                             <Globe className="h-5 w-5 mr-2" />
                             Employment Location (Local vs Foreign)
@@ -1259,8 +1331,8 @@ export default function Analytics({ user }: Props) {
                                         <div className="p-2 bg-emerald-500 rounded-lg"><MapPin className="h-5 w-5 text-white" /></div>
                                         <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Local (Philippines)</span>
                                     </div>
-                                    <p className="text-3xl font-bold text-emerald-800 dark:text-emerald-200">{comprehensiveData.employment_location.summary.local}</p>
-                                    <p className="text-sm text-emerald-600 dark:text-emerald-400">{comprehensiveData.employment_location.summary.local_rate}% of employed</p>
+                                    <p className="text-3xl font-bold text-emerald-800 dark:text-emerald-200"><CountUp end={comprehensiveData.employment_location.summary.local} /></p>
+                                    <p className="text-sm text-emerald-600 dark:text-emerald-400"><CountUp end={comprehensiveData.employment_location.summary.local_rate} suffix="% of employed" /></p>
                                 </CardContent>
                             </Card>
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-950/30 dark:to-blue-950/30">
@@ -1269,8 +1341,8 @@ export default function Analytics({ user }: Props) {
                                         <div className="p-2 bg-sky-500 rounded-lg"><Globe className="h-5 w-5 text-white" /></div>
                                         <span className="text-sm font-semibold text-sky-700 dark:text-sky-300">Foreign / OFW</span>
                                     </div>
-                                    <p className="text-3xl font-bold text-sky-800 dark:text-sky-200">{comprehensiveData.employment_location.summary.foreign}</p>
-                                    <p className="text-sm text-sky-600 dark:text-sky-400">{comprehensiveData.employment_location.summary.foreign_rate}% working abroad</p>
+                                    <p className="text-3xl font-bold text-sky-800 dark:text-sky-200"><CountUp end={comprehensiveData.employment_location.summary.foreign} /></p>
+                                    <p className="text-sm text-sky-600 dark:text-sky-400"><CountUp end={comprehensiveData.employment_location.summary.foreign_rate} suffix="% working abroad" /></p>
                                 </CardContent>
                             </Card>
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/30">
@@ -1279,8 +1351,8 @@ export default function Analytics({ user }: Props) {
                                         <div className="p-2 bg-violet-500 rounded-lg"><Briefcase className="h-5 w-5 text-white" /></div>
                                         <span className="text-sm font-semibold text-violet-700 dark:text-violet-300">Remote (Foreign Co.)</span>
                                     </div>
-                                    <p className="text-3xl font-bold text-violet-800 dark:text-violet-200">{comprehensiveData.employment_location.summary.remote}</p>
-                                    <p className="text-sm text-violet-600 dark:text-violet-400">{comprehensiveData.employment_location.summary.remote_rate}% remote work</p>
+                                    <p className="text-3xl font-bold text-violet-800 dark:text-violet-200"><CountUp end={comprehensiveData.employment_location.summary.remote} /></p>
+                                    <p className="text-sm text-violet-600 dark:text-violet-400"><CountUp end={comprehensiveData.employment_location.summary.remote_rate} suffix="% remote work" /></p>
                                 </CardContent>
                             </Card>
                         </div>
@@ -1339,7 +1411,7 @@ export default function Analytics({ user }: Props) {
 
                 {/* Section 6: System Overview (only for super_admin) */}
                 {user.role === 'super_admin' && dashboardStats && (
-                    <div className="space-y-4">
+                    <div className="space-y-4" style={sectionStyle(750)}>
                         <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
                             <Activity className="h-5 w-5 mr-2" />
                             System Overview
@@ -1419,7 +1491,7 @@ export default function Analytics({ user }: Props) {
 
                 {/* Section 7: Additional Charts */}
                 {dashboardStats && (
-                    <div className="space-y-4">
+                    <div className="space-y-4" style={sectionStyle(850)}>
                         <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
                             <BarChart3 className="h-5 w-5 mr-2" />
                             Additional Insights

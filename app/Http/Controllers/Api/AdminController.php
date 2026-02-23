@@ -18,18 +18,299 @@ use App\Services\EmailNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
 
 class AdminController extends Controller
 {
     /**
-     * Get dashboard metrics and overview data
+     * Get dashboard metrics and overview data with robust caching
      */
     public function dashboard(Request $request): JsonResponse
     {
         try {
             // Get campus_id filter if provided
             $campusId = $request->input('campus_id');
+            
+            // Cache key based on campus filter
+            $cacheKey = 'dashboard_metrics_' . ($campusId ?? 'all');
+            
+            // Try to get from cache first
+            $cachedData = Cache::get($cacheKey);
+            
+            // Validate cached data - if invalid, fetch fresh
+            if ($cachedData && $this->isValidDashboardData($cachedData)) {
+                return response()->json([
+                    'success' => true,
+                    'data' => $cachedData,
+                    'cached' => true,
+                    'source' => 'cache'
+                ]);
+            }
+            
+            // Cache miss or invalid - use locking to prevent race conditions
+            $lock = Cache::lock('dashboard_fetch_' . ($campusId ?? 'all'), 10);
+            
+            try {
+                // Try to acquire lock
+                if ($lock->get()) {
+                    // Fetch fresh data
+                    $data = $this->getDashboardMetrics($campusId);
+                    
+                    // Only cache if data is valid
+                    if ($this->isValidDashboardData($data)) {
+                        Cache::put($cacheKey, $data, 180); // 3 minutes (reduced from 5)
+                    }
+                    
+                    return response()->json([
+                        'success' => true,
+                        'data' => $data,
+                        'cached' => false,
+                        'source' => 'database'
+                    ]);
+                } else {
+                    // Couldn't get lock, wait and try cache again
+                    sleep(1);
+                    $cachedData = Cache::get($cacheKey);
+                    
+                    if ($cachedData && $this->isValidDashboardData($cachedData)) {
+                        return response()->json([
+                            'success' => true,
+                            'data' => $cachedData,
+                            'cached' => true,
+                            'source' => 'cache_retry'
+                        ]);
+                    }
+                    
+                    // Still no valid cache, fetch without locking
+                    $data = $this->getDashboardMetrics($campusId);
+                    
+                    return response()->json([
+                        'success' => true,
+                        'data' => $data,
+                        'cached' => false,
+                        'source' => 'fallback'
+                    ]);
+                }
+            } finally {
+                $lock->release();
+            }
+            
+        } catch (\Exception $e) {
+            \Log::error('Dashboard fetch error', [
+                'error' => $e->getMessage(),
+                'campus_id' => $campusId ?? 'all'
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch dashboard data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Validate dashboard data to ensure it's not empty or corrupted
+     */
+    private function isValidDashboardData($data): bool
+    {
+        if (!is_array($data)) {
+            return false;
+        }
+        
+        // Check required keys exist
+        $requiredKeys = ['overview', 'employment_metrics', 'batch_distribution'];
+        foreach ($requiredKeys as $key) {
+            if (!isset($data[$key])) {
+                return false;
+            }
+        }
+        
+        // Check overview has actual data (not all zeros)
+        if (isset($data['overview'])) {
+            $overview = $data['overview'];
+            // At least one metric should be > 0 for a valid system
+            if (
+                ($overview['total_alumni'] ?? 0) === 0 &&
+                ($overview['total_surveys'] ?? 0) === 0 &&
+                ($overview['total_batches'] ?? 0) === 0
+            ) {
+                // Fresh system might have no data, log it
+                \Log::warning('Dashboard has no data - might be fresh system or data issue');
+            }
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Manual cache refresh endpoint for admins
+     */
+    public function refreshDashboardCache(Request $request): JsonResponse
+    {
+        try {
+            $campusId = $request->input('campus_id');
+            $cacheKey = 'dashboard_metrics_' . ($campusId ?? 'all');
+            
+            // Clear existing cache
+            Cache::forget($cacheKey);
+            
+            // Fetch fresh data
+            $data = $this->getDashboardMetrics($campusId);
+            
+            // Cache it
+            if ($this->isValidDashboardData($data)) {
+                Cache::put($cacheKey, $data, 180);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Dashboard cache refreshed successfully',
+                'data' => $data
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to refresh dashboard cache',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Clear all system caches (for debugging)
+     */
+    public function clearAllCaches(Request $request): JsonResponse
+    {
+        try {
+            // Get all campus IDs
+            $campusIds = \App\Models\Campus::pluck('id')->toArray();
+            
+            $clearedKeys = [];
+            
+            // Clear dashboard caches
+            foreach (array_merge(['all'], $campusIds) as $campusId) {
+                $keys = [
+                    'dashboard_metrics_' . $campusId,
+                    'alumni_stats_' . $campusId,
+                    'analytics_overview_' . $campusId,
+                    'analytics_time_to_job_' . $campusId . '_all',
+                    'analytics_comprehensive_' . $campusId,
+                ];
+                
+                foreach ($keys as $key) {
+                    if (Cache::forget($key)) {
+                        $clearedKeys[] = $key;
+                    }
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'All caches cleared successfully',
+                'cleared_keys' => $clearedKeys,
+                'count' => count($clearedKeys)
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to clear caches',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Check cache health status
+     */
+    public function cacheHealthCheck(Request $request): JsonResponse
+    {
+        try {
+            $campusIds = \App\Models\Campus::pluck('id')->toArray();
+            
+            $health = [
+                'redis_connected' => false,
+                'cache_driver' => config('cache.default'),
+                'cached_dashboards' => [],
+                'cached_analytics' => [],
+                'total_cached_keys' => 0,
+                'redis_memory' => 'N/A',
+                'issues' => []
+            ];
+            
+            // Test Redis connection
+            try {
+                Cache::put('health_check_test', 'ok', 10);
+                $test = Cache::get('health_check_test');
+                $health['redis_connected'] = ($test === 'ok');
+                Cache::forget('health_check_test');
+            } catch (\Exception $e) {
+                $health['issues'][] = 'Redis connection failed: ' . $e->getMessage();
+            }
+            
+            // Check each campus cache
+            foreach (array_merge(['all'], $campusIds) as $campusId) {
+                $dashboardKey = 'dashboard_metrics_' . $campusId;
+                $statsKey = 'alumni_stats_' . $campusId;
+                $analyticsKey = 'analytics_overview_' . $campusId;
+                
+                $dashboardCached = Cache::has($dashboardKey);
+                $statsCached = Cache::has($statsKey);
+                $analyticsCached = Cache::has($analyticsKey);
+                
+                if ($dashboardCached || $statsCached || $analyticsCached) {
+                    $health['cached_dashboards'][$campusId] = [
+                        'dashboard' => $dashboardCached,
+                        'stats' => $statsCached,
+                        'analytics' => $analyticsCached
+                    ];
+                    
+                    $health['total_cached_keys'] += ($dashboardCached ? 1 : 0) + ($statsCached ? 1 : 0) + ($analyticsCached ? 1 : 0);
+                    
+                    // Validate cached data
+                    if ($dashboardCached) {
+                        $data = Cache::get($dashboardKey);
+                        if (!$this->isValidDashboardData($data)) {
+                            $health['issues'][] = "Invalid dashboard data cached for campus: {$campusId}";
+                        }
+                    }
+                }
+            }
+            
+            // Get Redis memory if available
+            try {
+                $redis = app('redis')->connection();
+                $info = $redis->info('memory');
+                $health['redis_memory'] = $info['used_memory_human'] ?? 'N/A';
+            } catch (\Exception $e) {
+                $health['issues'][] = 'Could not get Redis memory info';
+            }
+            
+            return response()->json([
+                'success' => true,
+                'health' => $health,
+                'healthy' => empty($health['issues'])
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Health check failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get dashboard metrics (extracted for caching)
+     */
+    private function getDashboardMetrics($campusId): array
+    {
+        // Get campus_id filter if provided
+        $campusId = $campusId;
             
             // Build base queries with optional campus filtering
             $alumniQuery = AlumniProfile::query();
@@ -256,47 +537,37 @@ class AdminController extends Controller
                 'remote' => (clone $locationQuery)->where('employment_location_type', 'remote')->count(),
             ];
 
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'overview' => [
-                        'total_alumni' => $totalAlumni,
-                        'total_surveys' => $totalSurveys,
-                        'total_batches' => $totalBatches,
-                        'total_responses' => $totalResponses,
-                        'response_rate' => $responseRate,
-                        'total_users' => $totalUsers,
-                        'total_departments' => $totalDepartments,
-                        'total_courses' => $totalCourses,
-                        'active_surveys' => $activeSurveys
-                    ],
-                    'employment_metrics' => [
-                        'employment_rate' => $employmentRate,
-                        'total_employed' => $totalEmployed,
-                        'avg_days_to_job' => $avgDaysToJob,
-                        'job_alignment_rate' => $jobAlignmentRate,
-                        'aligned_jobs_count' => $alignedJobs
-                    ],
-                    'mismatch_stats' => $mismatchStats,
-                    'unemployment_stats' => $unemploymentStats,
-                    'employment_location_stats' => $employmentLocationStats,
-                    'recent_activity' => [
-                        'recent_registrations' => $recentRegistrations,
-                        'recent_responses' => $recentResponses
-                    ],
-                    'batch_distribution' => $batchDistribution,
-                    'employment_stats' => $employmentStats,
-                    'recent_surveys' => $recentSurveys,
-                    'monthly_trend' => $monthlyTrend
-                ]
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch dashboard data',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+            return [
+                'overview' => [
+                    'total_alumni' => $totalAlumni,
+                    'total_surveys' => $totalSurveys,
+                    'total_batches' => $totalBatches,
+                    'total_responses' => $totalResponses,
+                    'response_rate' => $responseRate,
+                    'total_users' => $totalUsers,
+                    'total_departments' => $totalDepartments,
+                    'total_courses' => $totalCourses,
+                    'active_surveys' => $activeSurveys
+                ],
+                'employment_metrics' => [
+                    'employment_rate' => $employmentRate,
+                    'total_employed' => $totalEmployed,
+                    'avg_days_to_job' => $avgDaysToJob,
+                    'job_alignment_rate' => $jobAlignmentRate,
+                    'aligned_jobs_count' => $alignedJobs
+                ],
+                'mismatch_stats' => $mismatchStats,
+                'unemployment_stats' => $unemploymentStats,
+                'employment_location_stats' => $employmentLocationStats,
+                'recent_activity' => [
+                    'recent_registrations' => $recentRegistrations,
+                    'recent_responses' => $recentResponses
+                ],
+                'batch_distribution' => $batchDistribution,
+                'employment_stats' => $employmentStats,
+                'recent_surveys' => $recentSurveys,
+                'monthly_trend' => $monthlyTrend
+            ];
     }
     /**
      * Get all alumni with comprehensive filtering and pagination (Alumni Bank)
@@ -520,78 +791,157 @@ class AdminController extends Controller
     }
 
     /**
-     * Get alumni statistics and analytics
+     * Get alumni statistics and analytics with robust caching
      */
     public function getAlumniStats(Request $request): JsonResponse
     {
         try {
-            // Overall statistics
-            $totalAlumni = AlumniProfile::count();
-
-            // Batch-wise distribution
-            $batchStats = Batch::withCount('alumniProfiles')
-                ->orderBy('graduation_year', 'desc')
-                ->get()
-                ->map(function ($batch) {
-                    return [
-                        'batch_id' => $batch->id,
-                        'batch_name' => $batch->name,
-                        'graduation_year' => $batch->graduation_year,
-                        'alumni_count' => $batch->alumni_profiles_count
-                    ];
-                });
-
-            // Employment status distribution
-            $employmentStats = AlumniProfile::select('employment_status', DB::raw('count(*) as count'))
-                ->whereNotNull('employment_status')
-                ->groupBy('employment_status')
-                ->get()
-                ->pluck('count', 'employment_status');
-
-            // Top employers
-            $topEmployers = AlumniProfile::select('current_employer', DB::raw('count(*) as count'))
-                ->whereNotNull('current_employer')
-                ->where('current_employer', '!=', '')
-                ->groupBy('current_employer')
-                ->orderBy('count', 'desc')
-                ->limit(10)
-                ->get();
-
-            // Degree program distribution
-            $degreePrograms = AlumniProfile::select('degree_program', DB::raw('count(*) as count'))
-                ->whereNotNull('degree_program')
-                ->groupBy('degree_program')
-                ->orderBy('count', 'desc')
-                ->get()
-                ->pluck('count', 'degree_program');
-
-            // Major distribution
-            $majors = AlumniProfile::select('major', DB::raw('count(*) as count'))
-                ->whereNotNull('major')
-                ->groupBy('major')
-                ->orderBy('count', 'desc')
-                ->limit(15)
-                ->get()
-                ->pluck('count', 'major');
-
-            // Geographic distribution
-            $locations = AlumniProfile::select('city', 'state_province', 'country', DB::raw('count(*) as count'))
-                ->whereNotNull('city')
-                ->groupBy('city', 'state_province', 'country')
-                ->orderBy('count', 'desc')
-                ->limit(20)
-                ->get();
-
-            // Mentorship and hiring willingness
-            $mentoringStats = [
-                'willing_to_mentor' => AlumniProfile::where('willing_to_mentor', true)->count(),
-                'willing_to_hire' => AlumniProfile::where('willing_to_hire_alumni', true)->count(),
-                'total_alumni' => $totalAlumni
-            ];
-
+            $campusId = $request->get('campus_id');
+            
+            // Create cache key
+            $cacheKey = 'alumni_stats_' . ($campusId ?? 'all');
+            
+            // Try cache with validation
+            $cachedData = Cache::get($cacheKey);
+            if ($cachedData && is_array($cachedData) && isset($cachedData['overview'])) {
+                return response()->json([
+                    'success' => true,
+                    'data' => $cachedData,
+                    'cached' => true
+                ]);
+            }
+            
+            // Use locking
+            $lock = Cache::lock('alumni_stats_' . ($campusId ?? 'all'), 10);
+            
+            try {
+                if ($lock->get()) {
+                    // Fetch data
+                    $data = $this->calculateAlumniStats($campusId);
+                    
+                    // Cache if valid
+                    if (!empty($data) && isset($data['overview'])) {
+                        Cache::put($cacheKey, $data, 180); // 3 minutes
+                    }
+                    
+                    return response()->json([
+                        'success' => true,
+                        'data' => $data,
+                        'cached' => false
+                    ]);
+                } else {
+                    // Wait and retry
+                    sleep(1);
+                    $cachedData = Cache::get($cacheKey);
+                    if ($cachedData && is_array($cachedData)) {
+                        return response()->json([
+                            'success' => true,
+                            'data' => $cachedData,
+                            'cached' => true
+                        ]);
+                    }
+                    
+                    // Fallback
+                    $data = $this->calculateAlumniStats($campusId);
+                    return response()->json([
+                        'success' => true,
+                        'data' => $data,
+                        'cached' => false
+                    ]);
+                }
+            } finally {
+                $lock->release();
+            }
+        } catch (\Exception $e) {
+            \Log::error('Alumni stats error', [
+                'error' => $e->getMessage(),
+                'campus_id' => $campusId ?? 'all'
+            ]);
+            
             return response()->json([
-                'success' => true,
-                'data' => [
+                'success' => false,
+                'message' => 'Failed to fetch alumni statistics',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Calculate alumni statistics
+     */
+    private function calculateAlumniStats($campusId)
+    {
+                // Base query with optional campus filter
+                $baseQuery = AlumniProfile::query();
+                if ($campusId) {
+                    $baseQuery->where('campus_id', $campusId);
+                }
+                
+                // Overall statistics
+                $totalAlumni = (clone $baseQuery)->count();
+
+                // Batch-wise distribution
+                $batchQuery = Batch::withCount('alumniProfiles');
+                if ($campusId) {
+                    $batchQuery->where('campus_id', $campusId);
+                }
+                $batchStats = $batchQuery->orderBy('graduation_year', 'desc')
+                    ->get()
+                    ->map(function ($batch) {
+                        return [
+                            'batch_id' => $batch->id,
+                            'batch_name' => $batch->name,
+                            'graduation_year' => $batch->graduation_year,
+                            'alumni_count' => $batch->alumni_profiles_count
+                        ];
+                    });
+
+                // Employment status distribution
+                $empQuery = (clone $baseQuery)->select('employment_status', DB::raw('count(*) as count'))
+                    ->whereNotNull('employment_status')
+                    ->groupBy('employment_status');
+                $employmentStats = $empQuery->get()->pluck('count', 'employment_status');
+
+                // Top employers
+                $employerQuery = (clone $baseQuery)->select('current_employer', DB::raw('count(*) as count'))
+                    ->whereNotNull('current_employer')
+                    ->where('current_employer', '!=', '')
+                    ->groupBy('current_employer')
+                    ->orderBy('count', 'desc')
+                    ->limit(10);
+                $topEmployers = $employerQuery->get();
+
+                // Degree program distribution
+                $degreeQuery = (clone $baseQuery)->select('degree_program', DB::raw('count(*) as count'))
+                    ->whereNotNull('degree_program')
+                    ->groupBy('degree_program')
+                    ->orderBy('count', 'desc');
+                $degreePrograms = $degreeQuery->get()->pluck('count', 'degree_program');
+
+                // Major distribution
+                $majorQuery = (clone $baseQuery)->select('major', DB::raw('count(*) as count'))
+                    ->whereNotNull('major')
+                    ->groupBy('major')
+                    ->orderBy('count', 'desc')
+                    ->limit(15);
+                $majors = $majorQuery->get()->pluck('count', 'major');
+
+                // Geographic distribution
+                $locationQuery = (clone $baseQuery)->select('city', 'state_province', 'country', DB::raw('count(*) as count'))
+                    ->whereNotNull('city')
+                    ->groupBy('city', 'state_province', 'country')
+                    ->orderBy('count', 'desc')
+                    ->limit(20);
+                $locations = $locationQuery->get();
+
+                // Mentorship and hiring willingness
+                $mentoringStats = [
+                    'willing_to_mentor' => (clone $baseQuery)->where('willing_to_mentor', true)->count(),
+                    'willing_to_hire' => (clone $baseQuery)->where('willing_to_hire_alumni', true)->count(),
+                    'total_alumni' => $totalAlumni
+                ];
+                
+                return [
                     'overview' => [
                         'total_alumni' => $totalAlumni,
                         'total_batches' => $batchStats->count()
@@ -603,16 +953,9 @@ class AdminController extends Controller
                     'majors' => $majors,
                     'geographic_distribution' => $locations,
                     'mentoring_stats' => $mentoringStats
-                ]
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch alumni statistics',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+                ];
     }
+    
     /**
      * Get all surveys with comprehensive filtering and statistics
      */
@@ -962,6 +1305,176 @@ class AdminController extends Controller
     }
 
     /**
+     * Export batches data in various formats
+     */
+    public function exportBatches(Request $request)
+    {
+        $format = $request->get('format', 'csv');
+        
+        // Get batches with same filtering as getBatches
+        $search = $request->get('search');
+        $campusId = $request->get('campus_id');
+
+        $query = Batch::withCount(['alumniProfiles as alumni_count'])
+            ->orderBy('graduation_year', 'desc')
+            ->orderBy('name');
+
+        // Apply campus filter
+        if ($campusId) {
+            $query->where('campus_id', $campusId);
+        }
+
+        // Apply search filter
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('graduation_year', 'like', "%{$search}%")
+                  ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        // Limit to 5000 records for performance
+        $batches = $query->limit(5000)->get();
+
+        // Export based on format
+        switch ($format) {
+            case 'excel':
+                return $this->exportBatchesToExcel($batches);
+            case 'pdf':
+                return $this->exportBatchesToPdf($batches);
+            case 'csv':
+            default:
+                return $this->exportBatchesToCsv($batches);
+        }
+    }
+
+    /**
+     * Export batches to CSV
+     */
+    private function exportBatchesToCsv($batches)
+    {
+        $handle = fopen('php://temp', 'w+');
+        
+        // CSV Headers
+        fputcsv($handle, [
+            'Batch ID',
+            'Batch Name',
+            'Graduation Year',
+            'Description',
+            'Status',
+            'Alumni Count',
+            'Created Date'
+        ]);
+        
+        // Data rows
+        foreach ($batches as $batch) {
+            fputcsv($handle, [
+                $batch->id,
+                $batch->name,
+                $batch->graduation_year,
+                $batch->description,
+                ucfirst($batch->status),
+                $batch->alumni_count ?? 0,
+                Carbon::parse($batch->created_at)->format('Y-m-d')
+            ]);
+        }
+        
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+        
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="batches-' . date('Y-m-d') . '.csv"',
+        ]);
+    }
+
+    /**
+     * Export batches to Excel
+     */
+    private function exportBatchesToExcel($batches)
+    {
+        $handle = fopen('php://temp', 'w+');
+        
+        // Add UTF-8 BOM for Excel
+        fwrite($handle, "\xEF\xBB\xBF");
+        
+        // CSV Headers
+        fputcsv($handle, [
+            'Batch ID',
+            'Batch Name',
+            'Graduation Year',
+            'Description',
+            'Status',
+            'Alumni Count',
+            'Created Date'
+        ]);
+        
+        // Data rows
+        foreach ($batches as $batch) {
+            fputcsv($handle, [
+                $batch->id,
+                $batch->name,
+                $batch->graduation_year,
+                $batch->description,
+                ucfirst($batch->status),
+                $batch->alumni_count ?? 0,
+                Carbon::parse($batch->created_at)->format('Y-m-d')
+            ]);
+        }
+        
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+        
+        return response($csv, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="batches-' . date('Y-m-d') . '.xlsx"',
+        ]);
+    }
+
+    /**
+     * Export batches to PDF
+     */
+    private function exportBatchesToPdf($batches)
+    {
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            h1 { color: #7c2d3f; border-bottom: 3px solid #7c2d3f; padding-bottom: 10px; }
+            .header-info { margin: 15px 0; color: #666; font-size: 14px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #7c2d3f; color: white; font-weight: bold; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+        </style></head><body>';
+        
+        $html .= '<h1>Batch Management Report</h1>';
+        $html .= '<div class="header-info">Generated on: ' . date('Y-m-d H:i:s') . '<br>';
+        $html .= 'Total Records: ' . count($batches) . '</div>';
+        
+        $html .= '<table><thead><tr>';
+        $html .= '<th>Batch Name</th><th>Graduation Year</th><th>Alumni Count</th><th>Status</th><th>Created</th>';
+        $html .= '</tr></thead><tbody>';
+        
+        foreach ($batches as $batch) {
+            $html .= '<tr>';
+            $html .= '<td>' . htmlspecialchars($batch->name) . '</td>';
+            $html .= '<td>' . $batch->graduation_year . '</td>';
+            $html .= '<td>' . ($batch->alumni_count ?? 0) . '</td>';
+            $html .= '<td>' . ucfirst($batch->status) . '</td>';
+            $html .= '<td>' . Carbon::parse($batch->created_at)->format('Y-m-d') . '</td>';
+            $html .= '</tr>';
+        }
+        
+        $html .= '</tbody></table></body></html>';
+        
+        return response($html, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="batches-' . date('Y-m-d') . '.pdf"',
+        ]);
+    }
+
+    /**
      * Create a new batch
      */
     public function createBatch(Request $request): JsonResponse
@@ -971,7 +1484,7 @@ class AdminController extends Controller
                 'name' => 'required|string|max:255',
                 'graduation_year' => 'required|integer|min:1900|max:2050',
                 'description' => 'nullable|string|max:1000',
-                'status' => 'required|in:active,inactive,archived'
+                'status' => 'required|in:active,inactive'
             ]);
 
             // Check if batch with same name and year already exists
@@ -996,6 +1509,12 @@ class AdminController extends Controller
                 'data' => $batch,
                 'message' => 'Batch created successfully'
             ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error',
+                'errors' => $e->errors()
+            ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1085,6 +1604,141 @@ class AdminController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete batch',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Create a new alumni profile with user account
+     */
+    public function createAlumni(Request $request): JsonResponse
+    {
+        try {
+            $validatedData = $request->validate([
+                // Personal
+                'first_name' => 'required|string|max:255',
+                'last_name' => 'required|string|max:255',
+                'maiden_name' => 'nullable|string|max:255',
+                'email' => 'required|email|unique:users,email',
+                'student_id' => 'nullable|string|max:50',
+                'age' => 'nullable|integer|min:1|max:150',
+                'gender' => 'nullable|string|in:Male,Female',
+                'place_of_birth' => 'nullable|string|max:255',
+                'civil_status' => 'nullable|string|in:Single,Married,Separated,Widowed',
+                'spouse_name' => 'nullable|string|max:255',
+                'number_of_children' => 'nullable|integer|min:0',
+                'current_address' => 'nullable|string|max:1000',
+                'phone' => 'nullable|string|max:20',
+                'mobile_no' => 'nullable|string|max:20',
+
+                // School
+                'campus_id' => 'nullable|integer|exists:campuses,id',
+                'department_id' => 'nullable|integer|exists:departments,id',
+                'course_id' => 'nullable|integer|exists:courses,id',
+                'degree_program' => 'nullable|string|max:255',
+                'major' => 'nullable|string|max:255',
+                'graduation_year' => 'nullable|integer|min:1900|max:' . (date('Y') + 10),
+                'enrollment_year' => 'nullable|integer|min:1900|max:' . (date('Y') + 10),
+                'honors_awards' => 'nullable|string|max:1000',
+
+                // Employment
+                'presently_employed' => 'nullable|string|in:Yes,No',
+                'employment_location' => 'nullable|string|max:255',
+                'not_employed_reason' => 'nullable|string|max:1000',
+                'current_employer' => 'nullable|string|max:255',
+                'company_address' => 'nullable|string|max:500',
+                'current_job_title' => 'nullable|string|max:255',
+                'date_hired' => 'nullable|date',
+                'years_of_service' => 'nullable|numeric|min:0',
+                'job_aligned_to_course' => 'nullable|string|in:Yes,No',
+                'average_monthly_income' => 'nullable|string|max:255',
+                'employment_status' => 'nullable|string|max:255',
+                'job_level_position' => 'nullable|string|max:255',
+                'major_line_of_business' => 'nullable|string|max:255',
+
+                // Additional
+                'achievements' => 'nullable|string|max:2000',
+                'about_me' => 'nullable|string|max:2000',
+                'batch_id' => 'nullable|integer|exists:batches,id',
+            ]);
+
+            DB::beginTransaction();
+
+            // Create user account
+            $user = User::create([
+                'name' => $validatedData['first_name'] . ' ' . $validatedData['last_name'],
+                'email' => $validatedData['email'],
+                'password' => bcrypt('alumni' . date('Y')), // Default password
+                'role' => 'alumni',
+                'status' => 'active',
+            ]);
+
+            // Build profile data from all validated fields
+            $profileFields = [
+                'user_id', 'first_name', 'last_name', 'maiden_name', 'student_id',
+                'gender', 'current_address', 'phone',
+                'campus_id', 'department_id', 'course_id', 'degree_program', 'major',
+                'graduation_year',
+                'current_employer', 'company_address', 'current_job_title',
+                'employment_status', 'batch_id',
+            ];
+
+            $profileData = ['user_id' => $user->id];
+            foreach ($profileFields as $field) {
+                if ($field === 'user_id') continue;
+                if (isset($validatedData[$field])) {
+                    $profileData[$field] = $validatedData[$field];
+                }
+            }
+
+            // Map additional survey-style fields that go into alumni_profiles as JSON or extra columns
+            $extraMappings = [
+                'presently_employed', 'date_hired', 'years_of_service', 'job_aligned_to_course',
+                'average_monthly_income', 'job_level_position', 'major_line_of_business',
+                'achievements', 'about_me', 'honors_awards', 'enrollment_year',
+                'place_of_birth', 'civil_status', 'spouse_name', 'number_of_children',
+                'mobile_no', 'age', 'maiden_name',
+            ];
+
+            // Store extra survey fields in the profile's metadata or direct columns if they exist
+            $alumniProfileFillable = (new AlumniProfile())->getFillable();
+            foreach ($extraMappings as $field) {
+                if (isset($validatedData[$field]) && in_array($field, $alumniProfileFillable)) {
+                    $profileData[$field] = $validatedData[$field];
+                }
+            }
+
+            // Map fields with different names between form and DB
+            if (isset($validatedData['employment_location'])) {
+                $profileData['employment_location_type'] = $validatedData['employment_location'];
+            }
+            if (isset($validatedData['not_employed_reason'])) {
+                $profileData['unemployment_reason'] = $validatedData['not_employed_reason'];
+            }
+
+            $alumni = AlumniProfile::create($profileData);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Alumni profile created successfully. Default password: alumni' . date('Y'),
+                'data' => $alumni->load(['user:id,email', 'batch:id,name,graduation_year'])
+            ], 201);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create alumni profile',
                 'error' => $e->getMessage()
             ], 500);
         }
@@ -1230,11 +1884,12 @@ class AdminController extends Controller
     }
 
     /**
-     * Export alumni data to CSV
+     * Export alumni data to CSV, Excel, or PDF
      */
     public function exportAlumni(Request $request)
     {
         try {
+            $format = $request->get('format', 'csv');
             $query = AlumniProfile::with(['user:id,email', 'batch:id,name,graduation_year']);
 
             // Apply same filters as getAlumni
@@ -1248,31 +1903,15 @@ class AdminController extends Controller
 
             $alumni = $query->get();
 
-            $csvData = "Name,Email,Phone,Batch,Year,Employment Status,Current Position,Company,Industry,Job Related to Degree,Job Mismatch Reason,Job Satisfaction,Registration Date\n";
-
-            foreach ($alumni as $alumnus) {
-                $csvData .= sprintf(
-                    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
-                    $alumnus->full_name ?? '',
-                    $alumnus->user->email ?? '',
-                    $alumnus->phone ?? '',
-                    $alumnus->batch->name ?? '',
-                    $alumnus->batch->graduation_year ?? '',
-                    $alumnus->employment_status ?? '',
-                    $alumnus->current_job_title ?? '',
-                    $alumnus->current_employer ?? '',
-                    $alumnus->company_industry ?? '',
-                    $alumnus->job_related_to_degree ? 'Yes' : 'No',
-                    $alumnus->job_mismatch_reason ?? '',
-                    $alumnus->job_satisfaction ?? '',
-                    $alumnus->created_at->format('Y-m-d H:i:s')
-                );
+            switch ($format) {
+                case 'excel':
+                    return $this->exportAlumniToExcel($alumni);
+                case 'pdf':
+                    return $this->exportAlumniToPdf($alumni);
+                case 'csv':
+                default:
+                    return $this->exportAlumniToCsv($alumni);
             }
-
-            return response($csvData, 200, [
-                'Content-Type' => 'text/csv',
-                'Content-Disposition' => 'attachment; filename="alumni_export_' . date('Y-m-d_H-i-s') . '.csv"',
-            ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1282,13 +1921,122 @@ class AdminController extends Controller
         }
     }
 
+    private function exportAlumniToCsv($alumni)
+    {
+        $csvData = "Name,Email,Phone,Batch,Year,Employment Status,Current Position,Company,Industry,Job Related to Degree,Job Mismatch Reason,Job Satisfaction,Registration Date\n";
+
+        foreach ($alumni as $alumnus) {
+            $csvData .= sprintf(
+                "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+                $alumnus->full_name ?? '',
+                $alumnus->user->email ?? '',
+                $alumnus->phone ?? '',
+                $alumnus->batch->name ?? '',
+                $alumnus->batch->graduation_year ?? '',
+                $alumnus->employment_status ?? '',
+                $alumnus->current_job_title ?? '',
+                $alumnus->current_employer ?? '',
+                $alumnus->company_industry ?? '',
+                $alumnus->job_related_to_degree ? 'Yes' : 'No',
+                $alumnus->job_mismatch_reason ?? '',
+                $alumnus->job_satisfaction ?? '',
+                $alumnus->created_at->format('Y-m-d H:i:s')
+            );
+        }
+
+        return response($csvData, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="alumni_export_' . date('Y-m-d_H-i-s') . '.csv"',
+        ]);
+    }
+
+    private function exportAlumniToExcel($alumni)
+    {
+        $csvData = "\xEF\xBB\xBF"; // UTF-8 BOM for Excel
+        $csvData .= "Name,Email,Phone,Batch,Year,Employment Status,Current Position,Company,Industry,Job Related to Degree,Job Mismatch Reason,Job Satisfaction,Registration Date\n";
+
+        foreach ($alumni as $alumnus) {
+            $csvData .= sprintf(
+                "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
+                $alumnus->full_name ?? '',
+                $alumnus->user->email ?? '',
+                $alumnus->phone ?? '',
+                $alumnus->batch->name ?? '',
+                $alumnus->batch->graduation_year ?? '',
+                $alumnus->employment_status ?? '',
+                $alumnus->current_job_title ?? '',
+                $alumnus->current_employer ?? '',
+                $alumnus->company_industry ?? '',
+                $alumnus->job_related_to_degree ? 'Yes' : 'No',
+                $alumnus->job_mismatch_reason ?? '',
+                $alumnus->job_satisfaction ?? '',
+                $alumnus->created_at->format('Y-m-d H:i:s')
+            );
+        }
+
+        return response($csvData, 200, [
+            'Content-Type' => 'application/vnd.ms-excel',
+            'Content-Disposition' => 'attachment; filename="alumni_export_' . date('Y-m-d_H-i-s') . '.xlsx"',
+        ]);
+    }
+
+    private function exportAlumniToPdf($alumni)
+    {
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Alumni Directory</title><style>
+            body { font-family: Arial, sans-serif; font-size: 10px; margin: 20px; }
+            h1 { font-size: 18px; margin-bottom: 10px; color: #800000; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+            th { background-color: #800000; color: white; font-weight: bold; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .header-info { margin-bottom: 15px; font-size: 11px; }
+        </style></head><body>';
+        
+        $html .= '<h1>Alumni Directory Report</h1>';
+        $html .= '<div class="header-info">Generated on: ' . date('Y-m-d H:i:s') . '<br>';
+        $html .= 'Total Alumni: ' . count($alumni) . '</div>';
+        
+        $html .= '<table><thead><tr>';
+        $html .= '<th>Name</th><th>Email</th><th>Batch</th><th>Year</th><th>Employment</th><th>Position</th><th>Company</th>';
+        $html .= '</tr></thead><tbody>';
+        
+        foreach ($alumni as $alumnus) {
+            $html .= '<tr>';
+            $html .= '<td>' . htmlspecialchars($alumnus->full_name ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->user->email ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->batch->name ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->batch->graduation_year ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->employment_status ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->current_job_title ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->current_employer ?? '') . '</td>';
+            $html .= '</tr>';
+        }
+        
+        $html .= '</tbody></table></body></html>';
+        
+        return response($html, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="alumni_export_' . date('Y-m-d_H-i-s') . '.pdf"',
+        ]);
+    }
+
     /**
-     * Export surveys list to CSV
+     * Export surveys list to CSV, Excel, or PDF
      */
     public function exportSurveys(Request $request)
     {
         try {
+            $format = $request->get('format', 'csv');
             $query = Survey::with('questions');
+
+            // Apply campus filter
+            if ($request->has('campus_id') && $request->campus_id) {
+                $query->where(function ($q) use ($request) {
+                    $q->where('campus_id', $request->campus_id)
+                      ->orWhere('is_multi_campus', true)
+                      ->orWhereNull('campus_id');
+                });
+            }
 
             // Apply search if provided
             if ($request->has('search')) {
@@ -1301,34 +2049,15 @@ class AdminController extends Controller
 
             $surveys = $query->orderBy('created_at', 'desc')->get();
 
-            // Build CSV header
-            $csvData = "ID,Title,Description,Status,Target Audience,Questions Count,Responses Count,Created Date,Start Date,End Date\n";
-
-            // Build CSV rows
-            foreach ($surveys as $survey) {
-                $row = sprintf(
-                    '%d,"%s","%s","%s","%s",%d,%d,"%s","%s","%s"',
-                    $survey->id,
-                    str_replace('"', '""', $survey->title),
-                    str_replace('"', '""', $survey->description ?? ''),
-                    $survey->status,
-                    str_replace('"', '""', $survey->target_audience ?? ''),
-                    $survey->questions->count(),
-                    $survey->responses()->count(),
-                    $survey->created_at->format('Y-m-d H:i:s'),
-                    $survey->start_date ? \Carbon\Carbon::parse($survey->start_date)->format('Y-m-d') : '',
-                    $survey->end_date ? \Carbon\Carbon::parse($survey->end_date)->format('Y-m-d') : ''
-                );
-
-                $csvData .= $row . "\n";
+            switch ($format) {
+                case 'excel':
+                    return $this->exportSurveysToExcel($surveys);
+                case 'pdf':
+                    return $this->exportSurveysToPdf($surveys);
+                case 'csv':
+                default:
+                    return $this->exportSurveysToCsv($surveys);
             }
-
-            $filename = 'surveys_export_' . date('Y-m-d_H-i-s') . '.csv';
-
-            return response($csvData, 200, [
-                'Content-Type' => 'text/csv',
-                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
-            ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1336,6 +2065,100 @@ class AdminController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    private function exportSurveysToCsv($surveys)
+    {
+        $csvData = "ID,Title,Description,Status,Target Audience,Questions Count,Responses Count,Created Date,Start Date,End Date\n";
+
+        foreach ($surveys as $survey) {
+            $row = sprintf(
+                '%d,"%s","%s","%s","%s",%d,%d,"%s","%s","%s"',
+                $survey->id,
+                str_replace('"', '""', $survey->title),
+                str_replace('"', '""', $survey->description ?? ''),
+                $survey->status,
+                str_replace('"', '""', $survey->target_audience ?? ''),
+                $survey->questions->count(),
+                $survey->responses()->count(),
+                $survey->created_at->format('Y-m-d H:i:s'),
+                $survey->start_date ? \Carbon\Carbon::parse($survey->start_date)->format('Y-m-d') : '',
+                $survey->end_date ? \Carbon\Carbon::parse($survey->end_date)->format('Y-m-d') : ''
+            );
+            $csvData .= $row . "\n";
+        }
+
+        return response($csvData, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="surveys_export_' . date('Y-m-d_H-i-s') . '.csv"',
+        ]);
+    }
+
+    private function exportSurveysToExcel($surveys)
+    {
+        $csvData = "\xEF\xBB\xBF"; // UTF-8 BOM
+        $csvData .= "ID,Title,Description,Status,Target Audience,Questions Count,Responses Count,Created Date,Start Date,End Date\n";
+
+        foreach ($surveys as $survey) {
+            $row = sprintf(
+                '%d,"%s","%s","%s","%s",%d,%d,"%s","%s","%s"',
+                $survey->id,
+                str_replace('"', '""', $survey->title),
+                str_replace('"', '""', $survey->description ?? ''),
+                $survey->status,
+                str_replace('"', '""', $survey->target_audience ?? ''),
+                $survey->questions->count(),
+                $survey->responses()->count(),
+                $survey->created_at->format('Y-m-d H:i:s'),
+                $survey->start_date ? \Carbon\Carbon::parse($survey->start_date)->format('Y-m-d') : '',
+                $survey->end_date ? \Carbon\Carbon::parse($survey->end_date)->format('Y-m-d') : ''
+            );
+            $csvData .= $row . "\n";
+        }
+
+        return response($csvData, 200, [
+            'Content-Type' => 'application/vnd.ms-excel',
+            'Content-Disposition' => 'attachment; filename="surveys_export_' . date('Y-m-d_H-i-s') . '.xlsx"',
+        ]);
+    }
+
+    private function exportSurveysToPdf($surveys)
+    {
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Surveys Report</title><style>
+            body { font-family: Arial, sans-serif; font-size: 10px; margin: 20px; }
+            h1 { font-size: 18px; margin-bottom: 10px; color: #800000; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+            th { background-color: #800000; color: white; font-weight: bold; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .header-info { margin-bottom: 15px; font-size: 11px; }
+        </style></head><body>';
+        
+        $html .= '<h1>Surveys Report</h1>';
+        $html .= '<div class="header-info">Generated on: ' . date('Y-m-d H:i:s') . '<br>';
+        $html .= 'Total Surveys: ' . count($surveys) . '</div>';
+        
+        $html .= '<table><thead><tr>';
+        $html .= '<th>ID</th><th>Title</th><th>Status</th><th>Questions</th><th>Responses</th><th>Created</th>';
+        $html .= '</tr></thead><tbody>';
+        
+        foreach ($surveys as $survey) {
+            $html .= '<tr>';
+            $html .= '<td>' . $survey->id . '</td>';
+            $html .= '<td>' . htmlspecialchars($survey->title) . '</td>';
+            $html .= '<td>' . htmlspecialchars($survey->status) . '</td>';
+            $html .= '<td>' . $survey->questions->count() . '</td>';
+            $html .= '<td>' . $survey->responses()->count() . '</td>';
+            $html .= '<td>' . $survey->created_at->format('Y-m-d') . '</td>';
+            $html .= '</tr>';
+        }
+        
+        $html .= '</tbody></table></body></html>';
+        
+        return response($html, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="surveys_export_' . date('Y-m-d_H-i-s') . '.pdf"',
+        ]);
     }
 
     /**
@@ -1922,6 +2745,17 @@ class AdminController extends Controller
 
             $activities = $query->paginate($perPage, ['*'], 'page', $page);
 
+            // Server-side stats (accurate, not page-limited)
+            $statsQuery = ActivityLog::query();
+            $todayStr = Carbon::today()->toDateString();
+
+            $stats = [
+                'total' => ActivityLog::count(),
+                'today' => ActivityLog::whereDate('created_at', $todayStr)->count(),
+                'crud_operations' => ActivityLog::whereIn('action', ['create', 'update', 'delete'])->count(),
+                'unique_users' => ActivityLog::whereNotNull('user_id')->distinct('user_id')->count('user_id'),
+            ];
+
             return response()->json([
                 'success' => true,
                 'data' => [
@@ -1930,7 +2764,8 @@ class AdminController extends Controller
                     'last_page' => $activities->lastPage(),
                     'per_page' => $activities->perPage(),
                     'total' => $activities->total(),
-                ]
+                ],
+                'stats' => $stats,
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -1942,11 +2777,12 @@ class AdminController extends Controller
     }
 
     /**
-     * Export activity logs to CSV
+     * Export activity logs to CSV, Excel, or PDF
      */
     public function exportActivityLogs(Request $request)
     {
         try {
+            $format = $request->get('format', 'csv');
             $search = $request->get('search');
             $action = $request->get('action');
             $userId = $request->get('user_id');
@@ -2005,26 +2841,15 @@ class AdminController extends Controller
 
             $activities = $query->limit(5000)->get(); // Limit for performance
 
-            $csvData = "Timestamp,User,Email,Action,Entity Type,Entity ID,Description,IP Address\n";
-            
-            foreach ($activities as $activity) {
-                $csvData .= sprintf(
-                    "%s,%s,%s,%s,%s,%s,\"%s\",%s\n",
-                    $activity->created_at->format('Y-m-d H:i:s'),
-                    $activity->user ? $activity->user->name : 'Unknown',
-                    $activity->user ? $activity->user->email : '',
-                    $activity->action,
-                    $activity->entity_type ?: '',
-                    $activity->entity_id ?: '',
-                    str_replace('"', '""', $activity->description),
-                    $activity->ip_address ?: ''
-                );
+            switch ($format) {
+                case 'excel':
+                    return $this->exportActivityLogsToExcel($activities);
+                case 'pdf':
+                    return $this->exportActivityLogsToPdf($activities);
+                case 'csv':
+                default:
+                    return $this->exportActivityLogsToCsv($activities);
             }
-
-            return response($csvData, 200, [
-                'Content-Type' => 'text/csv',
-                'Content-Disposition' => 'attachment; filename="activity-logs-' . date('Y-m-d') . '.csv"',
-            ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -2032,6 +2857,308 @@ class AdminController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    private function exportActivityLogsToCsv($activities)
+    {
+        $csvData = "Timestamp,User,Email,Action,Entity Type,Entity ID,Description,IP Address\n";
+        
+        foreach ($activities as $activity) {
+            $csvData .= sprintf(
+                "%s,%s,%s,%s,%s,%s,\"%s\",%s\n",
+                $activity->created_at->format('Y-m-d H:i:s'),
+                $activity->user ? $activity->user->name : 'Unknown',
+                $activity->user ? $activity->user->email : '',
+                $activity->action,
+                $activity->entity_type ?: '',
+                $activity->entity_id ?: '',
+                str_replace('"', '""', $activity->description),
+                $activity->ip_address ?: ''
+            );
+        }
+
+        return response($csvData, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="activity-logs-' . date('Y-m-d') . '.csv"',
+        ]);
+    }
+
+    private function exportActivityLogsToExcel($activities)
+    {
+        // Excel format (using CSV with proper Excel headers)
+        $csvData = "\xEF\xBB\xBF"; // UTF-8 BOM for Excel
+        $csvData .= "Timestamp,User,Email,Action,Entity Type,Entity ID,Description,IP Address\n";
+        
+        foreach ($activities as $activity) {
+            $csvData .= sprintf(
+                "%s,%s,%s,%s,%s,%s,\"%s\",%s\n",
+                $activity->created_at->format('Y-m-d H:i:s'),
+                $activity->user ? $activity->user->name : 'Unknown',
+                $activity->user ? $activity->user->email : '',
+                $activity->action,
+                $activity->entity_type ?: '',
+                $activity->entity_id ?: '',
+                str_replace('"', '""', $activity->description),
+                $activity->ip_address ?: ''
+            );
+        }
+
+        return response($csvData, 200, [
+            'Content-Type' => 'application/vnd.ms-excel',
+            'Content-Disposition' => 'attachment; filename="activity-logs-' . date('Y-m-d') . '.xlsx"',
+        ]);
+    }
+
+    private function exportActivityLogsToPdf($activities)
+    {
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Activity Logs</title><style>
+            body { font-family: Arial, sans-serif; font-size: 10px; margin: 20px; }
+            h1 { font-size: 18px; margin-bottom: 10px; color: #800000; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+            th { background-color: #800000; color: white; font-weight: bold; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .header-info { margin-bottom: 15px; font-size: 11px; }
+        </style></head><body>';
+        
+        $html .= '<h1>Activity Logs Report</h1>';
+        $html .= '<div class="header-info">Generated on: ' . date('Y-m-d H:i:s') . '<br>';
+        $html .= 'Total Records: ' . count($activities) . '</div>';
+        
+        $html .= '<table><thead><tr>';
+        $html .= '<th>Timestamp</th><th>User</th><th>Action</th><th>Entity</th><th>Description</th><th>IP Address</th>';
+        $html .= '</tr></thead><tbody>';
+        
+        foreach ($activities as $activity) {
+            $html .= '<tr>';
+            $html .= '<td>' . $activity->created_at->format('Y-m-d H:i:s') . '</td>';
+            $html .= '<td>' . htmlspecialchars($activity->user ? $activity->user->name : 'Unknown') . '</td>';
+            $html .= '<td>' . htmlspecialchars($activity->action) . '</td>';
+            $html .= '<td>' . htmlspecialchars($activity->entity_type ?: '') . '</td>';
+            $html .= '<td>' . htmlspecialchars(substr($activity->description, 0, 100)) . '</td>';
+            $html .= '<td>' . htmlspecialchars($activity->ip_address ?: '') . '</td>';
+            $html .= '</tr>';
+        }
+        
+        $html .= '</tbody></table></body></html>';
+        
+        return response($html, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="activity-logs-' . date('Y-m-d') . '.pdf"',
+        ]);
+    }
+
+    /**
+     * Export users data in various formats
+     */
+    public function exportUsers(Request $request)
+    {
+        $format = $request->get('format', 'csv');
+        
+        // Get users with same filtering as getUsers
+        $currentUser = auth()->user();
+        $query = User::with(['alumniProfile:id,user_id,first_name,last_name,phone', 'campus:id,name,code']);
+
+        // Restrict admin users to super_admin only
+        if ($currentUser->role !== 'super_admin') {
+            $query->where('role', '!=', 'admin');
+        }
+
+        // Apply filters
+        if ($request->has('campus_id') && $request->campus_id) {
+            $query->where('campus_id', $request->campus_id);
+        }
+
+        if ($request->has('search') && $request->search) {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('email', 'like', "%{$search}%")
+                  ->orWhere('name', 'like', "%{$search}%")
+                  ->orWhereHas('alumniProfile', function($profileQuery) use ($search) {
+                      $profileQuery->where('first_name', 'like', "%{$search}%")
+                                  ->orWhere('last_name', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        if ($request->has('role') && $request->role !== 'all') {
+            $query->where('role', $request->role);
+        }
+
+        if ($request->has('status') && $request->status !== 'all') {
+            $query->where('status', $request->status);
+        }
+
+        // Apply sorting
+        if ($request->has('sort') && $request->sort) {
+            $sort = $request->sort;
+            switch ($sort) {
+                case 'name_asc':
+                    $query->orderBy('name', 'asc');
+                    break;
+                case 'name_desc':
+                    $query->orderBy('name', 'desc');
+                    break;
+                case 'last_login':
+                    $query->orderBy('last_login_at', 'desc')->orderBy('created_at', 'desc');
+                    break;
+                case 'recent':
+                default:
+                    $query->orderBy('created_at', 'desc');
+                    break;
+            }
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
+
+        // Limit to 5000 records for performance
+        $users = $query->limit(5000)->get();
+
+        // Export based on format
+        switch ($format) {
+            case 'excel':
+                return $this->exportUsersToExcel($users);
+            case 'pdf':
+                return $this->exportUsersToPdf($users);
+            case 'csv':
+            default:
+                return $this->exportUsersToCsv($users);
+        }
+    }
+
+    /**
+     * Export users to CSV
+     */
+    private function exportUsersToCsv($users)
+    {
+        $handle = fopen('php://temp', 'w+');
+        
+        // CSV Headers
+        fputcsv($handle, [
+            'Name',
+            'Email',
+            'Role',
+            'Status',
+            'Campus',
+            'Phone',
+            'Email Verified',
+            'Last Login',
+            'Registration Date'
+        ]);
+        
+        // Data rows
+        foreach ($users as $user) {
+            fputcsv($handle, [
+                $user->name ?: $user->email,
+                $user->email,
+                ucfirst($user->role),
+                ucfirst($user->status),
+                $user->campus ? $user->campus->name : 'N/A',
+                $user->alumniProfile ? $user->alumniProfile->phone : 'N/A',
+                $user->email_verified_at ? 'Yes' : 'No',
+                $user->last_login_at ? Carbon::parse($user->last_login_at)->format('Y-m-d H:i') : 'Never',
+                Carbon::parse($user->created_at)->format('Y-m-d')
+            ]);
+        }
+        
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+        
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="users-' . date('Y-m-d') . '.csv"',
+        ]);
+    }
+
+    /**
+     * Export users to Excel
+     */
+    private function exportUsersToExcel($users)
+    {
+        $handle = fopen('php://temp', 'w+');
+        
+        // Add UTF-8 BOM for Excel
+        fwrite($handle, "\xEF\xBB\xBF");
+        
+        // CSV Headers
+        fputcsv($handle, [
+            'Name',
+            'Email',
+            'Role',
+            'Status',
+            'Campus',
+            'Phone',
+            'Email Verified',
+            'Last Login',
+            'Registration Date'
+        ]);
+        
+        // Data rows
+        foreach ($users as $user) {
+            fputcsv($handle, [
+                $user->name ?: $user->email,
+                $user->email,
+                ucfirst($user->role),
+                ucfirst($user->status),
+                $user->campus ? $user->campus->name : 'N/A',
+                $user->alumniProfile ? $user->alumniProfile->phone : 'N/A',
+                $user->email_verified_at ? 'Yes' : 'No',
+                $user->last_login_at ? Carbon::parse($user->last_login_at)->format('Y-m-d H:i') : 'Never',
+                Carbon::parse($user->created_at)->format('Y-m-d')
+            ]);
+        }
+        
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+        
+        return response($csv, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="users-' . date('Y-m-d') . '.xlsx"',
+        ]);
+    }
+
+    /**
+     * Export users to PDF
+     */
+    private function exportUsersToPdf($users)
+    {
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            h1 { color: #7c2d3f; border-bottom: 3px solid #7c2d3f; padding-bottom: 10px; }
+            .header-info { margin: 15px 0; color: #666; font-size: 14px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #7c2d3f; color: white; font-weight: bold; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+        </style></head><body>';
+        
+        $html .= '<h1>User Management Report</h1>';
+        $html .= '<div class="header-info">Generated on: ' . date('Y-m-d H:i:s') . '<br>';
+        $html .= 'Total Records: ' . count($users) . '</div>';
+        
+        $html .= '<table><thead><tr>';
+        $html .= '<th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Campus</th><th>Last Login</th>';
+        $html .= '</tr></thead><tbody>';
+        
+        foreach ($users as $user) {
+            $html .= '<tr>';
+            $html .= '<td>' . htmlspecialchars($user->name ?: $user->email) . '</td>';
+            $html .= '<td>' . htmlspecialchars($user->email) . '</td>';
+            $html .= '<td>' . ucfirst($user->role) . '</td>';
+            $html .= '<td>' . ucfirst($user->status) . '</td>';
+            $html .= '<td>' . htmlspecialchars($user->campus ? $user->campus->name : 'N/A') . '</td>';
+            $html .= '<td>' . ($user->last_login_at ? Carbon::parse($user->last_login_at)->format('Y-m-d H:i') : 'Never') . '</td>';
+            $html .= '</tr>';
+        }
+        
+        $html .= '</tbody></table></body></html>';
+        
+        return response($html, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="users-' . date('Y-m-d') . '.pdf"',
+        ]);
     }
 
     /**

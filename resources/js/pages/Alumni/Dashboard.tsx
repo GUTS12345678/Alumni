@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Head, usePage, router } from '@inertiajs/react';
+import axios from 'axios';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -129,28 +130,9 @@ export default function AlumniDashboard() {
 
     const fetchProfile = async () => {
         try {
-            // First, get CSRF cookie for SPA authentication
-            await fetch('/sanctum/csrf-cookie', {
-                credentials: 'include',
-            });
-
-            // Now make the authenticated request
-            const response = await fetch('/api/v1/alumni/profile', {
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                credentials: 'include',
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to fetch profile data');
-            }
-
-            const data = await response.json();
-            if (data.success) {
-                setProfile(data.data);
+            const res = await axios.get('/api/v1/alumni/profile');
+            if (res.data.success) {
+                setProfile(res.data.data);
             }
         } catch (err) {
             console.error('Profile fetch error:', err);
@@ -482,7 +464,7 @@ export default function AlumniDashboard() {
                                         {job.company_logo ? (
                                             <div className="w-10 h-10 rounded-lg overflow-hidden bg-white dark:bg-gray-700 shadow-sm flex-shrink-0">
                                                 <img
-                                                    src={job.company_logo.startsWith('/') ? job.company_logo : `/storage/${job.company_logo}`}
+                                                    src={job.company_logo.startsWith('http') || job.company_logo.startsWith('/') ? job.company_logo : `/api/v1/files/${job.company_logo}`}
                                                     alt={job.company_name}
                                                     className="w-full h-full object-cover"
                                                     onError={(e) => {
@@ -577,7 +559,7 @@ export default function AlumniDashboard() {
                                         {announcement.image_path ? (
                                             <div className="w-12 h-12 rounded-lg overflow-hidden bg-white dark:bg-gray-700 shadow-sm flex-shrink-0">
                                                 <img
-                                                    src={announcement.image_path.startsWith('/') ? announcement.image_path : `/storage/${announcement.image_path}`}
+                                                    src={announcement.image_path.startsWith('http') || announcement.image_path.startsWith('/') ? announcement.image_path : `/api/v1/files/${announcement.image_path}`}
                                                     alt={announcement.title}
                                                     className="w-full h-full object-cover"
                                                     onError={(e) => {
@@ -591,10 +573,10 @@ export default function AlumniDashboard() {
                                             </div>
                                         ) : (
                                             <div className={`w-12 h-12 rounded-lg shadow-sm flex items-center justify-center flex-shrink-0 ${announcement.priority === 'urgent'
-                                                    ? 'bg-gradient-to-br from-red-100 to-red-200 dark:from-red-900/50 dark:to-red-800/50'
-                                                    : announcement.priority === 'high'
-                                                        ? 'bg-gradient-to-br from-orange-100 to-orange-200 dark:from-orange-900/50 dark:to-orange-800/50'
-                                                        : 'bg-gradient-to-br from-amber-100 to-yellow-100 dark:from-amber-900/50 dark:to-yellow-900/50'
+                                                ? 'bg-gradient-to-br from-red-100 to-red-200 dark:from-red-900/50 dark:to-red-800/50'
+                                                : announcement.priority === 'high'
+                                                    ? 'bg-gradient-to-br from-orange-100 to-orange-200 dark:from-orange-900/50 dark:to-orange-800/50'
+                                                    : 'bg-gradient-to-br from-amber-100 to-yellow-100 dark:from-amber-900/50 dark:to-yellow-900/50'
                                                 }`}>
                                                 <Bell className={`h-5 w-5 ${announcement.priority === 'urgent' ? 'text-red-500' :
                                                     announcement.priority === 'high' ? 'text-orange-500' :

@@ -6,7 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\URL;
 use App\Models\AlumniProfile;
+use App\Models\Survey;
+use App\Models\SurveyResponse;
 use App\Observers\AlumniProfileObserver;
+use App\Observers\SurveyObserver;
+use App\Observers\SurveyResponseObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -39,6 +43,8 @@ class AppServiceProvider extends ServiceProvider
 
         // Register model observers for auto-classification
         AlumniProfile::observe(AlumniProfileObserver::class);
+        Survey::observe(SurveyObserver::class);
+        SurveyResponse::observe(SurveyResponseObserver::class);
 
         // Prevent lazy loading in non-production to catch N+1 issues early.
         // In production, lazy loads are allowed (but logged) to avoid breaking pages.

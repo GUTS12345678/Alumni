@@ -48,6 +48,34 @@ class Announcement extends Model
         'expires_at' => 'datetime',
     ];
 
+    protected $appends = [
+        'featured_image_url',
+    ];
+
+    /**
+     * Get the full URL for featured_image
+     */
+    public function getFeaturedImageUrlAttribute(): ?string
+    {
+        if (!$this->featured_image) {
+            return null;
+        }
+        
+        // If it already starts with /api/ or is a full URL, return as is
+        if (str_starts_with($this->featured_image, '/api/') || str_starts_with($this->featured_image, 'http')) {
+            return $this->featured_image;
+        }
+        
+        // Strip legacy /storage/ prefix if present
+        $path = $this->featured_image;
+        if (str_starts_with($path, '/storage/')) {
+            $path = substr($path, 9);
+        }
+        
+        // Serve through authenticated file controller
+        return '/api/v1/files/' . $path;
+    }
+
     /**
      * Get the creator
      */

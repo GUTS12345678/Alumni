@@ -14,7 +14,7 @@ interface JobPosting {
     location: string;
     job_type: string;
     experience_level: string;
-    description: string;
+    content: string;
     requirements?: string;
     formatted_salary: string;
     deadline?: string;
@@ -178,7 +178,7 @@ const SavedJobs: React.FC<SavedJobsProps> = ({ savedJobs }) => {
 
                                     <div
                                         className="mt-4 text-gray-700 line-clamp-2 prose prose-sm max-w-none"
-                                        dangerouslySetInnerHTML={{ __html: job.description }}
+                                        dangerouslySetInnerHTML={{ __html: job.content }}
                                     />
 
                                     {job.saved_at && (
@@ -229,7 +229,7 @@ const SavedJobs: React.FC<SavedJobsProps> = ({ savedJobs }) => {
             {/* Job Details Modal */}
             {selectedJob && (
                 <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle className="text-2xl text-maroon-800">{selectedJob.title}</DialogTitle>
                             <DialogDescription className="text-lg">{selectedJob.company_name}</DialogDescription>
@@ -271,7 +271,7 @@ const SavedJobs: React.FC<SavedJobsProps> = ({ savedJobs }) => {
                                 <h3 className="font-semibold text-lg mb-2 text-maroon-800">Job Description</h3>
                                 <div
                                     className="text-gray-700 prose prose-sm max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: selectedJob.description }}
+                                    dangerouslySetInnerHTML={{ __html: selectedJob.content }}
                                 />
                             </div>
 

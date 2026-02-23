@@ -23,6 +23,8 @@ import {
     Code
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface TemplateViewProps {
     templateId: string;
@@ -51,6 +53,7 @@ interface EmailTemplate {
 export default function TemplateView({ templateId }: TemplateViewProps) {
     const [template, setTemplate] = useState<EmailTemplate | null>(null);
     const [loading, setLoading] = useState(true);
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
     const [error, setError] = useState<string | null>(null);
     const [showHtml, setShowHtml] = useState(false);
 
@@ -102,7 +105,8 @@ export default function TemplateView({ templateId }: TemplateViewProps) {
     };
 
     const handleDelete = async () => {
-        if (!confirm('Are you sure you want to delete this email template? This action cannot be undone.')) {
+        const ok = await confirm({ title: 'Delete Template', message: 'Are you sure you want to delete this email template? This action cannot be undone.', variant: 'destructive', confirmLabel: 'Delete' });
+        if (!ok) {
             return;
         }
 
@@ -275,15 +279,15 @@ export default function TemplateView({ templateId }: TemplateViewProps) {
                         </div>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Button
                             onClick={handleSendTest}
                             variant="outline"
                             size="sm"
                             className="border-green-300 text-green-700 hover:bg-green-50"
                         >
-                            <Send className="h-4 w-4 mr-2" />
-                            Send Test
+                            <Send className="h-4 w-4 sm:mr-2" />
+                            <span className="hidden sm:inline">Send Test</span>
                         </Button>
 
                         <Button
@@ -292,8 +296,8 @@ export default function TemplateView({ templateId }: TemplateViewProps) {
                             size="sm"
                             className="border-purple-300 text-purple-700 hover:bg-purple-50"
                         >
-                            <Copy className="h-4 w-4 mr-2" />
-                            Duplicate
+                            <Copy className="h-4 w-4 sm:mr-2" />
+                            <span className="hidden sm:inline">Duplicate</span>
                         </Button>
 
                         <Button
@@ -302,8 +306,8 @@ export default function TemplateView({ templateId }: TemplateViewProps) {
                             size="sm"
                             className="border-maroon-300 text-maroon-700 hover:bg-maroon-50"
                         >
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit
+                            <Edit className="h-4 w-4 sm:mr-2" />
+                            <span className="hidden sm:inline">Edit</span>
                         </Button>
 
                         <Button
@@ -312,8 +316,8 @@ export default function TemplateView({ templateId }: TemplateViewProps) {
                             size="sm"
                             className="border-red-300 text-red-700 hover:bg-red-50"
                         >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
+                            <Trash2 className="h-4 w-4 sm:mr-2" />
+                            <span className="hidden sm:inline">Delete</span>
                         </Button>
                     </div>
                 </div>
@@ -514,6 +518,7 @@ export default function TemplateView({ templateId }: TemplateViewProps) {
                     </div>
                 </div>
             </div>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AdminBaseLayout>
     );
 }

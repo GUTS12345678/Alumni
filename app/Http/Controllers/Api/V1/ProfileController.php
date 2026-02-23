@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Events\ProfileUpdated;
+use App\Events\DashboardUpdated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -25,8 +27,8 @@ class ProfileController extends Controller
         }
 
         // Add full URLs for profile and cover photo
-        $user->profile_picture_url = $user->profile_picture_path ? Storage::url($user->profile_picture_path) : null;
-        $user->cover_photo_url = $user->cover_photo_path ? Storage::url($user->cover_photo_path) : null;
+        $user->profile_picture_url = private_url($user->profile_picture_path);
+        $user->cover_photo_url = private_url($user->cover_photo_path);
 
         return response()->json([
             'success' => true,
@@ -95,8 +97,12 @@ class ProfileController extends Controller
         }
 
         // Add full URLs for profile and cover photo
-        $user->profile_picture_url = $user->profile_picture_path ? Storage::url($user->profile_picture_path) : null;
-        $user->cover_photo_url = $user->cover_photo_path ? Storage::url($user->cover_photo_path) : null;
+        $user->profile_picture_url = private_url($user->profile_picture_path);
+        $user->cover_photo_url = private_url($user->cover_photo_path);
+
+        // Broadcast real-time update to admin dashboard
+        ProfileUpdated::dispatch($user->id, $user->name);
+        DashboardUpdated::dispatch('profile_update');
 
         return response()->json([
             'success' => true,
@@ -143,16 +149,16 @@ class ProfileController extends Controller
             // Delete old image if exists
             $column = $type . '_path';
             if ($user->$column) {
-                if (Storage::disk('public')->exists($user->$column)) {
-                    Storage::disk('public')->delete($user->$column);
+                if (Storage::disk('uploads')->exists($user->$column)) {
+                    Storage::disk('uploads')->delete($user->$column);
                 }
             }
             
             // Generate unique filename
             $filename = $user->id . '_' . $type . '_' . time() . '.' . $file->getClientOriginalExtension();
             
-            // Store in public storage
-            $path = $file->storeAs('profile_images', $filename, 'public');
+            // Store in private uploads storage
+            $path = $file->storeAs('profile_images', $filename, 'uploads');
             
             \Log::info('Image stored at path', ['path' => $path]);
             
@@ -167,8 +173,8 @@ class ProfileController extends Controller
             // Log the updated value
             \Log::info('Updated user image path', ['user_id' => $user->id, 'column' => $column, 'value' => $user->$column]);
             
-            // Get full URL
-            $url = Storage::url($path);
+            // Get full URL via private serve route
+            $url = private_url($path);
 
             return response()->json([
                 'success' => true,
@@ -211,8 +217,8 @@ class ProfileController extends Controller
 
         // Delete file from storage
         if ($user->$column) {
-            if (Storage::disk('public')->exists($user->$column)) {
-                Storage::disk('public')->delete($user->$column);
+            if (Storage::disk('uploads')->exists($user->$column)) {
+                Storage::disk('uploads')->delete($user->$column);
             }
             
             // Update database to remove path

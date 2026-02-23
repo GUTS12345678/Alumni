@@ -17,6 +17,8 @@ import {
     RotateCcw,
     Clock
 } from 'lucide-react';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface CareerVersion {
     id: number;
@@ -55,6 +57,7 @@ interface Props {
 }
 
 export default function CareerVersionsShow({ alumniUser, careerHistories }: Props) {
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
     const employmentTypes: Record<string, string> = {
         full_time: 'Full Time',
         part_time: 'Part Time',
@@ -63,8 +66,9 @@ export default function CareerVersionsShow({ alumniUser, careerHistories }: Prop
         internship: 'Internship',
     };
 
-    const handleRestore = (careerId: number) => {
-        if (confirm('Are you sure you want to restore this career record?')) {
+    const handleRestore = async (careerId: number) => {
+        const ok = await confirm({ title: 'Restore Career Record', message: 'Are you sure you want to restore this career record?', confirmLabel: 'Restore' });
+        if (ok) {
             router.post(`/api/v1/admin/super-admin/career-versions/career/${careerId}/restore`);
         }
     };
@@ -272,6 +276,7 @@ export default function CareerVersionsShow({ alumniUser, careerHistories }: Prop
                     </CardContent>
                 </Card>
             </div>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AdminBaseLayout>
     );
 }

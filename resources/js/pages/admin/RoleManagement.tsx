@@ -34,6 +34,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 // Helper function to get CSRF token
 const getCsrfToken = (): string => {
@@ -72,6 +74,7 @@ interface Stats {
 
 export default function RoleManagement() {
     const { toast } = useToast();
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
 
     const [roles, setRoles] = useState<Role[]>([]);
     const [permissions, setPermissions] = useState<Permission[]>([]);
@@ -321,7 +324,8 @@ export default function RoleManagement() {
             });
             return;
         }
-        if (!confirm(`Are you sure you want to delete the "${role.display_name}" role? This cannot be undone.`)) return;
+        const ok = await confirm({ title: 'Delete Role', message: `Are you sure you want to delete the "${role.display_name}" role? This cannot be undone.`, variant: 'destructive', confirmLabel: 'Delete' });
+        if (!ok) return;
 
         try {
             const response = await fetch(`/api/v1/admin/roles/${role.id}`, {
@@ -891,6 +895,7 @@ export default function RoleManagement() {
                     )}
                 </DialogContent>
             </Dialog>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AdminBaseLayout>
     );
 }

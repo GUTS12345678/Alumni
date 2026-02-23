@@ -258,7 +258,7 @@ export default function TemplateForm({ mode, templateId }: TemplateFormProps) {
         <AdminBaseLayout title={mode === 'create' ? 'Create Email Template' : 'Edit Email Template'}>
             <div className="space-y-6">
                 {/* Header */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div className="flex items-center space-x-4">
                         <Button
                             onClick={() => router.visit('/admin/email-templates')}

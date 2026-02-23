@@ -24,6 +24,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'must_change_password',
         'role',
         'role_id',
         'status',
@@ -60,6 +61,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'must_change_password' => 'boolean',
             'last_login_at' => 'datetime',
         ];
     }
@@ -69,7 +71,7 @@ class User extends Authenticatable
      *
      * @var array<int, string>
      */
-    protected $appends = ['display_name'];
+    protected $appends = ['display_name', 'profile_picture_url', 'cover_photo_url'];
 
     /**
      * Get the user's display name (from name field or alumni profile).
@@ -93,6 +95,22 @@ class User extends Authenticatable
 
         // Fall back to email username
         return explode('@', $this->email ?? 'user')[0];
+    }
+
+    /**
+     * Get the full URL for the profile picture, served through the private file route.
+     */
+    public function getProfilePictureUrlAttribute(): ?string
+    {
+        return private_url($this->profile_picture_path);
+    }
+
+    /**
+     * Get the full URL for the cover photo, served through the private file route.
+     */
+    public function getCoverPhotoUrlAttribute(): ?string
+    {
+        return private_url($this->cover_photo_path);
     }
 
     /**

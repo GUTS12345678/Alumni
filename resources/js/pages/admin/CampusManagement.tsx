@@ -342,7 +342,7 @@ export default function CampusManagement({ user }: Props) {
                             Manage campuses, view statistics, and compare performance
                         </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <Button
                             variant="outline"
                             onClick={() => fetchCampuses()}
@@ -723,7 +723,7 @@ export default function CampusManagement({ user }: Props) {
 
                 {/* View Modal */}
                 <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-                    <DialogContent className="max-w-2xl">
+                    <DialogContent className="sm:max-w-2xl">
                         <DialogHeader>
                             <DialogTitle className="flex items-center gap-2">
                                 <Building2 className="h-5 w-5" />
@@ -736,7 +736,7 @@ export default function CampusManagement({ user }: Props) {
                         {selectedCampus && (
                             <div className="space-y-6">
                                 {/* Campus Info */}
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
                                         <Label className="text-muted-foreground">Full Name</Label>
                                         <p className="font-medium">{selectedCampus.name}</p>
@@ -819,7 +819,7 @@ export default function CampusManagement({ user }: Props) {
                             </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="name">Full Name *</Label>
                                     <Input
@@ -859,7 +859,7 @@ export default function CampusManagement({ user }: Props) {
                                     rows={2}
                                 />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="contact_email">Contact Email</Label>
                                     <Input

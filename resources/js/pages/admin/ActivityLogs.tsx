@@ -4,6 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
     Table,
     TableBody,
     TableCell,
@@ -11,6 +17,12 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import {
     Activity,
     Search,
@@ -22,7 +34,12 @@ import {
     Settings,
     Shield,
     Eye,
-    Download
+    Download,
+    ChevronDown,
+    Globe,
+    Monitor,
+    Clock,
+    X,
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 
@@ -32,7 +49,7 @@ interface ActivityLog {
         id: number;
         name: string;
         email: string;
-    };
+    } | null;
     action: string;
     entity_type: string;
     entity_id?: number;
@@ -41,6 +58,13 @@ interface ActivityLog {
     ip_address: string;
     user_agent: string;
     created_at: string;
+}
+
+interface ActivityStats {
+    total: number;
+    today: number;
+    crud_operations: number;
+    unique_users: number;
 }
 
 interface User {
@@ -67,6 +91,9 @@ export default function ActivityLogs({ user }: Props) {
     const [total, setTotal] = useState(0);
     const [refreshing, setRefreshing] = useState(false);
     const [debugInfo, setDebugInfo] = useState<string>('');
+    const [stats, setStats] = useState<ActivityStats | null>(null);
+    const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
+    const [detailOpen, setDetailOpen] = useState(false);
 
     const fetchActivities = async () => {
         try {
@@ -144,6 +171,11 @@ export default function ActivityLogs({ user }: Props) {
                 } else {
                     throw new Error('Unexpected response format');
                 }
+
+                // Set server-side stats if provided
+                if (data.stats) {
+                    setStats(data.stats);
+                }
             } else {
                 throw new Error(data.message || 'Failed to fetch activity logs');
             }
@@ -176,6 +208,7 @@ export default function ActivityLogs({ user }: Props) {
             'delete': 'bg-red-100 text-red-800',
             'view': 'bg-purple-100 text-purple-800',
             'export': 'bg-indigo-100 text-indigo-800',
+            'page_visit': 'bg-cyan-100 text-cyan-800',
             'survey_completed': 'bg-emerald-100 text-emerald-800',
             'user_registered_via_survey': 'bg-teal-100 text-teal-800',
         };
@@ -188,6 +221,7 @@ export default function ActivityLogs({ user }: Props) {
             'delete': 'Delete',
             'view': 'View',
             'export': 'Export',
+            'page_visit': 'Page Visit',
             'survey_completed': 'Survey Completed',
             'user_registered_via_survey': 'User Registration',
         };
@@ -206,6 +240,7 @@ export default function ActivityLogs({ user }: Props) {
             'AlumniProfile': User,
             'Setting': Settings,
             'Role': Shield,
+            'Page': Globe,
         };
 
         const Icon = icons[entityType] || Activity;
@@ -223,7 +258,7 @@ export default function ActivityLogs({ user }: Props) {
         });
     };
 
-    const handleExport = async () => {
+    const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
         try {
             const token = localStorage.getItem('auth_token');
             const params = new URLSearchParams();
@@ -231,6 +266,7 @@ export default function ActivityLogs({ user }: Props) {
             if (actionFilter !== 'all') params.append('action', actionFilter);
             if (userFilter !== 'all') params.append('user_id', userFilter);
             if (dateFilter !== 'all') params.append('date_filter', dateFilter);
+            params.append('format', format);
 
             // Try multiple export endpoints
             let response;
@@ -262,7 +298,8 @@ export default function ActivityLogs({ user }: Props) {
                 const a = document.createElement('a');
                 a.style.display = 'none';
                 a.href = url;
-                a.download = `activity-logs-${new Date().toISOString().split('T')[0]}.csv`;
+                const extension = format === 'excel' ? 'xlsx' : format;
+                a.download = `activity-logs-${new Date().toISOString().split('T')[0]}.${extension}`;
                 document.body.appendChild(a);
                 a.click();
                 window.URL.revokeObjectURL(url);
@@ -343,7 +380,7 @@ export default function ActivityLogs({ user }: Props) {
                         <p className="text-maroon-600 dark:text-gray-400">Monitor system activities and user actions</p>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Button
                             onClick={() => fetchActivities()}
                             variant="outline"
@@ -355,15 +392,33 @@ export default function ActivityLogs({ user }: Props) {
                             Refresh
                         </Button>
 
-                        <Button
-                            onClick={handleExport}
-                            variant="outline"
-                            size="sm"
-                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
-                        >
-                            <Download className="h-4 w-4 mr-2" />
-                            Export
-                        </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
+                                >
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Export
+                                    <ChevronDown className="h-4 w-4 ml-2" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleExport('csv')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as CSV
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('excel')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as Excel
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as PDF
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
 
@@ -395,6 +450,7 @@ export default function ActivityLogs({ user }: Props) {
                                 <option value="all">All Actions</option>
                                 <option value="login">Login</option>
                                 <option value="logout">Logout</option>
+                                <option value="page_visit">Page Visit</option>
                                 <option value="create">Create</option>
                                 <option value="update">Update</option>
                                 <option value="delete">Delete</option>
@@ -435,7 +491,7 @@ export default function ActivityLogs({ user }: Props) {
                             <Activity className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">{total}</div>
+                            <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">{stats?.total ?? total}</div>
                             <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">All recorded activities</p>
                         </CardContent>
                     </Card>
@@ -446,13 +502,7 @@ export default function ActivityLogs({ user }: Props) {
                             <Calendar className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-blue-600">
-                                {activities.filter(a => {
-                                    const activityDate = new Date(a.created_at);
-                                    const today = new Date();
-                                    return activityDate.toDateString() === today.toDateString();
-                                }).length}
-                            </div>
+                            <div className="text-2xl font-bold text-blue-600">{stats?.today ?? 0}</div>
                             <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Activities today</p>
                         </CardContent>
                     </Card>
@@ -463,9 +513,7 @@ export default function ActivityLogs({ user }: Props) {
                             <User className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-green-600">
-                                {activities.filter(a => ['create', 'update', 'delete'].includes(a.action)).length}
-                            </div>
+                            <div className="text-2xl font-bold text-green-600">{stats?.crud_operations ?? 0}</div>
                             <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">CRUD operations</p>
                         </CardContent>
                     </Card>
@@ -476,9 +524,7 @@ export default function ActivityLogs({ user }: Props) {
                             <Shield className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-purple-600">
-                                {new Set(activities.filter(a => a.user).map(a => a.user.id)).size}
-                            </div>
+                            <div className="text-2xl font-bold text-purple-600">{stats?.unique_users ?? 0}</div>
                             <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Active users</p>
                         </CardContent>
                     </Card>
@@ -511,13 +557,13 @@ export default function ActivityLogs({ user }: Props) {
                                                     <span>{activity.entity_type || 'Unknown'}</span>
                                                 </div>
                                             </div>
-                                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="View Details">
+                                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="View Details" onClick={() => { setSelectedLog(activity); setDetailOpen(true); }}>
                                                 <Eye className="h-4 w-4" />
                                             </Button>
                                         </div>
                                         <div className="text-sm font-medium text-maroon-800 dark:text-gray-200">
-                                            {activity.user?.name || 'Unknown User'}
-                                            <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">({activity.user?.email})</span>
+                                            {activity.user?.name || 'Deleted User'}
+                                            <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">({activity.user?.email || 'N/A'})</span>
                                         </div>
                                         <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{activity.description || 'No description'}</p>
                                         <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
@@ -570,10 +616,10 @@ export default function ActivityLogs({ user }: Props) {
                                                 <TableCell>
                                                     <div className="space-y-1">
                                                         <div className="font-medium text-maroon-800 dark:text-gray-200">
-                                                            {activity.user?.name || 'Unknown User'}
+                                                            {activity.user?.name || 'Deleted User'}
                                                         </div>
                                                         <div className="text-xs text-gray-600 dark:text-gray-400">
-                                                            {activity.user?.email || 'No email'}
+                                                            {activity.user?.email || 'N/A'}
                                                         </div>
                                                     </div>
                                                 </TableCell>
@@ -611,6 +657,7 @@ export default function ActivityLogs({ user }: Props) {
                                                         size="sm"
                                                         className="text-maroon-700 dark:text-gray-300 hover:text-maroon-800 dark:hover:text-gray-200 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                                         title="View Details"
+                                                        onClick={() => { setSelectedLog(activity); setDetailOpen(true); }}
                                                     >
                                                         <Eye className="h-4 w-4" />
                                                     </Button>
@@ -652,6 +699,88 @@ export default function ActivityLogs({ user }: Props) {
                         )}
                     </CardContent>
                 </Card>
+
+                {/* Activity Detail Modal */}
+                <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+                    <DialogContent className="max-w-lg">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2 text-maroon-800 dark:text-gray-200">
+                                <Eye className="h-5 w-5" />
+                                Activity Log Details
+                            </DialogTitle>
+                        </DialogHeader>
+                        {selectedLog && (
+                            <div className="space-y-4">
+                                {/* User Info */}
+                                <div className="flex items-start gap-3 p-3 bg-beige-50 dark:bg-gray-800 rounded-lg">
+                                    <User className="h-5 w-5 text-maroon-600 dark:text-gray-400 mt-0.5" />
+                                    <div className="flex-1">
+                                        <p className="font-medium text-gray-900 dark:text-gray-200">
+                                            {selectedLog.user?.name || 'Deleted User'}
+                                        </p>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                                            {selectedLog.user?.email || 'N/A'}
+                                        </p>
+                                    </div>
+                                    <div>{getActionBadge(selectedLog.action)}</div>
+                                </div>
+
+                                {/* Details Grid */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="p-3 border border-beige-200 dark:border-gray-700 rounded-lg">
+                                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Action</p>
+                                        <p className="text-sm font-medium text-gray-900 dark:text-gray-200 mt-1">{selectedLog.action}</p>
+                                    </div>
+                                    <div className="p-3 border border-beige-200 dark:border-gray-700 rounded-lg">
+                                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Entity</p>
+                                        <p className="text-sm font-medium text-gray-900 dark:text-gray-200 mt-1">
+                                            {selectedLog.entity_type || 'N/A'}
+                                            {selectedLog.entity_id ? ` #${selectedLog.entity_id}` : ''}
+                                        </p>
+                                    </div>
+                                    <div className="p-3 border border-beige-200 dark:border-gray-700 rounded-lg">
+                                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase flex items-center gap-1">
+                                            <Globe className="h-3 w-3" /> IP Address
+                                        </p>
+                                        <p className="text-sm font-mono text-gray-900 dark:text-gray-200 mt-1">{selectedLog.ip_address || 'Unknown'}</p>
+                                    </div>
+                                    <div className="p-3 border border-beige-200 dark:border-gray-700 rounded-lg">
+                                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase flex items-center gap-1">
+                                            <Clock className="h-3 w-3" /> Timestamp
+                                        </p>
+                                        <p className="text-sm text-gray-900 dark:text-gray-200 mt-1">{formatDate(selectedLog.created_at)}</p>
+                                    </div>
+                                </div>
+
+                                {/* Description */}
+                                <div className="p-3 border border-beige-200 dark:border-gray-700 rounded-lg">
+                                    <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Description</p>
+                                    <p className="text-sm text-gray-900 dark:text-gray-200 mt-1">{selectedLog.description || 'No description'}</p>
+                                </div>
+
+                                {/* User Agent */}
+                                {selectedLog.user_agent && (
+                                    <div className="p-3 border border-beige-200 dark:border-gray-700 rounded-lg">
+                                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase flex items-center gap-1">
+                                            <Monitor className="h-3 w-3" /> User Agent
+                                        </p>
+                                        <p className="text-xs text-gray-700 dark:text-gray-300 mt-1 break-all font-mono">{selectedLog.user_agent}</p>
+                                    </div>
+                                )}
+
+                                {/* Metadata */}
+                                {selectedLog.metadata && Object.keys(selectedLog.metadata).length > 0 && (
+                                    <div className="p-3 border border-beige-200 dark:border-gray-700 rounded-lg">
+                                        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Metadata</p>
+                                        <pre className="text-xs text-gray-700 dark:text-gray-300 mt-1 overflow-x-auto whitespace-pre-wrap font-mono bg-gray-50 dark:bg-gray-900 p-2 rounded">
+                                            {JSON.stringify(selectedLog.metadata, null, 2)}
+                                        </pre>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </DialogContent>
+                </Dialog>
             </div>
         </AdminBaseLayout>
     );

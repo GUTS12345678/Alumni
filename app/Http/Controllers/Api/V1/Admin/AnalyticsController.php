@@ -13,11 +13,12 @@ use App\Models\SurveyQuestion;
 use App\Models\SurveyAnswer;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 class AnalyticsController extends Controller
 {
     /**
-     * Get time-to-first-job analytics data
+     * Get time-to-first-job analytics data with robust caching
      */
     public function getTimeToJobAnalytics(Request $request): JsonResponse
     {
@@ -30,25 +31,75 @@ class AnalyticsController extends Controller
                 $yearFilter = explode(',', $years);
             }
 
-            // Get yearly analytics data
-            $yearlyData = $this->getYearlyTimeToJobData($yearFilter, $campusId);
+            // Create cache key based on filters
+            $cacheKey = 'analytics_time_to_job_' . ($campusId ?? 'all') . '_' . ($years ?? 'all');
             
-            // Get KPI metrics
-            $kpiMetrics = $this->getKPIMetrics($yearFilter, $campusId);
+            // Try cache first with validation
+            $cachedData = Cache::get($cacheKey);
+            if ($cachedData && is_array($cachedData) && !empty($cachedData)) {
+                return response()->json([
+                    'success' => true,
+                    'data' => $cachedData,
+                    'cached' => true
+                ]);
+            }
             
-            // Get job mismatch statistics
-            $mismatchStats = $this->getJobMismatchStatistics($yearFilter, $campusId);
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'yearly_data' => $yearlyData,
-                    'kpi_metrics' => $kpiMetrics,
-                    'job_mismatch_stats' => $mismatchStats
-                ]
-            ]);
+            // Use locking to prevent race conditions
+            $lock = Cache::lock('analytics_ttj_' . ($campusId ?? 'all'), 10);
+            
+            try {
+                if ($lock->get()) {
+                    $data = [
+                        'yearly_data' => $this->getYearlyTimeToJobData($yearFilter, $campusId),
+                        'kpi_metrics' => $this->getKPIMetrics($yearFilter, $campusId),
+                        'job_mismatch_stats' => $this->getJobMismatchStatistics($yearFilter, $campusId)
+                    ];
+                    
+                    // Only cache if data is valid (has at least one key)
+                    if (!empty($data['yearly_data']) || !empty($data['kpi_metrics'])) {
+                        Cache::put($cacheKey, $data, 180); // 3 minutes
+                    }
+                    
+                    return response()->json([
+                        'success' => true,
+                        'data' => $data,
+                        'cached' => false
+                    ]);
+                } else {
+                    // Wait and retry cache
+                    sleep(1);
+                    $cachedData = Cache::get($cacheKey);
+                    if ($cachedData && is_array($cachedData)) {
+                        return response()->json([
+                            'success' => true,
+                            'data' => $cachedData,
+                            'cached' => true
+                        ]);
+                    }
+                    
+                    // Fallback: fetch without lock
+                    $data = [
+                        'yearly_data' => $this->getYearlyTimeToJobData($yearFilter, $campusId),
+                        'kpi_metrics' => $this->getKPIMetrics($yearFilter, $campusId),
+                        'job_mismatch_stats' => $this->getJobMismatchStatistics($yearFilter, $campusId)
+                    ];
+                    
+                    return response()->json([
+                        'success' => true,
+                        'data' => $data,
+                        'cached' => false
+                    ]);
+                }
+            } finally {
+                $lock->release();
+            }
 
         } catch (\Exception $e) {
+            \Log::error('Time to job analytics error', [
+                'error' => $e->getMessage(),
+                'campus_id' => $campusId ?? 'all'
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch analytics data',
@@ -862,84 +913,135 @@ class AnalyticsController extends Controller
     }
 
     /**
-     * Get survey analytics overview stats
+     * Get survey analytics overview stats with robust caching
      */
     public function getAnalyticsOverview(Request $request): JsonResponse
     {
         try {
-            $totalSurveys = DB::table('surveys')->count();
-            $activeSurveys = DB::table('surveys')->where('status', 'active')->count();
+            $campusId = $request->get('campus_id');
             
-            $totalResponses = DB::table('survey_responses')->count();
+            // Create cache key
+            $cacheKey = 'analytics_overview_' . ($campusId ?? 'all');
             
-            // Calculate average completion rate across all surveys
-            $completionRates = DB::table('surveys')
-                ->leftJoin('survey_responses', 'surveys.id', '=', 'survey_responses.survey_id')
-                ->select(
-                    'surveys.id',
-                    DB::raw('COUNT(survey_responses.id) as total_responses'),
-                    DB::raw('SUM(CASE WHEN survey_responses.completed_at IS NOT NULL THEN 1 ELSE 0 END) as completed_responses')
-                )
-                ->groupBy('surveys.id')
-                ->get();
-            
-            $avgCompletionRate = 0;
-            if ($completionRates->count() > 0) {
-                $totalSurveysWithResponses = 0;
-                $sumCompletionRates = 0;
-                
-                foreach ($completionRates as $survey) {
-                    if ($survey->total_responses > 0) {
-                        $completionRate = ($survey->completed_responses / $survey->total_responses) * 100;
-                        $sumCompletionRates += $completionRate;
-                        $totalSurveysWithResponses++;
-                    }
-                }
-                
-                if ($totalSurveysWithResponses > 0) {
-                    $avgCompletionRate = $sumCompletionRates / $totalSurveysWithResponses;
-                }
+            // Try cache first with validation
+            $cachedData = Cache::get($cacheKey);
+            if ($cachedData && is_array($cachedData) && isset($cachedData['total_surveys'])) {
+                return response()->json([
+                    'success' => true,
+                    'data' => $cachedData,
+                    'cached' => true
+                ]);
             }
             
-            // Find most popular survey (highest response count)
-            $mostPopularSurvey = DB::table('surveys')
-                ->leftJoin('survey_responses', 'surveys.id', '=', 'survey_responses.survey_id')
-                ->select('surveys.title', DB::raw('COUNT(survey_responses.id) as response_count'))
-                ->groupBy('surveys.id', 'surveys.title')
-                ->orderBy('response_count', 'desc')
-                ->first();
+            // Use locking
+            $lock = Cache::lock('analytics_overview_' . ($campusId ?? 'all'), 10);
             
-            // Recent activity (last 7 days)
-            $recentActivity = DB::table('survey_responses')
-                ->select(
-                    DB::raw('DATE(created_at) as date'),
-                    DB::raw('COUNT(*) as responses')
-                )
-                ->where('created_at', '>=', Carbon::now()->subDays(7))
-                ->groupBy(DB::raw('DATE(created_at)'))
-                ->orderBy('date')
-                ->get()
-                ->map(function ($item) {
-                    return [
-                        'date' => $item->date,
-                        'responses' => (int) $item->responses
+            try {
+                if ($lock->get()) {
+                    $totalSurveys = DB::table('surveys')->count();
+                    $activeSurveys = DB::table('surveys')->where('status', 'active')->count();
+                    
+                    $totalResponses = DB::table('survey_responses')->count();
+                    
+                    // Calculate average completion rate across all surveys
+                    $completionRates = DB::table('surveys')
+                        ->leftJoin('survey_responses', 'surveys.id', '=', 'survey_responses.survey_id')
+                        ->select(
+                            'surveys.id',
+                            DB::raw('COUNT(survey_responses.id) as total_responses'),
+                            DB::raw('SUM(CASE WHEN survey_responses.completed_at IS NOT NULL THEN 1 ELSE 0 END) as completed_responses')
+                        )
+                        ->groupBy('surveys.id')
+                        ->get();
+                    
+                    $avgCompletionRate = 0;
+                    if ($completionRates->count() > 0) {
+                        $totalSurveysWithResponses = 0;
+                        $sumCompletionRates = 0;
+                        
+                        foreach ($completionRates as $survey) {
+                            if ($survey->total_responses > 0) {
+                                $completionRate = ($survey->completed_responses / $survey->total_responses) * 100;
+                                $sumCompletionRates += $completionRate;
+                                $totalSurveysWithResponses++;
+                            }
+                        }
+                        
+                        if ($totalSurveysWithResponses > 0) {
+                            $avgCompletionRate = $sumCompletionRates / $totalSurveysWithResponses;
+                        }
+                    }
+                    
+                    // Find most popular survey (highest response count)
+                    $mostPopularSurvey = DB::table('surveys')
+                        ->leftJoin('survey_responses', 'surveys.id', '=', 'survey_responses.survey_id')
+                        ->select('surveys.title', DB::raw('COUNT(survey_responses.id) as response_count'))
+                        ->groupBy('surveys.id', 'surveys.title')
+                        ->orderBy('response_count', 'desc')
+                        ->first();
+                    
+                    // Recent activity (last 7 days)
+                    $recentActivity = DB::table('survey_responses')
+                        ->select(
+                            DB::raw('DATE(created_at) as date'),
+                            DB::raw('COUNT(*) as responses')
+                        )
+                        ->where('created_at', '>=', Carbon::now()->subDays(7))
+                        ->groupBy(DB::raw('DATE(created_at)'))
+                        ->orderBy('date')
+                        ->get()
+                        ->map(function ($item) {
+                            return [
+                                'date' => $item->date,
+                                'responses' => (int) $item->responses
+                            ];
+                        })
+                        ->toArray();
+                    
+                    $data = [
+                        'total_surveys' => (int) $totalSurveys,
+                        'active_surveys' => (int) $activeSurveys,
+                        'total_responses' => (int) $totalResponses,
+                        'avg_completion_rate' => round($avgCompletionRate, 1),
+                        'most_popular_survey' => $mostPopularSurvey ? $mostPopularSurvey->title : 'N/A',
+                        'recent_activity' => $recentActivity
                     ];
-                })
-                ->toArray();
-
-            return response()->json([
-                'success' => true,
-                'data' => [
-                    'total_surveys' => (int) $totalSurveys,
-                    'active_surveys' => (int) $activeSurveys,
-                    'total_responses' => (int) $totalResponses,
-                    'avg_completion_rate' => round($avgCompletionRate, 1),
-                    'most_popular_survey' => $mostPopularSurvey ? $mostPopularSurvey->title : 'N/A',
-                    'recent_activity' => $recentActivity
-                ]
-            ]);
+                    
+                    // Cache valid data
+                    if ((int)$totalSurveys >= 0) { // Always cache, even if 0
+                        Cache::put($cacheKey, $data, 180); // 3 minutes
+                    }
+                    
+                    return response()->json([
+                        'success' => true,
+                        'data' => $data,
+                        'cached' => false
+                    ]);
+                } else {
+                    // Wait and retry
+                    sleep(1);
+                    $cachedData = Cache::get($cacheKey);
+                    if ($cachedData && is_array($cachedData)) {
+                        return response()->json([
+                            'success' => true,
+                            'data' => $cachedData,
+                            'cached' => true
+                        ]);
+                    }
+                    
+                    // Fallback - fetch without lock
+                    throw new \Exception('Could not acquire lock, retry failed');
+                }
+            } finally {
+                $lock->release();
+            }
 
         } catch (\Exception $e) {
+            \Log::error('Analytics overview error', [
+                'error' => $e->getMessage(),
+                'campus_id' => $campusId ?? 'all'
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch analytics overview',
@@ -1101,13 +1203,90 @@ class AnalyticsController extends Controller
                     $skippedCount = $totalResponses - $totalAnswers;
                     $skipRate = $totalResponses > 0 ? (($skippedCount / $totalResponses) * 100) : 0;
                     
+                    // Build response distribution for choice-type questions
+                    $responseDistribution = [];
+                    $choiceTypes = ['radio', 'checkbox', 'select', 'dropdown', 'multiple_choice'];
+                    
+                    if (in_array($question->question_type, $choiceTypes) && $totalAnswers > 0) {
+                        $answers = DB::table('survey_answers')
+                            ->join('survey_responses', 'survey_answers.survey_response_id', '=', 'survey_responses.id')
+                            ->where('survey_answers.survey_question_id', $question->id)
+                            ->where('survey_responses.survey_id', $surveyId)
+                            ->when($days !== 'all', function ($q) use ($days) {
+                                return $q->where('survey_responses.created_at', '>=', Carbon::now()->subDays((int) $days));
+                            })
+                            ->whereNotNull('survey_answers.answer_text')
+                            ->where('survey_answers.answer_text', '!=', '')
+                            ->select('survey_answers.answer_text', 'survey_answers.answer_json')
+                            ->get();
+                        
+                        $optionCounts = [];
+                        foreach ($answers as $answer) {
+                            // Handle JSON answers (checkbox/multi-select)
+                            if ($answer->answer_json) {
+                                $jsonValues = json_decode($answer->answer_json, true);
+                                if (is_array($jsonValues)) {
+                                    foreach ($jsonValues as $val) {
+                                        $key = is_string($val) ? trim($val) : (string) $val;
+                                        if ($key !== '') {
+                                            $optionCounts[$key] = ($optionCounts[$key] ?? 0) + 1;
+                                        }
+                                    }
+                                    continue;
+                                }
+                            }
+                            // Handle plain text answers (radio/select)
+                            $key = trim($answer->answer_text);
+                            if ($key !== '') {
+                                $optionCounts[$key] = ($optionCounts[$key] ?? 0) + 1;
+                            }
+                        }
+                        
+                        // Sort by count descending and build distribution array
+                        arsort($optionCounts);
+                        $answersTotal = array_sum($optionCounts);
+                        foreach ($optionCounts as $option => $count) {
+                            $responseDistribution[] = [
+                                'option' => $option,
+                                'count' => $count,
+                                'percentage' => $answersTotal > 0 ? round(($count / $answersTotal) * 100, 1) : 0,
+                            ];
+                        }
+                    }
+                    // For text/textarea: show top common answers
+                    elseif (in_array($question->question_type, ['text', 'textarea']) && $totalAnswers > 0) {
+                        $textAnswers = DB::table('survey_answers')
+                            ->join('survey_responses', 'survey_answers.survey_response_id', '=', 'survey_responses.id')
+                            ->where('survey_answers.survey_question_id', $question->id)
+                            ->where('survey_responses.survey_id', $surveyId)
+                            ->when($days !== 'all', function ($q) use ($days) {
+                                return $q->where('survey_responses.created_at', '>=', Carbon::now()->subDays((int) $days));
+                            })
+                            ->whereNotNull('survey_answers.answer_text')
+                            ->where('survey_answers.answer_text', '!=', '')
+                            ->pluck('survey_answers.answer_text');
+                        
+                        $textCounts = $textAnswers->map(fn($t) => strtolower(trim($t)))
+                            ->countBy()
+                            ->sortDesc()
+                            ->take(10);
+                        
+                        foreach ($textCounts as $text => $count) {
+                            $responseDistribution[] = [
+                                'option' => $text,
+                                'count' => $count,
+                                'percentage' => $totalAnswers > 0 ? round(($count / $totalAnswers) * 100, 1) : 0,
+                            ];
+                        }
+                    }
+
                     $questionAnalytics[] = [
                         'question_id' => $question->id,
                         'question_text' => $question->question_text,
                         'question_type' => $question->question_type,
                         'total_responses' => (int) $totalAnswers,
                         'skip_rate' => round($skipRate, 1),
-                        'response_distribution' => []
+                        'response_distribution' => $responseDistribution
                     ];
                 }
             } catch (\Exception $e) {
@@ -1340,6 +1519,7 @@ class AnalyticsController extends Controller
     public function exportSurveyAnalytics(Request $request, $surveyId)
     {
         try {
+            $format = $request->get('format', 'excel');
             $days = $request->get('days', 30);
             
             // Get the analytics data
@@ -1352,14 +1532,15 @@ class AnalyticsController extends Controller
             
             $data = $analyticsData['data'];
             
-            // Create Excel-like CSV format
-            $filename = 'survey_analytics_' . $surveyId . '_' . date('Y-m-d') . '.xlsx';
-            
-            $content = $this->generateSurveyAnalyticsExcel($data);
-            
-            return response($content)
-                ->header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-                ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+            // Export based on format
+            switch ($format) {
+                case 'excel':
+                    return $this->exportSurveyAnalyticsToExcel($data, $surveyId);
+                case 'pdf':
+                    return $this->exportSurveyAnalyticsToPdf($data, $surveyId);
+                default:
+                    return $this->exportSurveyAnalyticsToCsv($data, $surveyId);
+            }
 
         } catch (\Exception $e) {
             return response()->json([
@@ -1368,6 +1549,117 @@ class AnalyticsController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Export survey analytics to CSV
+     */
+    private function exportSurveyAnalyticsToCsv($data, $surveyId)
+    {
+        $filename = 'survey_analytics_' . $surveyId . '_' . date('Y-m-d') . '.csv';
+        $content = $this->generateSurveyAnalyticsExcel($data);
+        
+        return response($content)
+            ->header('Content-Type', 'text/csv')
+            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+    }
+
+    /**
+     * Export survey analytics to Excel
+     */
+    private function exportSurveyAnalyticsToExcel($data, $surveyId)
+    {
+        $filename = 'survey_analytics_' . $surveyId . '_' . date('Y-m-d') . '.xlsx';
+        $content = "\xEF\xBB\xBF" . $this->generateSurveyAnalyticsExcel($data);
+        
+        return response($content)
+            ->header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+    }
+
+    /**
+     * Export survey analytics to PDF
+     */
+    private function exportSurveyAnalyticsToPdf($data, $surveyId)
+    {
+        $filename = 'survey_analytics_' . $surveyId . '_' . date('Y-m-d') . '.pdf';
+        
+        // Build HTML content for PDF
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+            body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+            h1 { color: #7c2d3f; border-bottom: 3px solid #7c2d3f; padding-bottom: 10px; }
+            h2 { color: #555; border-bottom: 2px solid #ddd; padding-bottom: 8px; margin-top: 30px; }
+            table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+            th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+            th { background-color: #7c2d3f; color: white; font-weight: bold; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .info { margin: 10px 0; line-height: 1.6; }
+            .metric { background-color: #f5f5f5; padding: 10px; margin: 5px 0; border-left: 4px solid #7c2d3f; }
+        </style></head><body>';
+        
+        $html .= '<h1>Survey Analytics Report</h1>';
+        $html .= '<p><strong>Generated:</strong> ' . date('Y-m-d H:i:s') . '</p>';
+        
+        // Survey Overview
+        $html .= '<div class="info">';
+        $html .= '<p><strong>Survey:</strong> ' . htmlspecialchars($data['survey']['title']) . '</p>';
+        $html .= '<p><strong>Description:</strong> ' . htmlspecialchars($data['survey']['description']) . '</p>';
+        $html .= '<p><strong>Status:</strong> ' . ucfirst($data['survey']['status']) . '</p>';
+        $html .= '</div>';
+        
+        // Key Metrics
+        $html .= '<h2>Key Metrics</h2>';
+        $html .= '<div class="metric"><strong>Total Responses:</strong> ' . $data['total_responses'] . '</div>';
+        $html .= '<div class="metric"><strong>Completion Rate:</strong> ' . $data['completion_rate'] . '%</div>';
+        $html .= '<div class="metric"><strong>Average Completion Time:</strong> ' . round($data['avg_completion_time'], 1) . ' minutes</div>';
+        
+        // Response by Date (last 10 only for PDF)
+        if (!empty($data['response_rate_by_date'])) {
+            $html .= '<h2>Recent Responses by Date</h2>';
+            $html .= '<table><thead><tr><th>Date</th><th>Responses</th></tr></thead><tbody>';
+            $recentData = array_slice($data['response_rate_by_date'], -10);
+            foreach ($recentData as $dateData) {
+                $html .= '<tr><td>' . $dateData['date'] . '</td><td>' . $dateData['responses'] . '</td></tr>';
+            }
+            $html .= '</tbody></table>';
+        }
+        
+        // Employment Status Distribution
+        if (!empty($data['employment_status_distribution'])) {
+            $html .= '<h2>Employment Status Distribution</h2>';
+            $html .= '<table><thead><tr><th>Status</th><th>Count</th><th>Percentage</th></tr></thead><tbody>';
+            foreach ($data['employment_status_distribution'] as $statusData) {
+                $html .= '<tr><td>' . htmlspecialchars($statusData['status']) . '</td>';
+                $html .= '<td>' . $statusData['count'] . '</td>';
+                $html .= '<td>' . $statusData['percentage'] . '%</td></tr>';
+            }
+            $html .= '</tbody></table>';
+        }
+        
+        // Question Analytics (top 15 only for PDF)
+        if (!empty($data['question_analytics'])) {
+            $html .= '<h2>Top Question Analytics</h2>';
+            $html .= '<table><thead><tr><th>Question</th><th>Type</th><th>Responses</th><th>Skip Rate</th></tr></thead><tbody>';
+            $topQuestions = array_slice($data['question_analytics'], 0, 15);
+            foreach ($topQuestions as $question) {
+                $html .= '<tr><td>' . htmlspecialchars(substr($question['question_text'], 0, 80)) . '</td>';
+                $html .= '<td>' . ucfirst($question['question_type']) . '</td>';
+                $html .= '<td>' . $question['total_responses'] . '</td>';
+                $html .= '<td>' . $question['skip_rate'] . '%</td></tr>';
+            }
+            $html .= '</tbody></table>';
+            
+            $totalQuestions = count($data['question_analytics']);
+            if ($totalQuestions > 15) {
+                $html .= '<p><em>Showing top 15 of ' . $totalQuestions . ' questions. Download CSV or Excel for complete data.</em></p>';
+            }
+        }
+        
+        $html .= '</body></html>';
+        
+        return response($html)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
     }
 
     /**
@@ -1772,43 +2064,27 @@ class AnalyticsController extends Controller
     {
         try {
             $campusId = $request->get('campus_id');
-
-            // Get enrollment metrics from batches
-            $enrollmentMetrics = $this->getEnrollmentMetrics($campusId);
             
-            // Get performance indicator (employed within 2 years)
-            $performanceIndicator = $this->getPerformanceIndicator($campusId);
+            // Create cache key
+            $cacheKey = 'analytics_comprehensive_' . ($campusId ?? 'all');
             
-            // Get job alignment statistics (from job classifier)
-            $jobAlignmentStats = $this->getJobAlignmentStats($campusId);
-            
-            // Get attrition rate
-            $attritionRate = $this->getAttritionRate($campusId);
-            
-            // Get program-wise performance
-            $programPerformance = $this->getProgramWisePerformance($campusId);
-            
-            // Get college-level enrollment/attrition breakdown
-            $collegeBreakdown = $this->getCollegeEnrollmentBreakdown($campusId);
-            
-            // Get course-level enrollment/attrition breakdown
-            $courseBreakdown = $this->getCourseEnrollmentBreakdown($campusId);
-
-            // Get employment location breakdown (local/foreign/remote)
-            $employmentLocationStats = $this->getEmploymentLocationStats($campusId);
+            // Cache for 10 minutes (comprehensive analytics are expensive)
+            $data = Cache::remember($cacheKey, 600, function () use ($campusId) {
+                return [
+                    'enrollment_metrics' => $this->getEnrollmentMetrics($campusId),
+                    'performance_indicator' => $this->getPerformanceIndicator($campusId),
+                    'job_alignment' => $this->getJobAlignmentStats($campusId),
+                    'attrition_rate' => $this->getAttritionRate($campusId),
+                    'program_performance' => $this->getProgramWisePerformance($campusId),
+                    'college_breakdown' => $this->getCollegeEnrollmentBreakdown($campusId),
+                    'course_breakdown' => $this->getCourseEnrollmentBreakdown($campusId),
+                    'employment_location' => $this->getEmploymentLocationStats($campusId),
+                ];
+            });
 
             return response()->json([
                 'success' => true,
-                'data' => [
-                    'enrollment_metrics' => $enrollmentMetrics,
-                    'performance_indicator' => $performanceIndicator,
-                    'job_alignment' => $jobAlignmentStats,
-                    'attrition_rate' => $attritionRate,
-                    'program_performance' => $programPerformance,
-                    'college_breakdown' => $collegeBreakdown,
-                    'course_breakdown' => $courseBreakdown,
-                    'employment_location' => $employmentLocationStats,
-                ]
+                'data' => $data
             ]);
 
         } catch (\Exception $e) {

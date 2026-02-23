@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -51,6 +52,9 @@ class TwoFactorController extends Controller
             Auth::login($user);
             session()->forget('2fa:user:id');
             $request->session()->regenerate();
+            
+            // Log successful login after 2FA verification
+            ActivityLog::logLogin($user->id, $request->ip());
             
             return redirect()->intended('/dashboard');
         }

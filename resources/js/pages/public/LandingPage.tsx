@@ -70,8 +70,7 @@ interface Job {
     company_name: string;
     company_logo: string | null;
     poster_image: string | null;
-    description: string;
-    full_description?: string;
+    content: string;
     pages?: ContentPage[] | null;
     use_pages?: boolean;
     location: string;
@@ -348,7 +347,7 @@ export default function LandingPage({ stats: initialStats }: LandingPageProps) {
                         setAppearanceSettings({
                             logoLight: data.data.logo_light_path,
                             logoDark: data.data.logo_dark_path,
-                            heroBackground: data.data.hero_background_path || null,
+                            heroBackground: data.data.background_image_path || data.data.hero_background_path || null,
                         });
                     }
                 }
@@ -557,7 +556,7 @@ export default function LandingPage({ stats: initialStats }: LandingPageProps) {
                         <Link href="/" className="flex items-center space-x-2 flex-shrink-0">
                             {appearanceSettings.logoLight || appearanceSettings.logoDark ? (
                                 <img
-                                    src={`/storage/${appearanceSettings.logoLight || appearanceSettings.logoDark}`}
+                                    src={`/api/v1/assets/${appearanceSettings.logoLight || appearanceSettings.logoDark}`}
                                     alt="Alumni Tracer Logo"
                                     className="w-8 h-8 sm:w-10 sm:h-10 object-contain rounded-lg"
                                 />
@@ -709,7 +708,7 @@ export default function LandingPage({ stats: initialStats }: LandingPageProps) {
                 <div className="absolute inset-0 z-0">
                     {appearanceSettings.heroBackground ? (
                         <img
-                            src={`/storage/${appearanceSettings.heroBackground}`}
+                            src={`/api/v1/assets/${appearanceSettings.heroBackground}`}
                             alt=""
                             className="w-full h-full object-cover opacity-15"
                         />
@@ -1228,7 +1227,7 @@ export default function LandingPage({ stats: initialStats }: LandingPageProps) {
                                                 )}
                                                 <div
                                                     className="text-maroon-600 dark:text-gray-400 text-sm line-clamp-2 mb-4 prose prose-sm max-w-none"
-                                                    dangerouslySetInnerHTML={{ __html: job.description }}
+                                                    dangerouslySetInnerHTML={{ __html: job.content }}
                                                 />
                                                 {job.application_deadline && (
                                                     <div className="flex items-center text-amber-600 text-xs">
@@ -1682,7 +1681,7 @@ export default function LandingPage({ stats: initialStats }: LandingPageProps) {
                             ) : (
                                 <div className="prose prose-sm prose-maroon max-w-none text-gray-700 dark:text-gray-300 [&>p]:mb-3 [&>ul]:mb-3 [&>ol]:mb-3">
                                     <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">Job Description</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: selectedJob.full_description || selectedJob.description }} />
+                                    <div dangerouslySetInnerHTML={{ __html: selectedJob.content }} />
                                 </div>
                             )}
 

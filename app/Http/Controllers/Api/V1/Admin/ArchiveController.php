@@ -31,9 +31,9 @@ class ArchiveController extends Controller
                 'display' => fn($item) => [
                     'title' => $item->name,
                     'subtitle' => $item->email,
-                    'meta' => $item->role ? $item->role->name : 'Unknown Role',
+                    'meta' => $item->role ?? 'Unknown Role',
                 ],
-                'with' => ['role', 'campus'],
+                'with' => ['campus'],
             ],
             'announcements' => [
                 'model' => Announcement::class,

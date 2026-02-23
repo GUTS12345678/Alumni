@@ -120,7 +120,8 @@ const MyApplications: React.FC<MyApplicationsProps> = ({ applications, stats }) 
     };
 
     const downloadResume = (resumePath: string) => {
-        window.open(`/storage/${resumePath}`, '_blank');
+        // Serve resumes via the authenticated private file route
+        window.open(`/api/v1/files/${resumePath}`, '_blank');
     };
 
     return (
@@ -301,7 +302,7 @@ const MyApplications: React.FC<MyApplicationsProps> = ({ applications, stats }) 
             {/* Application Details Modal */}
             {selectedApplication && (
                 <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle className="text-2xl text-maroon-800">
                                 Application for {selectedApplication.job_posting.title}

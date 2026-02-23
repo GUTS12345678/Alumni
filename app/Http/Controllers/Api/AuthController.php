@@ -114,7 +114,25 @@ class AuthController extends Controller
             ], 403);
         }
 
-        $token = $user->createToken('auth-token')->plainTextToken;
+        // Enforce device limit
+        $maxDevices = config('security.authentication.session.max_devices', 5);
+        $activeTokens = $user->tokens()->count();
+
+        if ($activeTokens >= $maxDevices) {
+            // Remove the oldest token to make room
+            $user->tokens()
+                ->orderBy('last_used_at', 'asc')
+                ->first()
+                ?->delete();
+        }
+
+        // Create token with device info
+        $newToken = $user->createToken('auth-token');
+        $accessToken = $newToken->accessToken;
+        $accessToken->ip_address = $request->ip();
+        $accessToken->user_agent = $request->userAgent();
+        $accessToken->device_name = $this->generateDeviceName($request->userAgent());
+        $accessToken->save();
 
         ActivityLog::logLogin($user->id, $request->ip());
 
@@ -128,7 +146,7 @@ class AuthController extends Controller
                     'role' => $user->role,
                     'status' => $user->status,
                 ],
-                'token' => $token,
+                'token' => $newToken->plainTextToken,
             ]
         ]);
     }
@@ -168,13 +186,18 @@ class AuthController extends Controller
         // Delete any existing tokens for this user to maintain single session
         $user->tokens()->delete();
 
-        // Create a new token
-        $token = $user->createToken('web-session-token')->plainTextToken;
+        // Create a new token with device info
+        $newToken = $user->createToken('web-session-token');
+        $accessToken = $newToken->accessToken;
+        $accessToken->ip_address = $request->ip();
+        $accessToken->user_agent = $request->userAgent();
+        $accessToken->device_name = $this->generateDeviceName($request->userAgent());
+        $accessToken->save();
 
         return response()->json([
             'success' => true,
             'data' => [
-                'token' => $token,
+                'token' => $newToken->plainTextToken,
                 'user' => $user
             ]
         ]);
@@ -216,10 +239,14 @@ class AuthController extends Controller
         $profile = $user->alumniProfile()->with('batch')->first();
 
         if (!$profile) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Alumni profile not found'
-            ], 404);
+            // Auto-create a stub profile so the dashboard doesn't crash
+            $nameParts = explode(' ', $user->name, 2);
+            $profile = $user->alumniProfile()->create([
+                'first_name' => $nameParts[0] ?? '',
+                'last_name' => $nameParts[1] ?? '',
+                'campus_id' => $user->campus_id ?? 1,
+            ]);
+            $profile->load('batch');
         }
 
         // Check if survey was completed by looking for any survey responses
@@ -572,6 +599,38 @@ class AuthController extends Controller
     }
 
     /**
+     * Check if phone number already exists in alumni profiles
+     */
+    public function checkPhone(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'phone' => 'required|string|min:7',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid phone number',
+                'exists' => false
+            ], 422);
+        }
+
+        // Normalize phone (strip spaces, dashes, parens)
+        $phone = preg_replace('/[\s\-\(\)]/', '', $request->phone);
+
+        $exists = AlumniProfile::where(function ($q) use ($phone) {
+            $q->where('phone', 'LIKE', "%{$phone}%")
+              ->orWhere('phone', 'LIKE', "%{$phone}");
+        })->exists();
+
+        return response()->json([
+            'success' => true,
+            'exists' => $exists,
+            'message' => $exists ? 'Phone number already registered' : 'Phone number available'
+        ]);
+    }
+
+    /**
      * Check if login (email or student_id) exists
      * Used by login page to validate credentials before submission
      */
@@ -606,5 +665,45 @@ class AuthController extends Controller
             'exists' => $exists,
             'message' => $message
         ]);
+    }
+
+    /**
+     * Generate a human-readable device name from user agent string.
+     */
+    private function generateDeviceName(?string $userAgent): string
+    {
+        if (!$userAgent) {
+            return 'Unknown Device';
+        }
+
+        // Detect browser
+        $browser = 'Unknown Browser';
+        if (preg_match('/Edg\/(\d+)/i', $userAgent)) {
+            $browser = 'Edge';
+        } elseif (preg_match('/OPR\/(\d+)/i', $userAgent) || preg_match('/Opera/i', $userAgent)) {
+            $browser = 'Opera';
+        } elseif (preg_match('/Chrome\/(\d+)/i', $userAgent) && !preg_match('/Edg/i', $userAgent)) {
+            $browser = 'Chrome';
+        } elseif (preg_match('/Firefox\/(\d+)/i', $userAgent)) {
+            $browser = 'Firefox';
+        } elseif (preg_match('/Safari\/(\d+)/i', $userAgent) && !preg_match('/Chrome/i', $userAgent)) {
+            $browser = 'Safari';
+        }
+
+        // Detect platform
+        $platform = 'Unknown';
+        if (preg_match('/Windows/i', $userAgent)) {
+            $platform = 'Windows';
+        } elseif (preg_match('/Macintosh|Mac OS X/i', $userAgent)) {
+            $platform = 'macOS';
+        } elseif (preg_match('/Android/i', $userAgent)) {
+            $platform = 'Android';
+        } elseif (preg_match('/iPhone|iPad|iPod/i', $userAgent)) {
+            $platform = 'iOS';
+        } elseif (preg_match('/Linux/i', $userAgent)) {
+            $platform = 'Linux';
+        }
+
+        return "{$browser} on {$platform}";
     }
 }

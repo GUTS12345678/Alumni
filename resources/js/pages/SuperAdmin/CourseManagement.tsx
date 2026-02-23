@@ -16,6 +16,8 @@ import {
     XCircle,
     AlertCircle,
 } from 'lucide-react';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface Course {
     id: number;
@@ -50,6 +52,7 @@ interface CourseStats {
     inactive_courses: number;
     deleted_courses: number;
     courses_with_alumni: number;
+    total_alumni: number;
     total_departments: number;
 }
 
@@ -68,6 +71,7 @@ interface PageProps {
 export default function CourseManagement({ auth }: PageProps) {
     const [courses, setCourses] = useState<Course[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
     const [stats, setStats] = useState<CourseStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -268,7 +272,8 @@ export default function CourseManagement({ auth }: PageProps) {
     };
 
     const handleRestore = async (courseId: number) => {
-        if (!confirm('Are you sure you want to restore this course?')) return;
+        const ok = await confirm({ title: 'Restore Course', message: 'Are you sure you want to restore this course?', confirmLabel: 'Restore' });
+        if (!ok) return;
 
         try {
             await axios.post(`/api/v1/admin/super-admin/courses/${courseId}/restore`);
@@ -375,8 +380,9 @@ export default function CourseManagement({ auth }: PageProps) {
                         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">With Alumni</p>
-                                    <p className="text-3xl font-bold text-purple-600 mt-2">{stats.courses_with_alumni}</p>
+                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Alumni</p>
+                                    <p className="text-3xl font-bold text-purple-600 mt-2">{stats.total_alumni}</p>
+                                    <p className="text-xs text-gray-500 mt-1">across {stats.courses_with_alumni} courses</p>
                                 </div>
                                 <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center">
                                     <Users className="h-6 w-6 text-purple-600" />
@@ -945,6 +951,7 @@ export default function CourseManagement({ auth }: PageProps) {
                     </div>
                 </div>
             )}
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AdminBaseLayout>
     );
 }

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from './button';
 import { Checkbox } from './checkbox';
 import { Trash2, X } from 'lucide-react';
@@ -20,8 +21,8 @@ export function BulkActionBar({
 }: BulkActionBarProps) {
     if (selectedCount === 0) return null;
 
-    return (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5">
+    return createPortal(
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[9999]">
             <div className="bg-maroon-700 dark:bg-maroon-800 text-white rounded-full shadow-2xl px-6 py-4 flex items-center space-x-4">
                 <div className="flex items-center space-x-2">
                     <Checkbox checked={true} className="border-white" />
@@ -53,7 +54,8 @@ export function BulkActionBar({
                     <X className="h-4 w-4" />
                 </Button>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 }
 

@@ -12,6 +12,8 @@ use App\Models\AlumniProfile;
 use App\Models\Batch;
 use App\Models\User;
 use App\Models\ActivityLog;
+use App\Events\SurveyResponseSubmitted;
+use App\Events\DashboardUpdated;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
@@ -322,7 +324,7 @@ class SurveyController extends Controller
             if ($existingUser) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Email already exists'
+                    'message' => 'This email address is already registered. Please use a different email or try logging in.'
                 ], 409);
             }
 
@@ -330,7 +332,7 @@ class SurveyController extends Controller
             $studentIdAnswer = null;
             $tempAnswers = $response->answers()->with('surveyQuestion')->get();
             foreach ($tempAnswers as $answer) {
-                $questionText = strtolower($answer->surveyQuestion->question_text);
+                $questionText = strtolower($answer->surveyQuestion->question_text ?? '');
                 if (str_contains($questionText, 'student id') || str_contains($questionText, 'student number')) {
                     $studentIdAnswer = $answer->formatted_answer;
                     break;
@@ -348,16 +350,27 @@ class SurveyController extends Controller
                 }
             }
 
-            // Create new user
-            $user = User::create([
-                'email' => $request->email,
-                'password' => Hash::make($request->password),
-                'role' => 'alumni',
-                'status' => 'active',
-            ]);
+            // Create new user (wrapped in try-catch to handle race condition duplicates)
+            try {
+                $user = User::create([
+                    'email' => $request->email,
+                    'password' => Hash::make($request->password),
+                    'role' => 'alumni',
+                    'status' => 'active',
+                ]);
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Handle duplicate entry (race condition: email inserted between check and create)
+                if ($e->errorInfo[1] === 1062) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This email address is already registered. Please use a different email or try logging in.'
+                    ], 409);
+                }
+                throw $e; // Re-throw if it's a different DB error
+            }
 
-            // Create alumni profile from survey answers
-            $this->createAlumniProfileFromAnswers($user, $response);
+            // Create alumni profile from direct form data (preferred) or survey answers (fallback)
+            $this->createAlumniProfileFromAnswers($user, $response, $request->input('profile_data', []));
 
             // Update response with user
             $response->update(['user_id' => $user->id]);
@@ -393,13 +406,27 @@ class SurveyController extends Controller
         // Update survey statistics
         $survey->updateResponseStats();
 
+        // Broadcast real-time update to admin dashboard
+        try {
+            SurveyResponseSubmitted::dispatch(
+                $survey->id,
+                $survey->title,
+                $response->user_id ?? 0,
+                isset($user) && $user ? $user->name : 'Anonymous'
+            );
+            DashboardUpdated::dispatch('survey_response');
+        } catch (\Exception $e) {
+            // Broadcasting failures should not break survey completion
+            \Log::warning('Failed to broadcast survey completion event: ' . $e->getMessage());
+        }
+
         $responseData = [
             'message' => 'Survey completed successfully',
             'response_id' => $response->id,
             'completion_percentage' => $response->completion_percentage,
         ];
 
-        if ($user) {
+        if (isset($user) && $user) {
             $token = $user->createToken('auth-token')->plainTextToken;
             $responseData['user'] = [
                 'id' => $user->id,
@@ -418,51 +445,102 @@ class SurveyController extends Controller
     }
 
     /**
-     * Create alumni profile from survey answers
+     * Create alumni profile from survey answers and direct form data.
+     * Direct form data (profile_data) is preferred as it avoids fragile keyword matching.
      */
-    private function createAlumniProfileFromAnswers(User $user, SurveyResponse $response)
+    private function createAlumniProfileFromAnswers(User $user, SurveyResponse $response, array $directData = [])
     {
-        $answers = $response->answers()->with('surveyQuestion')->get();
         $profileData = ['user_id' => $user->id];
 
-        // Map survey answers to profile fields
-        $fieldMapping = [
-            'first_name' => ['First Name', 'first name'],
-            'last_name' => ['Last Name', 'last name'],
-            'student_id' => ['Student ID', 'student id'],
-            'phone' => ['Phone Number', 'phone'],
-            'birth_date' => ['Date of Birth', 'birth date'],
-            'gender' => ['Gender'],
-            'degree_program' => ['Degree Program', 'degree'],
-            'major' => ['Major'],
-            'graduation_year' => ['Graduation Year', 'graduation'],
-            'gpa' => ['GPA'],
-            'employment_status' => ['Employment Status', 'employment'],
-            'current_job_title' => ['Job Title', 'current job'],
-            'current_employer' => ['Employer', 'company'],
-            'current_salary' => ['Salary'],
-            'current_address' => ['Address'],
-            'city' => ['City'],
-            'country' => ['Country'],
-        ];
+        // --- Use direct profile data from the frontend form ---
+        if (!empty($directData)) {
+            // Personal information
+            if (!empty($directData['first_name'])) $profileData['first_name'] = $directData['first_name'];
+            if (!empty($directData['last_name'])) $profileData['last_name'] = $directData['last_name'];
+            if (!empty($directData['maiden_name'])) $profileData['middle_name'] = $directData['maiden_name'];
+            if (!empty($directData['student_id'])) $profileData['student_id'] = $directData['student_id'];
+            if (!empty($directData['phone'])) $profileData['phone'] = $directData['phone'];
+            if (!empty($directData['birth_date'])) $profileData['birth_date'] = $directData['birth_date'];
+            if (!empty($directData['gender'])) $profileData['gender'] = strtolower($directData['gender']);
+            if (!empty($directData['current_address'])) $profileData['current_address'] = $directData['current_address'];
 
-        foreach ($answers as $answer) {
-            $questionText = strtolower($answer->surveyQuestion->question_text);
+            // School / academic information
+            if (!empty($directData['campus_id'])) $profileData['campus_id'] = (int) $directData['campus_id'];
+            if (!empty($directData['department_id'])) $profileData['department_id'] = (int) $directData['department_id'];
+            if (!empty($directData['course_id'])) $profileData['course_id'] = (int) $directData['course_id'];
+            if (!empty($directData['degree_program'])) $profileData['degree_program'] = $directData['degree_program'];
+            if (!empty($directData['major'])) $profileData['major'] = $directData['major'];
+            if (!empty($directData['graduation_year'])) $profileData['graduation_year'] = (int) $directData['graduation_year'];
 
-            foreach ($fieldMapping as $field => $keywords) {
-                foreach ($keywords as $keyword) {
-                    if (str_contains($questionText, strtolower($keyword))) {
-                        $value = $answer->formatted_answer;
+            // Employment information - derive employment_status from presentlyEmployed + employmentStatus
+            $isEmployed = ($directData['presently_employed'] ?? '') === 'Yes';
 
-                        // Handle special cases
-                        if ($field === 'employment_status') {
-                            $value = $this->mapEmploymentStatus($value);
-                        } elseif ($field === 'gender') {
-                            $value = strtolower($value);
+            if ($isEmployed) {
+                // Map the specific employment type to our DB enum
+                $profileData['employment_status'] = $this->mapEmploymentStatus($directData['employment_status'] ?? '');
+                if (!empty($directData['company_name'])) $profileData['current_employer'] = $directData['company_name'];
+                if (!empty($directData['present_position'])) $profileData['current_job_title'] = $directData['present_position'];
+                if (!empty($directData['average_monthly_income'])) $profileData['current_salary'] = $directData['average_monthly_income'];
+                $profileData['salary_currency'] = 'PHP';
+
+                // Job start date (date hired) — critical for time-to-first-job analytics
+                if (!empty($directData['date_hired'])) {
+                    $profileData['job_start_date'] = $directData['date_hired'];
+                }
+
+                // Job aligned to course → job_related_to_degree (boolean)
+                if (!empty($directData['job_aligned_to_course'])) {
+                    $profileData['job_related_to_degree'] = strtolower($directData['job_aligned_to_course']) === 'yes';
+                }
+
+                // Employment location type — critical for location analytics
+                if (!empty($directData['employment_location'])) {
+                    $profileData['employment_location_type'] = $this->mapEmploymentLocationType($directData['employment_location']);
+                }
+
+                // Company / industry info
+                if (!empty($directData['major_line_of_business'])) $profileData['company_industry'] = $directData['major_line_of_business'];
+            } else {
+                // Not employed
+                $profileData['employment_status'] = 'unemployed_seeking';
+                $profileData['employment_location_type'] = 'not_applicable';
+
+                // Map the not-employed reason
+                if (!empty($directData['not_employed_reason'])) {
+                    $profileData['unemployment_reason'] = $this->mapUnemploymentReason($directData['not_employed_reason']);
+                }
+            }
+        } else {
+            // Fallback: Try keyword-matching from survey answers (legacy behavior)
+            $answers = $response->answers()->with('surveyQuestion')->get();
+            $fieldMapping = [
+                'first_name' => ['First Name', 'first name'],
+                'last_name' => ['Last Name', 'last name'],
+                'student_id' => ['Student ID', 'student id'],
+                'phone' => ['Phone Number', 'phone'],
+                'birth_date' => ['Date of Birth', 'birth date'],
+                'gender' => ['Gender'],
+                'degree_program' => ['Degree Program', 'degree'],
+                'major' => ['Major'],
+                'graduation_year' => ['Graduation Year', 'graduation'],
+                'current_job_title' => ['Job Title', 'current job'],
+                'current_employer' => ['Employer', 'company'],
+                'current_salary' => ['Salary'],
+                'current_address' => ['Address'],
+                'city' => ['City'],
+                'country' => ['Country'],
+            ];
+
+            foreach ($answers as $answer) {
+                $questionText = strtolower($answer->surveyQuestion->question_text ?? '');
+                foreach ($fieldMapping as $field => $keywords) {
+                    foreach ($keywords as $keyword) {
+                        if (str_contains($questionText, strtolower($keyword))) {
+                            $value = $answer->formatted_answer;
+                            if ($field === 'gender') $value = strtolower($value);
+                            $profileData[$field] = $value;
+                            break 2;
                         }
-
-                        $profileData[$field] = $value;
-                        break 2;
                     }
                 }
             }
@@ -474,6 +552,17 @@ class SurveyController extends Controller
             if ($batch) {
                 $profileData['batch_id'] = $batch->id;
             }
+
+            // Derive graduation_date if not set (analytics uses this for time-to-job calculations)
+            if (!isset($profileData['graduation_date'])) {
+                $profileData['graduation_date'] = $profileData['graduation_year'] . '-06-01';
+            }
+        }
+
+        // Update user name from profile data
+        $userName = trim(($profileData['first_name'] ?? '') . ' ' . ($profileData['last_name'] ?? ''));
+        if ($userName) {
+            $user->update(['name' => $userName]);
         }
 
         $profileData['profile_completed'] = true;
@@ -483,11 +572,13 @@ class SurveyController extends Controller
     }
 
     /**
-     * Map employment status from survey answer to database enum
+     * Map employment status from survey answer to database enum.
+     * Handles both legacy values ("Employed Full-time") and actual form values ("Permanent", "Contractual", etc.)
      */
     private function mapEmploymentStatus($status)
     {
         $mapping = [
+            // Legacy values
             'Employed Full-time' => 'employed_full_time',
             'Employed Part-time' => 'employed_part_time',
             'Self-employed' => 'self_employed',
@@ -495,9 +586,69 @@ class SurveyController extends Controller
             'Unemployed (not seeking work)' => 'unemployed_not_seeking',
             'Continuing Education' => 'continuing_education',
             'Military Service' => 'military_service',
+            // Actual form values from SurveyRegistration
+            'Permanent' => 'employed_full_time',
+            'Temporary/Provisional' => 'employed_part_time',
+            'Contractual' => 'employed_part_time',
+            'Casual' => 'employed_part_time',
+            'Job Order' => 'employed_part_time',
+            'Self-Employed' => 'self_employed',
+            'Others' => 'employed_full_time',
         ];
 
-        return $mapping[$status] ?? 'other';
+        return $mapping[$status] ?? 'employed_full_time';
+    }
+
+    /**
+     * Map employment location from survey answer to database enum.
+     * Form sends "Local" or "Abroad/Foreign"
+     */
+    private function mapEmploymentLocationType($location)
+    {
+        $locationLower = strtolower(trim($location));
+
+        if (str_contains($locationLower, 'local')) {
+            return 'local';
+        }
+        if (str_contains($locationLower, 'abroad') || str_contains($locationLower, 'foreign') || str_contains($locationLower, 'ofw')) {
+            return 'foreign';
+        }
+        if (str_contains($locationLower, 'remote')) {
+            return 'remote';
+        }
+
+        return 'local'; // default
+    }
+
+    /**
+     * Map unemployment reason from survey answer to database enum
+     */
+    private function mapUnemploymentReason($reason)
+    {
+        $reasonLower = strtolower(trim($reason));
+
+        $mapping = [
+            'further study' => 'continuing_education',
+            'studies' => 'continuing_education',
+            'advance study' => 'continuing_education',
+            'no job opportunity' => 'lack_of_opportunities',
+            'no opportunity' => 'lack_of_opportunities',
+            'lack of' => 'lack_of_opportunities',
+            'did not look' => 'not_looking',
+            'not looking' => 'not_looking',
+            'health' => 'health_issues',
+            'family' => 'family_responsibilities',
+            'business' => 'pursuing_business',
+            'lack of experience' => 'lack_of_experience',
+        ];
+
+        foreach ($mapping as $keyword => $dbValue) {
+            if (str_contains($reasonLower, $keyword)) {
+                return $dbValue;
+            }
+        }
+
+        return $reason; // store raw if no mapping found
     }
 
     /**
@@ -1144,6 +1295,15 @@ class SurveyController extends Controller
                 'SurveyResponse',
                 $response->id
             );
+
+            // Broadcast real-time update
+            SurveyResponseSubmitted::dispatch(
+                $response->survey_id,
+                $response->survey->title,
+                $user->id,
+                $user->name
+            );
+            DashboardUpdated::dispatch('survey_response');
 
             return response()->json([
                 'success' => true,

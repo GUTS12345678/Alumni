@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Circle, SkipBack, SkipForward } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -77,7 +77,7 @@ export function PageCarousel({
                         {page.image && (
                             <div className="relative w-full aspect-video overflow-hidden rounded-lg">
                                 <img
-                                    src={page.image.startsWith('http') ? page.image : `/storage/${page.image}`}
+                                    src={page.image.startsWith('http') || page.image.startsWith('/') ? page.image : `/api/v1/files/${page.image}`}
                                     alt={page.title || 'Page image'}
                                     className={cn("w-full h-full object-cover", imageClassName)}
                                 />
@@ -114,7 +114,7 @@ export function PageCarousel({
                         {page.image && (
                             <div className="w-full aspect-video overflow-hidden rounded-t-lg">
                                 <img
-                                    src={page.image.startsWith('http') ? page.image : `/storage/${page.image}`}
+                                    src={page.image.startsWith('http') || page.image.startsWith('/') ? page.image : `/api/v1/files/${page.image}`}
                                     alt={page.title || 'Page image'}
                                     className={cn("w-full h-full object-cover", imageClassName)}
                                 />
@@ -139,7 +139,7 @@ export function PageCarousel({
                             <div className="w-full md:w-1/3 flex-shrink-0">
                                 <div className="aspect-square overflow-hidden rounded-lg">
                                     <img
-                                        src={page.image.startsWith('http') ? page.image : `/storage/${page.image}`}
+                                        src={page.image.startsWith('http') || page.image.startsWith('/') ? page.image : `/api/v1/files/${page.image}`}
                                         alt={page.title || 'Page image'}
                                         className={cn("w-full h-full object-cover", imageClassName)}
                                     />
@@ -174,7 +174,7 @@ export function PageCarousel({
                             <div className="w-full md:w-1/3 flex-shrink-0 order-1 md:order-2">
                                 <div className="aspect-square overflow-hidden rounded-lg">
                                     <img
-                                        src={page.image.startsWith('http') ? page.image : `/storage/${page.image}`}
+                                        src={page.image.startsWith('http') || page.image.startsWith('/') ? page.image : `/api/v1/files/${page.image}`}
                                         alt={page.title || 'Page image'}
                                         className={cn("w-full h-full object-cover", imageClassName)}
                                     />

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Head, router, Link, usePage } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
+import { useSessionGuard } from '@/hooks/useSessionGuard';
 import {
     LayoutDashboard,
     User,
@@ -12,7 +13,6 @@ import {
     Briefcase,
     Users,
     Heart,
-    FileText,
     HelpCircle,
     Menu,
     ChevronLeft,
@@ -21,7 +21,8 @@ import {
     GraduationCap,
     MessageCircle,
     Bell,
-    UserCheck
+    UserCheck,
+    Layers
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import AppearanceToggleDropdown from '@/components/appearance-dropdown';
@@ -57,7 +58,7 @@ const alumniNavigation = [
         section: "Communication",
         items: [
             { name: "Messages", href: "/alumni/messages", icon: MessageCircle },
-            { name: "Announcements", href: "/alumni/announcements", icon: Bell }
+            { name: "Content Feed", href: "/alumni/content", icon: Layers }
         ]
     },
     {
@@ -72,7 +73,6 @@ const alumniNavigation = [
         section: "Career & Networking",
         items: [
             { name: "Career Timeline", href: "/alumni/career", icon: TrendingUp },
-            { name: "Job Board", href: "/alumni/job-board", icon: Briefcase },
             { name: "Alumni Network", href: "/alumni/network", icon: Users },
             { name: "My Connections", href: "/alumni/connections", icon: UserCheck },
             { name: "Mentorship", href: "/alumni/mentorship", icon: Heart }
@@ -81,11 +81,21 @@ const alumniNavigation = [
     {
         section: "Resources",
         items: [
-            { name: "Documents", href: "/alumni/documents", icon: FileText },
             { name: "Help & Support", href: "/alumni/help", icon: HelpCircle }
         ]
     }
 ];
+
+const getLogoUrl = (path: string | null): string => {
+    if (!path) return '';
+    if (path.startsWith('http') || path.startsWith('/')) return path;
+    return `/api/v1/assets/${path}`;
+};
+
+const getFileUrl = (path: string): string => {
+    if (path.startsWith('http') || path.startsWith('/')) return path;
+    return `/api/v1/files/${path}`;
+};
 
 export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: AlumniBaseLayoutProps) {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -94,6 +104,9 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
         logoLight: string | null;
         logoDark: string | null;
     }>({ logoLight: null, logoDark: null });
+
+    // Guard against stale sessions after standby/sleep
+    useSessionGuard();
 
     // Get user from Inertia's shared props
     const { auth } = usePage<{ auth: { user: UserData } }>().props;
@@ -151,7 +164,7 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                 {appearanceSettings.logoLight || appearanceSettings.logoDark ? (
                     <div className="flex items-center">
                         <img
-                            src={`/storage/${document.documentElement.classList.contains('dark') && appearanceSettings.logoDark ? appearanceSettings.logoDark : appearanceSettings.logoLight || appearanceSettings.logoDark}`}
+                            src={getLogoUrl(document.documentElement.classList.contains('dark') && appearanceSettings.logoDark ? appearanceSettings.logoDark : appearanceSettings.logoLight || appearanceSettings.logoDark)}
                             alt="Logo"
                             className="h-8 w-8 object-contain flex-shrink-0"
                         />
@@ -226,7 +239,7 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                     <div className="h-8 w-8 bg-maroon-600 dark:bg-maroon-700 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
                         {currentUser?.profile_picture_path ? (
                             <img
-                                src={currentUser.profile_picture_path.startsWith('/storage') ? currentUser.profile_picture_path : `/storage/${currentUser.profile_picture_path}`}
+                                src={getFileUrl(currentUser.profile_picture_path)}
                                 alt="Profile"
                                 className="w-full h-full object-cover"
                             />
@@ -336,7 +349,7 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
 
                     {/* Page Content - Scrollable */}
                     <main className="flex-1 overflow-y-auto bg-beige-50 dark:bg-gray-950 scrollbar-none">
-                        <div className="container mx-auto px-4 pt-6 pb-8 max-w-7xl min-h-full">
+                        <div className="container mx-auto px-4 pt-6 pb-8 max-w-7xl min-h-full animate-fade-in-up">
                             {children}
                         </div>
                     </main>

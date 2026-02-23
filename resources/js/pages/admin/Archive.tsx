@@ -6,6 +6,8 @@ import {
     Briefcase, MessageCircle, History, AlertTriangle, X, ArrowUpDown
 } from 'lucide-react';
 import axios from 'axios';
+import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface ArchiveItem {
     id: number;
@@ -60,6 +62,7 @@ const typeColors: Record<string, string> = {
 
 export default function ArchivePage({ user }: { user: { id: number; email: string; role: string; status: string;[key: string]: unknown } }) {
     const [items, setItems] = useState<ArchiveItem[]>([]);
+    const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
     const [meta, setMeta] = useState<ArchiveMeta>({ total: 0, per_page: 20, current_page: 1, last_page: 1 });
     const [counts, setCounts] = useState<Record<string, TypeCount>>({});
     const [loading, setLoading] = useState(true);
@@ -167,7 +170,8 @@ export default function ArchivePage({ user }: { user: { id: number; email: strin
 
     const handleBulkDelete = async () => {
         if (selectedItems.size === 0) return;
-        if (!confirm(`Permanently delete ${selectedItems.size} item(s)? This cannot be undone.`)) return;
+        const ok = await confirm({ title: 'Delete Permanently', message: `Permanently delete ${selectedItems.size} item(s)? This cannot be undone.`, variant: 'destructive', confirmLabel: 'Delete' });
+        if (!ok) return;
         setActionLoading('bulk-delete');
         try {
             const itemsArr = Array.from(selectedItems).map(key => {
@@ -539,6 +543,7 @@ export default function ArchivePage({ user }: { user: { id: number; email: strin
                     </div>
                 )}
             </div>
+            <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
         </AdminBaseLayout>
     );
 }

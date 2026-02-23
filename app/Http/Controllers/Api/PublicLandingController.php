@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Announcement;
 use App\Models\JobPosting;
+use App\Models\Content;
 use App\Models\AlumniProfile;
 use App\Models\User;
+use App\Models\LandingContent;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +17,8 @@ class PublicLandingController extends Controller
 {
     /**
      * Helper to get the correct image URL.
-     * Returns external URLs as-is, prepends /storage/ to local paths.
+     * Returns external URLs as-is, uses /api/v1/assets/ for local paths
+     * (public landing page content served without authentication).
      */
     private function getImageUrl(?string $path): ?string
     {
@@ -28,13 +31,18 @@ class PublicLandingController extends Controller
             return $path;
         }
         
-        // If it already has /storage prefix, return as-is
-        if (str_starts_with($path, '/storage')) {
+        // If it already has /api/ prefix, return as-is
+        if (str_starts_with($path, '/api/')) {
             return $path;
         }
         
-        // Otherwise, prepend /storage/
-        return '/storage/' . $path;
+        // Strip legacy /storage/ prefix if present
+        if (str_starts_with($path, '/storage/')) {
+            $path = substr($path, 9);
+        }
+        
+        // Serve through public assets route (no auth required for landing page)
+        return '/api/v1/assets/' . $path;
     }
 
     /**
@@ -44,8 +52,9 @@ class PublicLandingController extends Controller
     {
         $limit = $request->get('limit', 6);
         
-        $announcements = Announcement::where('status', 'published')
-            ->where('show_on_landing', true)
+        $announcements = Content::where('content_type', 'announcement')
+            ->where('status', 'published')
+            ->where('is_featured', true) // For landing page, show featured announcements
             ->where(function ($q) {
                 $q->whereNull('expires_at')
                   ->orWhere('expires_at', '>', now());
@@ -114,8 +123,9 @@ class PublicLandingController extends Controller
     {
         $limit = $request->get('limit', 6);
         
-        $jobs = JobPosting::where('status', 'published')
-            ->where('show_on_landing', true)
+        $jobs = Content::where('content_type', 'job')
+            ->where('status', 'published')
+            ->where('is_featured', true) // For landing page, show featured jobs
             ->where(function ($q) {
                 $q->whereNull('application_deadline')
                   ->orWhere('application_deadline', '>', now());
@@ -126,14 +136,15 @@ class PublicLandingController extends Controller
                 'slug',
                 'company_name',
                 'company_logo',
-                'poster_image',
-                'description',
+                'featured_image',
+                'content',
                 'pages',
                 'use_pages',
                 'location',
                 'job_type',
-                'salary_range',
-                'is_remote',
+                'salary_min',
+                'salary_max',
+                'work_arrangement',
                 'is_featured',
                 'application_deadline',
                 'published_at',
@@ -158,22 +169,31 @@ class PublicLandingController extends Controller
                 }, $pages);
             }
 
+            // Format salary range
+            $salaryRange = null;
+            if ($job->salary_min || $job->salary_max) {
+                $salaryRange = ($job->salary_min ? '₱' . number_format($job->salary_min) : '') . 
+                    ($job->salary_min && $job->salary_max ? ' - ' : '') . 
+                    ($job->salary_max ? '₱' . number_format($job->salary_max) : '');
+            }
+
             return [
                 'id' => $job->id,
                 'title' => $job->title,
                 'slug' => $job->slug,
                 'company_name' => $job->company_name,
                 'company_logo' => $this->getImageUrl($job->company_logo),
-                'poster_image' => $this->getImageUrl($job->poster_image),
-                'description' => \Illuminate\Support\Str::limit(strip_tags($job->description), 120),
-                'full_description' => $job->description,
+                'poster_image' => $this->getImageUrl($job->featured_image),
+                'description' => \Illuminate\Support\Str::limit(strip_tags($job->content), 120),
+                'full_description' => $job->content,
                 'pages' => $pages,
                 'use_pages' => (bool) $job->use_pages,
                 'location' => $job->location,
                 'job_type' => $job->job_type,
                 'job_type_label' => $this->getJobTypeLabel($job->job_type),
-                'salary_range' => $job->salary_range,
-                'is_remote' => $job->is_remote,
+                'salary_range' => $salaryRange,
+                'is_remote' => $job->work_arrangement === 'remote',
+                'work_arrangement' => $job->work_arrangement,
                 'is_featured' => $job->is_featured,
                 'application_deadline' => $job->application_deadline?->format('M d, Y'),
                 'published_at' => $job->published_at?->format('M d, Y'),
@@ -350,5 +370,86 @@ class PublicLandingController extends Controller
         ];
 
         return $labels[$type] ?? ucfirst(str_replace('_', ' ', $type));
+    }
+
+    /**
+     * Get custom landing page content.
+     */
+    public function getContent(Request $request): JsonResponse
+    {
+        $query = LandingContent::where('is_active', true)
+            ->where('is_published', true)
+            ->where(function ($q) {
+                $q->whereNull('published_at')
+                  ->orWhere('published_at', '<=', now());
+            })
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                  ->orWhere('expires_at', '>', now());
+            });
+
+        // Filter by campus
+        if ($request->has('campus_id')) {
+            $campusId = $request->campus_id;
+            $query->where(function ($q) use ($campusId) {
+                $q->where('campus_id', $campusId)
+                  ->orWhere('is_multi_campus', true)
+                  ->orWhereNull('campus_id');
+            });
+        }
+
+        // Filter by content type
+        if ($request->has('type')) {
+            $query->where('content_type', $request->type);
+        }
+
+        $contents = $query->orderBy('display_order', 'asc')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Transform data for frontend
+        $contents = $contents->map(function ($content) {
+            // Process gallery images
+            $galleryImages = $content->gallery_images;
+            if (is_array($galleryImages)) {
+                $galleryImages = array_map(fn($img) => $this->getImageUrl($img), $galleryImages);
+            }
+
+            // Process pages images
+            $pages = $content->pages;
+            if (is_array($pages)) {
+                $pages = array_map(function ($page) {
+                    if (!empty($page['image'])) {
+                        $page['image'] = $this->getImageUrl($page['image']);
+                    }
+                    return $page;
+                }, $pages);
+            }
+
+            return [
+                'id' => $content->id,
+                'title' => $content->title,
+                'description' => $content->description,
+                'content_type' => $content->content_type,
+                'media_url' => $content->media_url,
+                'media_file_url' => $this->getImageUrl($content->media_file),
+                'thumbnail_url' => $this->getImageUrl($content->thumbnail),
+                'gallery_images' => $galleryImages,
+                'content' => $content->content,
+                'pages' => $pages,
+                'use_pages' => (bool) $content->use_pages,
+                'metadata' => $content->metadata,
+                'layout' => $content->layout,
+                'background_color' => $content->background_color,
+                'text_color' => $content->text_color,
+                'section_id' => $content->section_id,
+                'display_order' => $content->display_order,
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $contents,
+        ]);
     }
 }

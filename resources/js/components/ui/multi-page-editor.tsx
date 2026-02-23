@@ -286,7 +286,7 @@ export function MultiPageEditor({
                                             {page.image ? (
                                                 <div className="relative mt-2 inline-block">
                                                     <img
-                                                        src={page.image.startsWith('http') ? page.image : `/storage/${page.image}`}
+                                                        src={page.image.startsWith('http') || page.image.startsWith('/') ? page.image : `/api/v1/files/${page.image}`}
                                                         alt="Page image"
                                                         className="h-32 w-auto rounded-lg object-cover"
                                                     />

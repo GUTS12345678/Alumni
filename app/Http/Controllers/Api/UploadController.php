@@ -31,19 +31,21 @@ class UploadController extends Controller
         ]);
 
         $type = $request->input('type', 'general');
-        $folder = "uploads/{$type}s";
+        // Store directly in the type folder (e.g., 'jobs', 'announcements')
+        // matching the existing structure
+        $folder = $type === 'job' ? 'jobs' : ($type === 'announcement' ? 'announcements' : 'general');
         
         // Generate unique filename
         $file = $request->file('image');
         $filename = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
         
-        // Store the file
-        $path = $file->storeAs($folder, $filename, 'public');
+        // Store the file in private uploads disk (not publicly accessible)
+        $path = $file->storeAs($folder, $filename, 'uploads');
 
         return response()->json([
             'success' => true,
             'path' => $path,
-            'url' => Storage::url($path),
+            'url' => private_url($path),
             'message' => 'Image uploaded successfully.',
         ]);
     }
@@ -68,16 +70,25 @@ class UploadController extends Controller
 
         $path = $request->input('path');
         
-        // Ensure the path is within uploads folder
-        if (!str_starts_with($path, 'uploads/')) {
+        // Ensure the path is within allowed folders (jobs, announcements, general, profile_images)
+        $allowedFolders = ['jobs/', 'announcements/', 'general/', 'profile_images/', 'departments/', 'appearance/'];
+        $isAllowed = false;
+        foreach ($allowedFolders as $folder) {
+            if (str_starts_with($path, $folder)) {
+                $isAllowed = true;
+                break;
+            }
+        }
+        
+        if (!$isAllowed) {
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid file path.',
             ], 400);
         }
 
-        if (Storage::disk('public')->exists($path)) {
-            Storage::disk('public')->delete($path);
+        if (Storage::disk('uploads')->exists($path)) {
+            Storage::disk('uploads')->delete($path);
             
             return response()->json([
                 'success' => true,

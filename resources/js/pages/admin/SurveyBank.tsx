@@ -26,7 +26,8 @@ import {
     BarChart3,
     Clock,
     X,
-    List
+    List,
+    ChevronDown
 } from 'lucide-react';
 import {
     Dialog,
@@ -35,6 +36,12 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
     Select,
     SelectContent,
@@ -46,6 +53,7 @@ import { Textarea } from '@/components/ui/textarea';
 import axios from 'axios';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import QuestionsManager from '@/components/QuestionsManager';
+import { useAdminChannel } from '@/hooks/useAdminChannel';
 
 interface Survey {
     id: number;
@@ -161,6 +169,14 @@ export default function SurveyBank({ user }: Props) {
         fetchSurveys();
     }, [selectedCampus?.id]);
 
+    // Real-time: refresh when survey responses come in
+    useAdminChannel({
+        onSurveyResponse: () => fetchSurveys(),
+        onContentChange: (data) => {
+            if (data.content_type === 'survey') fetchSurveys();
+        },
+    });
+
     // Debounced search effect
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -174,7 +190,7 @@ export default function SurveyBank({ user }: Props) {
         return () => clearTimeout(timer);
     }, [searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const handleExport = async () => {
+    const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
         try {
             const token = localStorage.getItem('auth_token');
             if (!token) {
@@ -184,10 +200,12 @@ export default function SurveyBank({ user }: Props) {
 
             const params = new URLSearchParams();
             if (searchTerm) params.append('search', searchTerm);
+            params.append('format', format);
+            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
 
             const response = await axios.get(`/api/v1/admin/surveys/export?${params}`, {
                 headers: {
-                    'Accept': 'text/csv',
+                    'Accept': 'application/octet-stream',
                     'Authorization': `Bearer ${token}`,
                     'X-Requested-With': 'XMLHttpRequest',
                 },
@@ -195,17 +213,18 @@ export default function SurveyBank({ user }: Props) {
             });
 
             // Create blob from response
-            const blob = new Blob([response.data], { type: 'text/csv' });
+            const blob = new Blob([response.data]);
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = url;
-            a.download = `surveys-export-${new Date().toISOString().split('T')[0]}.csv`;
+            const extension = format === 'excel' ? 'xlsx' : format;
+            a.download = `surveys-export-${new Date().toISOString().split('T')[0]}.${extension}`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
-            alert('Surveys data exported successfully!');
+            alert(`Surveys data exported successfully as ${format.toUpperCase()}!`);
         } catch (error) {
             console.error('Export error:', error);
             alert('Failed to export surveys data. Please try again.');
@@ -252,8 +271,8 @@ export default function SurveyBank({ user }: Props) {
             description: survey.description,
             target_audience: survey.target_audience,
             status: survey.status,
-            start_date: survey.start_date || '',
-            end_date: survey.end_date || ''
+            start_date: survey.start_date ? survey.start_date.substring(0, 10) : '',
+            end_date: survey.end_date ? survey.end_date.substring(0, 10) : ''
         });
         setEditModalOpen(true);
     };
@@ -377,7 +396,7 @@ export default function SurveyBank({ user }: Props) {
                         <p className="text-maroon-600 dark:text-gray-400">Create, manage and analyze alumni surveys</p>
                     </div>
 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <Button
                             onClick={() => fetchSurveys()}
                             variant="outline"
@@ -385,27 +404,45 @@ export default function SurveyBank({ user }: Props) {
                             disabled={refreshing}
                             className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                         >
-                            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                            Refresh
+                            <RefreshCw className={`h-4 w-4 sm:mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                            <span className="hidden sm:inline">Refresh</span>
                         </Button>
 
-                        <Button
-                            onClick={handleExport}
-                            variant="outline"
-                            size="sm"
-                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
-                        >
-                            <Download className="h-4 w-4 mr-2" />
-                            Export Data
-                        </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
+                                >
+                                    <Download className="h-4 w-4 sm:mr-2" />
+                                    <span className="hidden sm:inline">Export</span>
+                                    <ChevronDown className="h-4 w-4 sm:ml-2" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleExport('csv')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as CSV
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('excel')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as Excel
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Export as PDF
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
                         <Button
                             onClick={handleNewSurvey}
                             className="bg-maroon-700 hover:bg-maroon-800 text-white"
                             size="sm"
                         >
-                            <Plus className="h-4 w-4 mr-2" />
-                            New Survey
+                            <Plus className="h-4 w-4 sm:mr-2" />
+                            <span className="hidden sm:inline">New Survey</span>
                         </Button>
                     </div>
                 </div>
@@ -680,7 +717,7 @@ export default function SurveyBank({ user }: Props) {
 
                 {/* View Survey Modal */}
                 <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-gray-800">
+                    <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto dark:bg-gray-800">
                         <DialogHeader className="relative">
                             <Button
                                 variant="ghost"
@@ -831,7 +868,7 @@ export default function SurveyBank({ user }: Props) {
 
                 {/* Edit Survey Modal */}
                 <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-gray-800">
+                    <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto dark:bg-gray-800">
                         <DialogHeader className="relative">
                             <Button
                                 variant="ghost"

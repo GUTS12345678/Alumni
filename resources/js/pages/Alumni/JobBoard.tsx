@@ -535,7 +535,7 @@ export default function JobBoard() {
                                         )}
                                         <div
                                             className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2 mb-4 prose prose-sm max-w-none"
-                                            dangerouslySetInnerHTML={{ __html: job.description }}
+                                            dangerouslySetInnerHTML={{ __html: job.content }}
                                         />
                                         {job.expires_at && (
                                             <div className="flex items-center text-amber-600 dark:text-amber-400 text-xs mb-3">
@@ -682,7 +682,7 @@ export default function JobBoard() {
                                     ) : (
                                         <div
                                             className="text-sm text-gray-600 dark:text-gray-400 prose prose-sm max-w-none dark:prose-invert"
-                                            dangerouslySetInnerHTML={{ __html: selectedJob.description }}
+                                            dangerouslySetInnerHTML={{ __html: selectedJob.content }}
                                         />
                                     )}
                                 </div>

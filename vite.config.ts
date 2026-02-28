@@ -18,7 +18,41 @@ export default defineConfig({
         rollupOptions: {
             output: {
                 manualChunks: {
+                    // Heavy charting library – only loaded on pages with charts
                     recharts: ['recharts'],
+                    // Real-time WebSocket – lazy-loaded, kept separate
+                    'vendor-echo': ['pusher-js', 'laravel-echo'],
+                    // Rich text editor – only loaded in ContentManagement
+                    'vendor-tiptap': [
+                        '@tiptap/react',
+                        '@tiptap/starter-kit',
+                        '@tiptap/extension-image',
+                        '@tiptap/extension-link',
+                        '@tiptap/extension-underline',
+                        '@tiptap/extension-text-align',
+                        '@tiptap/extension-placeholder',
+                        '@tiptap/extension-color',
+                        '@tiptap/extension-text-style',
+                        '@tiptap/extension-highlight',
+                        '@tiptap/extension-typography',
+                    ],
+                    // Radix UI primitives – shared across many pages
+                    'vendor-radix': [
+                        '@radix-ui/react-dialog',
+                        '@radix-ui/react-dropdown-menu',
+                        '@radix-ui/react-select',
+                        '@radix-ui/react-tabs',
+                        '@radix-ui/react-tooltip',
+                        '@radix-ui/react-scroll-area',
+                        '@radix-ui/react-checkbox',
+                        '@radix-ui/react-radio-group',
+                        '@radix-ui/react-switch',
+                        '@radix-ui/react-separator',
+                        '@radix-ui/react-label',
+                        '@radix-ui/react-slot',
+                        '@radix-ui/react-avatar',
+                        '@radix-ui/react-progress',
+                    ],
                 },
             },
         },

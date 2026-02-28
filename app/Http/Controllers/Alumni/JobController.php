@@ -29,7 +29,7 @@ class JobController extends Controller
             $query->where(function($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
                   ->orWhere('company_name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                  ->orWhere('content', 'like', "%{$search}%");
             });
         }
 
@@ -77,7 +77,7 @@ class JobController extends Controller
             'location' => 'required|string|max:255',
             'job_type' => 'required|in:full_time,part_time,contract,remote',
             'experience_level' => 'required|in:entry,mid,senior',
-            'description' => 'required|string',
+            'content' => 'required|string',
             'requirements' => 'nullable|string',
             'salary_min' => 'nullable|numeric|min:0',
             'salary_max' => 'nullable|numeric|min:0|gte:salary_min',
@@ -98,7 +98,11 @@ class JobController extends Controller
 
         $job = JobPosting::create([
             'user_id' => $user->id,
-            ...$request->all(),
+            ...$request->only([
+                'title', 'company_name', 'location', 'job_type', 'experience_level',
+                'content', 'requirements', 'salary_min', 'salary_max', 'salary_currency',
+                'application_email', 'application_url', 'deadline', 'skills_required',
+            ]),
             'status' => 'active',
         ]);
 
@@ -124,7 +128,7 @@ class JobController extends Controller
             'location' => 'required|string|max:255',
             'job_type' => 'required|in:full_time,part_time,contract,remote',
             'experience_level' => 'required|in:entry,mid,senior',
-            'description' => 'required|string',
+            'content' => 'required|string',
             'requirements' => 'nullable|string',
             'salary_min' => 'nullable|numeric|min:0',
             'salary_max' => 'nullable|numeric|min:0|gte:salary_min',
@@ -147,7 +151,11 @@ class JobController extends Controller
             ->where('user_id', $user->id)
             ->firstOrFail();
 
-        $job->update($request->all());
+        $job->update($request->only([
+            'title', 'company_name', 'location', 'job_type', 'experience_level',
+            'content', 'requirements', 'salary_min', 'salary_max', 'salary_currency',
+            'application_email', 'application_url', 'deadline', 'skills_required', 'status',
+        ]));
 
         ActivityLog::logActivity(
             $user->id,
@@ -257,7 +265,7 @@ class JobController extends Controller
                 'location' => $job->location,
                 'job_type' => $job->job_type,
                 'experience_level' => $job->experience_level,
-                'description' => $job->description,
+                'content' => $job->content,
                 'requirements' => $job->requirements,
                 'formatted_salary' => $job->formatted_salary,
                 'deadline' => $job->deadline,
@@ -339,14 +347,19 @@ class JobController extends Controller
             ->latest()
             ->paginate(12);
 
-        // Calculate stats
+        // Calculate stats with single query
+        $statusCounts = JobApplication::where('user_id', $user->id)
+            ->selectRaw('status, count(*) as count')
+            ->groupBy('status')
+            ->pluck('count', 'status');
+
         $stats = [
-            'total' => JobApplication::where('user_id', $user->id)->count(),
-            'pending' => JobApplication::where('user_id', $user->id)->where('status', 'pending')->count(),
-            'reviewed' => JobApplication::where('user_id', $user->id)->where('status', 'reviewed')->count(),
-            'shortlisted' => JobApplication::where('user_id', $user->id)->where('status', 'shortlisted')->count(),
-            'rejected' => JobApplication::where('user_id', $user->id)->where('status', 'rejected')->count(),
-            'accepted' => JobApplication::where('user_id', $user->id)->where('status', 'accepted')->count(),
+            'total' => $statusCounts->sum(),
+            'pending' => $statusCounts->get('pending', 0),
+            'reviewed' => $statusCounts->get('reviewed', 0),
+            'shortlisted' => $statusCounts->get('shortlisted', 0),
+            'rejected' => $statusCounts->get('rejected', 0),
+            'accepted' => $statusCounts->get('accepted', 0),
         ];
 
         return Inertia::render('Alumni/MyApplications', [

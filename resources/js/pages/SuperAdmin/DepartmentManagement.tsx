@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import { useCampus } from '@/contexts/CampusContext';
-import { AnimatePresence, motion } from 'framer-motion';
 import {
     Building,
     Plus,
@@ -676,15 +675,13 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                     )}
 
                                     {/* Analytics Expandable Section */}
-                                    <AnimatePresence>
-                                        {expandedAnalytics === department.id && (
-                                            <motion.div
-                                                initial={{ height: 0, opacity: 0 }}
-                                                animate={{ height: "auto", opacity: 1 }}
-                                                exit={{ height: 0, opacity: 0 }}
-                                                transition={{ duration: 0.3 }}
-                                                className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden mb-4"
-                                            >
+                                    {expandedAnalytics === department.id && (
+                                        <div
+                                            className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-lg overflow-hidden mb-4 animate-expand"
+                                            style={{
+                                                animation: 'expandIn 0.3s ease forwards',
+                                            }}
+                                        >
                                                 {loadingAnalytics[department.id] ? (
                                                     <div className="p-6 flex justify-center">
                                                         <RefreshCw className="h-6 w-6 animate-spin text-maroon-600" />
@@ -800,9 +797,8 @@ export default function DepartmentManagement({ auth }: PageProps) {
                                                         No analytics data available
                                                     </div>
                                                 )}
-                                            </motion.div>
+                                            </div>
                                         )}
-                                    </AnimatePresence>
 
                                     {/* Actions */}
                                     <div className="flex items-center gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">

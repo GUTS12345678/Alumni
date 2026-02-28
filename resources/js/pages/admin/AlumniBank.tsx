@@ -23,11 +23,14 @@ import {
     DialogHeader,
     DialogTitle,
 } from '../../components/ui/dialog';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
+    DropdownMenuSeparator,
+    DropdownMenuLabel,
 } from '../../components/ui/dropdown-menu';
 import {
     Users,
@@ -59,13 +62,18 @@ import {
     School,
     Award,
     Heart,
-    Briefcase as BriefcaseIcon
+    Briefcase as BriefcaseIcon,
+    Archive,
 } from 'lucide-react';
 import AdminBaseLayout from '../../components/base/AdminBaseLayout';
 import { useMultiSelect, BulkActionBar, SelectAllCheckbox } from '../../components/ui/multi-select';
 import { useCampus } from '@/contexts/CampusContext';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useToast } from '@/hooks/use-toast';
+import { useExport } from '@/hooks/useExport';
+import { ExportProgressDialog } from '@/components/ExportProgressDialog';
+
 
 interface User {
     id: number;
@@ -82,13 +90,52 @@ interface AlumniProfile {
     id: number;
     first_name: string;
     last_name: string;
+    middle_name?: string;
+    maiden_name?: string;
+    suffix?: string;
+    student_id?: string;
     email?: string;
     phone?: string;
+    mobile_no?: string;
+    alternate_email?: string;
+    birth_date?: string;
+    age?: number;
+    gender?: string;
+    place_of_birth?: string;
+    civil_status?: string;
+    spouse_name?: string;
+    number_of_children?: number;
+    current_address?: string;
+    city?: string;
+    state_province?: string;
+    postal_code?: string;
+    country?: string;
     degree_program: string;
+    major?: string;
+    minor?: string;
     graduation_year: number;
+    enrollment_year?: number;
+    honors_awards?: string;
     employment_status: string;
     current_employer?: string;
     current_job_title?: string;
+    company_address?: string;
+    company_industry?: string;
+    salary_range?: string;
+    average_monthly_income?: string;
+    job_level_position?: string;
+    major_line_of_business?: string;
+    job_related_to_degree?: boolean;
+    job_aligned_to_course?: string;
+    years_of_service?: string;
+    date_hired?: string;
+    about_me?: string;
+    career_goals?: string;
+    achievements?: string;
+    skills?: string;
+    certifications?: string;
+    willing_to_mentor?: boolean;
+    willing_to_hire_alumni?: boolean;
     created_at: string;
     import_source?: string | null;
     imported_at?: string | null;
@@ -109,6 +156,8 @@ export default function AlumniBank({ user }: Props) {
     const [alumni, setAlumni] = useState<AlumniProfile[]>([]);
     const [loading, setLoading] = useState(true);
     const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
+    const { toast } = useToast();
+    const { exportData, cancelExport, ...exportState } = useExport();
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -239,6 +288,7 @@ export default function AlumniBank({ user }: Props) {
         batch_id: '',
         department_id: '',
         duplicate_action: 'skip' as 'skip' | 'update',
+        template_type: 'old' as 'old' | 'new',
     });
     const [importResults, setImportResults] = useState<any>(null);
 
@@ -251,7 +301,10 @@ export default function AlumniBank({ user }: Props) {
                 last_name: selectedAlumni.last_name || '',
                 email: selectedAlumni.user?.email || selectedAlumni.email || '',
                 phone: selectedAlumni.phone || '',
+                gender: selectedAlumni.gender || '',
+                current_address: selectedAlumni.current_address || '',
                 degree_program: selectedAlumni.degree_program || '',
+                major: selectedAlumni.major || '',
                 employment_status: selectedAlumni.employment_status || '',
                 current_employer: selectedAlumni.current_employer || '',
                 current_job_title: selectedAlumni.current_job_title || '',
@@ -304,9 +357,25 @@ export default function AlumniBank({ user }: Props) {
     // Multi-select state
     const multiSelect = useMultiSelect<number>();
     const [isDeleting, setIsDeleting] = useState(false);
+    const [archivedCount, setArchivedCount] = useState(0);
 
     // Campus filter
     const { selectedCampus } = useCampus();
+
+    // Helper to build headers for API calls — uses cookie auth (credentials: include)
+    // and adds Bearer token only if one exists in localStorage
+    const getApiHeaders = (accept = 'application/json'): Record<string, string> => {
+        const headers: Record<string, string> = {
+            'Accept': accept,
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+        };
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        return headers;
+    };
 
     // Debounce search term
     useEffect(() => {
@@ -315,16 +384,12 @@ export default function AlumniBank({ user }: Props) {
         }, 300); // 300ms delay
 
         return () => clearTimeout(timer);
-    }, [searchTerm]); const fetchAlumniCallback = React.useCallback(async () => {
+    }, [searchTerm]);
+
+    const fetchAlumniCallback = React.useCallback(async () => {
         try {
             setLoading(currentPage === 1);
             setRefreshing(currentPage !== 1);
-
-            const token = localStorage.getItem('auth_token');
-            if (!token) {
-                window.location.href = '/login';
-                return;
-            }
 
             const params = new URLSearchParams();
             if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
@@ -339,16 +404,12 @@ export default function AlumniBank({ user }: Props) {
             params.append('per_page', '15');
 
             const response = await fetch(`/api/v1/admin/alumni?${params}`, {
-                headers: {
-                    'Accept': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
+                credentials: 'include',
+                headers: getApiHeaders(),
             });
 
             if (!response.ok) {
                 if (response.status === 401) {
-                    localStorage.removeItem('auth_token');
                     window.location.href = '/login';
                     return;
                 }
@@ -382,15 +443,9 @@ export default function AlumniBank({ user }: Props) {
     // Fetch available graduation years/batches
     const fetchAvailableYears = React.useCallback(async () => {
         try {
-            const token = localStorage.getItem('auth_token');
-            if (!token) return;
-
             const response = await fetch('/api/v1/admin/batches?per_page=100', {
-                headers: {
-                    'Accept': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
+                credentials: 'include',
+                headers: getApiHeaders(),
             });
 
             if (response.ok) {
@@ -447,7 +502,10 @@ export default function AlumniBank({ user }: Props) {
             last_name: alumni.last_name || '',
             email: alumni.user?.email || alumni.email || '',
             phone: alumni.phone || '',
+            gender: alumni.gender || '',
+            current_address: alumni.current_address || '',
             degree_program: alumni.degree_program || '',
+            major: alumni.major || '',
             employment_status: alumni.employment_status || '',
             current_employer: alumni.current_employer || '',
             current_job_title: alumni.current_job_title || '',
@@ -467,6 +525,7 @@ export default function AlumniBank({ user }: Props) {
 
             const response = await fetch(`/api/v1/admin/alumni/${editFormData.id}`, {
                 method: 'PUT',
+                credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
@@ -489,14 +548,14 @@ export default function AlumniBank({ user }: Props) {
                 setEditModalOpen(false);
                 setEditFormData({});
                 setSelectedAlumni(null);
-                alert('Alumni profile updated successfully!');
+                toast({ title: 'Profile Updated', description: 'Alumni profile updated successfully!' });
                 fetchAlumniCallback();
             } else {
-                alert('Failed to update alumni profile: ' + (data.message || 'Unknown error'));
+                toast({ title: 'Update Failed', description: data.message || 'Unknown error', variant: 'destructive' });
             }
         } catch (error: unknown) {
             console.error('Error updating alumni:', error);
-            alert('Failed to update alumni profile. Please try again.');
+            toast({ title: 'Error', description: 'Failed to update alumni profile. Please try again.', variant: 'destructive' });
         } finally {
             setUpdating(false);
         }
@@ -504,7 +563,7 @@ export default function AlumniBank({ user }: Props) {
 
     const handleCreateAlumni = async () => {
         if (!addFormData.first_name || !addFormData.last_name || !addFormData.email) {
-            alert('First name, last name, and email are required.');
+            toast({ title: 'Validation Error', description: 'First name, last name, and email are required.', variant: 'destructive' });
             return;
         }
 
@@ -522,6 +581,7 @@ export default function AlumniBank({ user }: Props) {
 
             const response = await fetch('/api/v1/admin/alumni', {
                 method: 'POST',
+                credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
@@ -536,17 +596,17 @@ export default function AlumniBank({ user }: Props) {
                 setAddModalOpen(false);
                 setAddFormData(initialAddFormData);
                 setAddStep(0);
-                alert(data.message || 'Alumni created successfully!');
+                toast({ title: 'Alumni Created', description: data.message || 'Alumni created successfully!', variant: 'default' });
                 fetchAlumniCallback();
             } else {
                 const errorMsg = data.errors
-                    ? Object.values(data.errors).flat().join('\n')
+                    ? Object.values(data.errors).flat().join(' ')
                     : data.message || 'Unknown error';
-                alert('Failed to create alumni: ' + errorMsg);
+                toast({ title: 'Failed to Create Alumni', description: errorMsg, variant: 'destructive' });
             }
         } catch (error: unknown) {
             console.error('Error creating alumni:', error);
-            alert('Failed to create alumni. Please try again.');
+            toast({ title: 'Error', description: 'Failed to create alumni. Please try again.', variant: 'destructive' });
         } finally {
             setCreating(false);
         }
@@ -563,6 +623,7 @@ export default function AlumniBank({ user }: Props) {
 
             const response = await fetch(`/api/v1/admin/alumni/${alumni.id}`, {
                 method: 'DELETE',
+                credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
@@ -577,14 +638,14 @@ export default function AlumniBank({ user }: Props) {
                 setAlumni((prevAlumni: AlumniProfile[]) =>
                     prevAlumni.filter((a: AlumniProfile) => a.id !== alumni.id)
                 );
-                alert('Alumni deleted successfully');
+                toast({ title: 'Alumni Deleted', description: 'Alumni deleted successfully.' });
                 fetchAlumniCallback();
             } else {
-                alert('Failed to delete alumni: ' + (data.message || 'Unknown error'));
+                toast({ title: 'Delete Failed', description: data.message || 'Unknown error', variant: 'destructive' });
             }
         } catch (error) {
             console.error('Delete error:', error);
-            alert('Failed to delete alumni. Please try again.');
+            toast({ title: 'Error', description: 'Failed to delete alumni. Please try again.', variant: 'destructive' });
         }
     };
 
@@ -599,6 +660,7 @@ export default function AlumniBank({ user }: Props) {
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
             const response = await fetch('/api/v1/admin/alumni/bulk-delete', {
                 method: 'DELETE',
+                credentials: 'include',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
@@ -615,65 +677,144 @@ export default function AlumniBank({ user }: Props) {
             if (response.ok && data.success) {
                 multiSelect.clearSelection();
                 fetchAlumniCallback();
-                alert(`Successfully deleted ${data.deleted_count} alumni`);
+                toast({ title: 'Bulk Delete Successful', description: `Successfully deleted ${data.deleted_count} alumni.` });
             } else {
                 throw new Error(data.message || 'Failed to delete');
             }
         } catch (error) {
             console.error('Bulk delete error:', error);
-            alert('Failed to delete alumni. Please try again.');
+            toast({ title: 'Error', description: 'Failed to delete alumni. Please try again.', variant: 'destructive' });
         } finally {
             setIsDeleting(false);
         }
     };
 
-    const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
+    const handleClearAllData = async () => {
+        const ok = await confirm({
+            title: 'Clear ALL Alumni Data',
+            message: 'This will permanently delete ALL alumni profiles and their associated user accounts. This action cannot be undone. Are you absolutely sure?',
+            variant: 'destructive',
+            confirmLabel: 'Yes, Clear Everything'
+        });
+        if (!ok) return;
+
+        // Double confirmation
+        const ok2 = await confirm({
+            title: 'Final Confirmation',
+            message: `You are about to delete ALL ${total} alumni records. Type-level confirmation: this is irreversible.`,
+            variant: 'destructive',
+            confirmLabel: 'Delete All Data'
+        });
+        if (!ok2) return;
+
         try {
-            const token = localStorage.getItem('auth_token');
-            if (!token) {
-                window.location.href = '/login';
-                return;
-            }
-
-            // Add current filters to export
-            const params = new URLSearchParams();
-            if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
-            if (filterStatus) params.append('employment_status', filterStatus);
-            if (filterYear) params.append('graduation_year', filterYear);
-            if (filterJobTitle) params.append('job_title', filterJobTitle);
-            if (filterEmployer) params.append('employer', filterEmployer);
-            if (filterCareerField) params.append('career_field', filterCareerField);
-            params.append('format', format);
-
-            const response = await fetch(`/api/v1/admin/alumni/export?${params}`, {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            const response = await fetch('/api/v1/admin/alumni/clear-all', {
+                method: 'DELETE',
+                credentials: 'include',
                 headers: {
-                    'Accept': 'application/octet-stream',
-                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken || '',
                     'X-Requested-With': 'XMLHttpRequest',
                 },
             });
 
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                const extension = format === 'excel' ? 'xlsx' : format;
-                a.download = `alumni-export-${new Date().toISOString().split('T')[0]}.${extension}`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
+            const data = await response.json();
 
-                alert(`Successfully exported ${format.toUpperCase()} file!`);
+            if (response.ok && data.success) {
+                fetchAlumniCallback();
+                toast({
+                    title: 'All Data Cleared',
+                    description: `Successfully deleted ${data.deleted_count} alumni profiles.`,
+                });
             } else {
-                alert('Failed to export alumni data. Please try again.');
+                throw new Error(data.message || 'Failed to clear data');
             }
         } catch (error) {
-            console.error('CSV export error:', error);
-            alert('Failed to export alumni data. Please try again.');
+            console.error('Clear all error:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to clear alumni data. Please try again.',
+                variant: 'destructive',
+            });
         }
+    };
+
+    // Fetch archived (soft-deleted) count
+    const fetchArchivedCount = useCallback(async () => {
+        try {
+            const response = await fetch('/api/v1/admin/alumni/archived-count', {
+                credentials: 'include',
+                headers: getApiHeaders(),
+            });
+            const data = await response.json();
+            if (data.success) setArchivedCount(data.count || 0);
+        } catch { /* ignore */ }
+    }, []);
+
+    useEffect(() => { fetchArchivedCount(); }, [fetchArchivedCount]);
+
+    const handleClearArchive = async () => {
+        if (archivedCount === 0) {
+            toast({ title: 'No Archived Data', description: 'There are no archived alumni records to clear.' });
+            return;
+        }
+
+        const ok = await confirm({
+            title: 'Permanently Delete Archive',
+            message: `This will permanently delete ${archivedCount} archived alumni record(s) and their user accounts. This action cannot be undone.`,
+            variant: 'destructive',
+            confirmLabel: 'Yes, Delete Permanently'
+        });
+        if (!ok) return;
+
+        try {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+            const response = await fetch('/api/v1/admin/alumni/clear-archive', {
+                method: 'DELETE',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken || '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            });
+
+            const data = await response.json();
+            if (response.ok && data.success) {
+                setArchivedCount(0);
+                toast({
+                    title: 'Archive Cleared',
+                    description: `Permanently deleted ${data.deleted_count} archived alumni records.`,
+                });
+            } else {
+                throw new Error(data.message || 'Failed to clear archive');
+            }
+        } catch (error) {
+            console.error('Clear archive error:', error);
+            toast({ title: 'Error', description: 'Failed to clear archive. Please try again.', variant: 'destructive' });
+        }
+    };
+
+    const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv', template: 'old' | 'new' = 'old') => {
+        const params: Record<string, string> = { template };
+        if (debouncedSearchTerm) params.search = debouncedSearchTerm;
+        if (filterStatus) params.employment_status = filterStatus;
+        if (filterYear) params.graduation_year = filterYear;
+        if (filterJobTitle) params.job_title = filterJobTitle;
+        if (filterEmployer) params.employer = filterEmployer;
+        if (filterCareerField) params.career_field = filterCareerField;
+
+        exportData({
+            url: '/api/v1/admin/alumni/export',
+            params,
+            filename: 'alumni-export',
+            format,
+            onSuccess: (f) => toast({ title: 'Export Successful', description: `Successfully exported ${f.toUpperCase()} file.` }),
+            onError: () => toast({ title: 'Export Failed', description: 'Failed to export alumni data. Please try again.', variant: 'destructive' }),
+        });
     };
 
     // ========== IMPORT HANDLERS ==========
@@ -681,11 +822,11 @@ export default function AlumniBank({ user }: Props) {
         const validExtensions = ['.xlsx', '.xls', '.csv'];
         const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
         if (!validExtensions.includes(ext)) {
-            alert('Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.');
+            toast({ title: 'Invalid File', description: 'Please upload an Excel (.xlsx, .xls) or CSV (.csv) file.', variant: 'destructive' });
             return;
         }
         if (file.size > 10 * 1024 * 1024) {
-            alert('File size must be under 10MB.');
+            toast({ title: 'File Too Large', description: 'File size must be under 10MB.', variant: 'destructive' });
             return;
         }
         setImportFile(file);
@@ -696,19 +837,14 @@ export default function AlumniBank({ user }: Props) {
         setImportLoading(true);
 
         try {
-            const token = localStorage.getItem('auth_token');
-            if (!token) { window.location.href = '/login'; return; }
-
             const formData = new FormData();
             formData.append('file', importFile);
+            formData.append('template_type', importConfig.template_type);
 
             const response = await fetch('/api/v1/admin/alumni/import/preview', {
                 method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
+                credentials: 'include',
+                headers: getApiHeaders(),
                 body: formData,
             });
 
@@ -721,11 +857,11 @@ export default function AlumniBank({ user }: Props) {
                 }
                 setImportStep('configure');
             } else {
-                alert(data.message || 'Failed to parse the file.');
+                toast({ title: 'Parse Failed', description: data.message || 'Failed to parse the file.', variant: 'destructive' });
             }
         } catch (error) {
             console.error('Import preview error:', error);
-            alert('Failed to process the file. Please check the format and try again.');
+            toast({ title: 'Error', description: 'Failed to process the file. Please check the format and try again.', variant: 'destructive' });
         } finally {
             setImportLoading(false);
         }
@@ -733,29 +869,24 @@ export default function AlumniBank({ user }: Props) {
 
     const handleImportExecute = async () => {
         if (!importFile) return;
-        if (!importConfig.campus_id) { alert('Please select a campus.'); return; }
+        if (!importConfig.campus_id) { toast({ title: 'Validation Error', description: 'Please select a campus.', variant: 'destructive' }); return; }
 
         setImportStep('importing');
         setImportLoading(true);
 
         try {
-            const token = localStorage.getItem('auth_token');
-            if (!token) { window.location.href = '/login'; return; }
-
             const formData = new FormData();
             formData.append('file', importFile);
             formData.append('campus_id', importConfig.campus_id);
             if (importConfig.batch_id) formData.append('batch_id', importConfig.batch_id);
             if (importConfig.department_id) formData.append('department_id', importConfig.department_id);
             formData.append('duplicate_action', importConfig.duplicate_action);
+            formData.append('template_type', importConfig.template_type);
 
             const response = await fetch('/api/v1/admin/alumni/import', {
                 method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
+                credentials: 'include',
+                headers: getApiHeaders(),
                 body: formData,
             });
 
@@ -766,12 +897,12 @@ export default function AlumniBank({ user }: Props) {
                 // Refresh the alumni list
                 fetchAlumniCallback();
             } else {
-                alert(data.message || 'Import failed.');
+                toast({ title: 'Import Failed', description: data.message || 'Import failed.', variant: 'destructive' });
                 setImportStep('preview');
             }
         } catch (error) {
             console.error('Import error:', error);
-            alert('Import failed. Please try again.');
+            toast({ title: 'Import Failed', description: 'Import failed. Please try again.', variant: 'destructive' });
             setImportStep('preview');
         } finally {
             setImportLoading(false);
@@ -782,7 +913,7 @@ export default function AlumniBank({ user }: Props) {
         setImportStep('upload');
         setImportFile(null);
         setImportPreviewData(null);
-        setImportConfig({ campus_id: '', batch_id: '', department_id: '', duplicate_action: 'skip' });
+        setImportConfig({ campus_id: '', batch_id: '', department_id: '', duplicate_action: 'skip', template_type: 'old' });
         setImportResults(null);
         setImportLoading(false);
         setImportDragOver(false);
@@ -797,33 +928,34 @@ export default function AlumniBank({ user }: Props) {
 
     const handleDownloadTemplate = async () => {
         try {
-            const token = localStorage.getItem('auth_token');
-            if (!token) { window.location.href = '/login'; return; }
+            const url = importConfig.template_type === 'new'
+                ? '/api/v1/admin/alumni/import/template-new'
+                : '/api/v1/admin/alumni/import/template';
+            const filename = importConfig.template_type === 'new'
+                ? 'Alumni_Extended_Import_Template.xlsx'
+                : '2025 Alumni Directory Template.xlsx';
 
-            const response = await fetch('/api/v1/admin/alumni/import/template', {
-                headers: {
-                    'Accept': 'application/octet-stream',
-                    'Authorization': `Bearer ${token}`,
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
+            const response = await fetch(url, {
+                credentials: 'include',
+                headers: getApiHeaders('application/octet-stream'),
             });
 
             if (response.ok) {
                 const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
+                const blobUrl = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = url;
-                a.download = '2025 Alumni Directory Template.xlsx';
+                a.href = blobUrl;
+                a.download = filename;
                 document.body.appendChild(a);
                 a.click();
-                window.URL.revokeObjectURL(url);
+                window.URL.revokeObjectURL(blobUrl);
                 document.body.removeChild(a);
             } else {
-                alert('Template not available. Please contact support.');
+                toast({ title: 'Not Available', description: 'Template not available. Please contact support.', variant: 'destructive' });
             }
         } catch (error) {
             console.error('Template download error:', error);
-            alert('Failed to download template.');
+            toast({ title: 'Download Failed', description: 'Failed to download template.', variant: 'destructive' });
         }
     };
     // ========== END IMPORT HANDLERS ==========
@@ -951,6 +1083,31 @@ export default function AlumniBank({ user }: Props) {
                             <span className="hidden sm:inline">Import</span>
                         </Button>
 
+                        <Button
+                            onClick={handleClearAllData}
+                            variant="outline"
+                            size="sm"
+                            className="border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30"
+                        >
+                            <Trash2 className="h-4 w-4 sm:mr-2" />
+                            <span className="hidden sm:inline">Clear Data</span>
+                        </Button>
+
+                        {archivedCount > 0 && (
+                            <Button
+                                onClick={handleClearArchive}
+                                variant="outline"
+                                size="sm"
+                                className="border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/30"
+                            >
+                                <Archive className="h-4 w-4 sm:mr-2" />
+                                <span className="hidden sm:inline">Clear Archive</span>
+                                <Badge variant="secondary" className="ml-1 bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 text-xs">
+                                    {archivedCount}
+                                </Badge>
+                            </Button>
+                        )}
+
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button
@@ -963,18 +1120,33 @@ export default function AlumniBank({ user }: Props) {
                                     <ChevronDown className="h-4 w-4 ml-2" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleExport('csv')}>
+                            <DropdownMenuContent align="end" className="w-56">
+                                <DropdownMenuLabel>Basic Format</DropdownMenuLabel>
+                                <DropdownMenuItem onClick={() => handleExport('csv', 'old')}>
                                     <FileText className="h-4 w-4 mr-2" />
-                                    Export as CSV
+                                    CSV (Basic)
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleExport('excel')}>
+                                <DropdownMenuItem onClick={() => handleExport('excel', 'old')}>
                                     <FileText className="h-4 w-4 mr-2" />
-                                    Export as Excel
+                                    Excel (Basic)
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                                <DropdownMenuItem onClick={() => handleExport('pdf', 'old')}>
                                     <FileText className="h-4 w-4 mr-2" />
-                                    Export as PDF
+                                    PDF (Basic)
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuLabel>Extended Format</DropdownMenuLabel>
+                                <DropdownMenuItem onClick={() => handleExport('csv', 'new')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    CSV (Extended)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('excel', 'new')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Excel (Extended)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleExport('pdf', 'new')}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    PDF (Extended)
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -1455,9 +1627,10 @@ export default function AlumniBank({ user }: Props) {
 
             {/* Alumni Detail Modal */}
             <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>
-                <DialogContent className="sm:max-w-2xl">
+                <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle className="text-xl text-maroon-800 dark:text-maroon-200">
+                        <DialogTitle className="text-xl text-maroon-800 dark:text-maroon-200 flex items-center gap-2">
+                            <Users className="h-5 w-5" />
                             Alumni Profile Details
                         </DialogTitle>
                         <DialogDescription className="dark:text-gray-400">
@@ -1466,103 +1639,129 @@ export default function AlumniBank({ user }: Props) {
                     </DialogHeader>
 
                     {selectedAlumni && (
-                        <div className="space-y-6">
-                            {/* Personal Information */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <Card className="border-beige-200 dark:border-gray-700">
-                                    <CardHeader className="pb-3">
-                                        <CardTitle className="text-lg text-maroon-800 dark:text-maroon-200 flex items-center">
-                                            <Users className="h-5 w-5 mr-2" />
-                                            Personal Information
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        <div>
-                                            <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Full Name</label>
-                                            <p className="text-sm text-gray-900 dark:text-gray-200">
-                                                {selectedAlumni.first_name} {selectedAlumni.last_name}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Email</label>
-                                            <p className="text-sm text-gray-900 dark:text-gray-200 flex items-center">
-                                                <Mail className="h-3 w-3 mr-1" />
-                                                {getAlumniEmail(selectedAlumni)}
-                                            </p>
-                                        </div>
-                                        {selectedAlumni.phone && (
-                                            <div>
-                                                <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Phone</label>
-                                                <p className="text-sm text-gray-900 dark:text-gray-200 flex items-center">
-                                                    <Phone className="h-3 w-3 mr-1" />
-                                                    {selectedAlumni.phone}
-                                                </p>
-                                            </div>
-                                        )}
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="border-beige-200">
-                                    <CardHeader className="pb-3">
-                                        <CardTitle className="text-lg text-maroon-800 flex items-center">
-                                            <GraduationCap className="h-5 w-5 mr-2" />
-                                            Education
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        <div>
-                                            <label className="text-sm font-medium text-gray-600">Degree Program</label>
-                                            <p className="text-sm text-gray-900">{selectedAlumni.degree_program}</p>
-                                        </div>
-                                        <div>
-                                            <label className="text-sm font-medium text-gray-600">Graduation Year</label>
-                                            <p className="text-sm text-gray-900">Class of {selectedAlumni.graduation_year}</p>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </div>
-
-                            {/* Employment Information */}
-                            <Card className="border-beige-200">
-                                <CardHeader className="pb-3">
-                                    <CardTitle className="text-lg text-maroon-800 flex items-center">
-                                        <Building className="h-5 w-5 mr-2" />
-                                        Employment Information
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-3">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-sm font-medium text-gray-600">Employment Status</label>
-                                            <div className="mt-1">
-                                                {getEmploymentStatusBadge(selectedAlumni.employment_status)}
-                                            </div>
-                                        </div>
-                                        {selectedAlumni.current_job_title && (
-                                            <div>
-                                                <label className="text-sm font-medium text-gray-600">Job Title</label>
-                                                <p className="text-sm text-gray-900">{selectedAlumni.current_job_title}</p>
-                                            </div>
+                        <div className="space-y-4">
+                            {/* Profile Header */}
+                            <div className="flex items-start gap-4 p-4 bg-gradient-to-r from-maroon-50 to-beige-50 dark:from-maroon-900/20 dark:to-gray-800/30 rounded-xl border border-maroon-100 dark:border-maroon-800/40">
+                                <div className="w-14 h-14 rounded-full bg-maroon-600 dark:bg-maroon-700 flex items-center justify-center flex-shrink-0">
+                                    <span className="text-lg font-bold text-white">
+                                        {selectedAlumni.first_name?.[0]}{selectedAlumni.last_name?.[0]}
+                                    </span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                                        {selectedAlumni.first_name} {selectedAlumni.middle_name ? selectedAlumni.middle_name + ' ' : ''}{selectedAlumni.last_name}{selectedAlumni.suffix ? ', ' + selectedAlumni.suffix : ''}
+                                    </h3>
+                                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                                        {selectedAlumni.degree_program}{selectedAlumni.major ? ' — ' + selectedAlumni.major : ''}
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                                        <Badge className="bg-maroon-100 text-maroon-700 dark:bg-maroon-900/40 dark:text-maroon-300">
+                                            <GraduationCap className="h-3 w-3 mr-1" /> Class of {selectedAlumni.graduation_year}
+                                        </Badge>
+                                        {getEmploymentStatusBadge(selectedAlumni.employment_status)}
+                                        {selectedAlumni.campus && (
+                                            <Badge variant="outline" className="dark:border-gray-600 dark:text-gray-300">
+                                                <School className="h-3 w-3 mr-1" /> {selectedAlumni.campus.name}
+                                            </Badge>
                                         )}
                                     </div>
-                                    {selectedAlumni.current_employer && (
-                                        <div>
-                                            <label className="text-sm font-medium text-gray-600">Current Employer</label>
-                                            <p className="text-sm text-gray-900">{selectedAlumni.current_employer}</p>
+                                </div>
+                            </div>
+
+                            {/* Tabbed Content */}
+                            <Tabs defaultValue="personal" className="w-full">
+                                <TabsList className="grid w-full grid-cols-4">
+                                    <TabsTrigger value="personal">Personal</TabsTrigger>
+                                    <TabsTrigger value="education">Education</TabsTrigger>
+                                    <TabsTrigger value="career">Career</TabsTrigger>
+                                    <TabsTrigger value="other">Other</TabsTrigger>
+                                </TabsList>
+
+                                {/* Personal Tab */}
+                                <TabsContent value="personal" className="mt-4 space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                                        <ViewField label="Full Name" value={`${selectedAlumni.first_name} ${selectedAlumni.middle_name || ''} ${selectedAlumni.last_name}${selectedAlumni.suffix ? ', ' + selectedAlumni.suffix : ''}`} />
+                                        {selectedAlumni.maiden_name && <ViewField label="Maiden Name" value={selectedAlumni.maiden_name} />}
+                                        {selectedAlumni.student_id && <ViewField label="Student ID" value={selectedAlumni.student_id} />}
+                                        <ViewField label="Email" value={getAlumniEmail(selectedAlumni)} icon={<Mail className="h-3.5 w-3.5" />} />
+                                        {selectedAlumni.phone && <ViewField label="Phone" value={selectedAlumni.phone} icon={<Phone className="h-3.5 w-3.5" />} />}
+                                        {selectedAlumni.mobile_no && <ViewField label="Mobile" value={selectedAlumni.mobile_no} icon={<Phone className="h-3.5 w-3.5" />} />}
+                                        {selectedAlumni.gender && <ViewField label="Gender" value={selectedAlumni.gender} />}
+                                        {selectedAlumni.birth_date && <ViewField label="Birth Date" value={selectedAlumni.birth_date} />}
+                                        {selectedAlumni.civil_status && <ViewField label="Civil Status" value={selectedAlumni.civil_status.replace(/_/g, ' ')} />}
+                                        {selectedAlumni.place_of_birth && <ViewField label="Place of Birth" value={selectedAlumni.place_of_birth} />}
+                                    </div>
+                                    {(selectedAlumni.current_address || selectedAlumni.city || selectedAlumni.country) && (
+                                        <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Address</p>
+                                            <p className="text-sm text-gray-900 dark:text-gray-200">
+                                                {[selectedAlumni.current_address, selectedAlumni.city, selectedAlumni.state_province, selectedAlumni.postal_code, selectedAlumni.country].filter(Boolean).join(', ')}
+                                            </p>
                                         </div>
                                     )}
-                                </CardContent>
-                            </Card>
+                                </TabsContent>
+
+                                {/* Education Tab */}
+                                <TabsContent value="education" className="mt-4 space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                                        <ViewField label="Degree Program" value={selectedAlumni.degree_program} />
+                                        {selectedAlumni.major && <ViewField label="Major" value={selectedAlumni.major} />}
+                                        {selectedAlumni.minor && <ViewField label="Minor" value={selectedAlumni.minor} />}
+                                        <ViewField label="Graduation Year" value={`Class of ${selectedAlumni.graduation_year}`} />
+                                        {selectedAlumni.enrollment_year && <ViewField label="Enrollment Year" value={String(selectedAlumni.enrollment_year)} />}
+                                        {selectedAlumni.batch && <ViewField label="Batch" value={selectedAlumni.batch.name} />}
+                                        {selectedAlumni.campus && <ViewField label="Campus" value={selectedAlumni.campus.name} />}
+                                    </div>
+                                    {selectedAlumni.honors_awards && (
+                                        <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+                                            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Honors & Awards</p>
+                                            <p className="text-sm text-gray-900 dark:text-gray-200">{selectedAlumni.honors_awards}</p>
+                                        </div>
+                                    )}
+                                </TabsContent>
+
+                                {/* Career Tab */}
+                                <TabsContent value="career" className="mt-4 space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                                        <ViewField label="Employment Status" badge={getEmploymentStatusBadge(selectedAlumni.employment_status)} />
+                                        {selectedAlumni.current_job_title && <ViewField label="Job Title" value={selectedAlumni.current_job_title} icon={<BriefcaseIcon className="h-3.5 w-3.5" />} />}
+                                        {selectedAlumni.current_employer && <ViewField label="Employer" value={selectedAlumni.current_employer} icon={<Building className="h-3.5 w-3.5" />} />}
+                                        {selectedAlumni.company_industry && <ViewField label="Industry" value={selectedAlumni.company_industry} />}
+                                        {selectedAlumni.job_level_position && <ViewField label="Job Level" value={selectedAlumni.job_level_position.replace(/_/g, ' ')} />}
+                                        {selectedAlumni.major_line_of_business && <ViewField label="Line of Business" value={selectedAlumni.major_line_of_business} />}
+                                        {(selectedAlumni.salary_range || selectedAlumni.average_monthly_income) && <ViewField label="Income" value={selectedAlumni.salary_range || selectedAlumni.average_monthly_income || ''} />}
+                                        {selectedAlumni.years_of_service && <ViewField label="Years of Service" value={selectedAlumni.years_of_service} />}
+                                        {selectedAlumni.date_hired && <ViewField label="Date Hired" value={selectedAlumni.date_hired} />}
+                                        {selectedAlumni.company_address && <ViewField label="Company Address" value={selectedAlumni.company_address} />}
+                                        {selectedAlumni.job_aligned_to_course && <ViewField label="Job Aligned to Course" value={selectedAlumni.job_aligned_to_course} />}
+                                    </div>
+                                </TabsContent>
+
+                                {/* Other Tab */}
+                                <TabsContent value="other" className="mt-4 space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+                                        {selectedAlumni.about_me && <ViewField label="About" value={selectedAlumni.about_me} fullWidth />}
+                                        {selectedAlumni.career_goals && <ViewField label="Career Goals" value={selectedAlumni.career_goals} fullWidth />}
+                                        {selectedAlumni.achievements && <ViewField label="Achievements" value={selectedAlumni.achievements} fullWidth />}
+                                        {selectedAlumni.skills && <ViewField label="Skills" value={selectedAlumni.skills} />}
+                                        {selectedAlumni.certifications && <ViewField label="Certifications" value={selectedAlumni.certifications} />}
+                                        <ViewField label="Willing to Mentor" value={selectedAlumni.willing_to_mentor ? 'Yes' : selectedAlumni.willing_to_mentor === false ? 'No' : '—'} />
+                                        <ViewField label="Willing to Hire Alumni" value={selectedAlumni.willing_to_hire_alumni ? 'Yes' : selectedAlumni.willing_to_hire_alumni === false ? 'No' : '—'} />
+                                        {selectedAlumni.import_source && <ViewField label="Import Source" value={selectedAlumni.import_source} />}
+                                        <ViewField label="Created" value={selectedAlumni.created_at} />
+                                    </div>
+                                </TabsContent>
+                            </Tabs>
 
                             {/* Action Buttons */}
-                            <div className="flex justify-end space-x-2 pt-4 border-t">
+                            <div className="flex justify-end space-x-2 pt-4 border-t border-gray-200 dark:border-gray-700">
                                 <Button
                                     variant="outline"
                                     onClick={() => handleContactAlumni(selectedAlumni)}
-                                    className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                                    className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30"
                                 >
                                     <MessageCircle className="h-4 w-4 mr-2" />
-                                    Contact Alumni
+                                    Contact
                                 </Button>
                                 <Button
                                     variant="outline"
@@ -1570,14 +1769,14 @@ export default function AlumniBank({ user }: Props) {
                                         handleEditAlumni(selectedAlumni);
                                         setViewModalOpen(false);
                                     }}
-                                    className="border-green-300 text-green-700 hover:bg-green-50"
+                                    className="border-green-300 dark:border-green-700 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30"
                                 >
                                     <Edit className="h-4 w-4 mr-2" />
-                                    Edit Profile
+                                    Edit
                                 </Button>
                                 <Button
                                     onClick={() => setViewModalOpen(false)}
-                                    className="bg-maroon-700 hover:bg-maroon-800"
+                                    className="bg-maroon-700 hover:bg-maroon-800 text-white"
                                 >
                                     Close
                                 </Button>
@@ -1589,131 +1788,199 @@ export default function AlumniBank({ user }: Props) {
 
             {/* Edit Alumni Modal */}
             <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
-                <DialogContent className="sm:max-w-2xl">
+                <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle className="text-xl text-maroon-800">
+                        <DialogTitle className="text-xl text-maroon-800 dark:text-maroon-200 flex items-center gap-2">
+                            <Edit className="h-5 w-5" />
                             Edit Alumni Profile
                         </DialogTitle>
-                        <DialogDescription>
+                        <DialogDescription className="dark:text-gray-400">
                             Update the selected alumni's information
                         </DialogDescription>
                     </DialogHeader>
 
                     {editFormData && (
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Tabs defaultValue="personal" className="w-full">
+                            <TabsList className="grid w-full grid-cols-3">
+                                <TabsTrigger value="personal">Personal</TabsTrigger>
+                                <TabsTrigger value="education">Education</TabsTrigger>
+                                <TabsTrigger value="career">Career</TabsTrigger>
+                            </TabsList>
+
+                            {/* Personal Tab */}
+                            <TabsContent value="personal" className="mt-4 space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">First Name</Label>
+                                        <Input
+                                            value={editFormData.first_name || ''}
+                                            onChange={(e) => setEditFormData({ ...editFormData, first_name: e.target.value })}
+                                            className="mt-1"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Last Name</Label>
+                                        <Input
+                                            value={editFormData.last_name || ''}
+                                            onChange={(e) => setEditFormData({ ...editFormData, last_name: e.target.value })}
+                                            className="mt-1"
+                                        />
+                                    </div>
+                                </div>
+
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700">First Name</label>
+                                    <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Email</Label>
                                     <Input
-                                        value={editFormData.first_name || ''}
-                                        onChange={(e) => setEditFormData({ ...editFormData, first_name: e.target.value })}
+                                        type="email"
+                                        value={editFormData.email || ''}
+                                        onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
                                         className="mt-1"
                                     />
                                 </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Phone</Label>
+                                        <Input
+                                            value={editFormData.phone || ''}
+                                            onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                                            className="mt-1"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Gender</Label>
+                                        <Select
+                                            value={editFormData.gender || ''}
+                                            onValueChange={(v) => setEditFormData({ ...editFormData, gender: v })}
+                                        >
+                                            <SelectTrigger className="mt-1">
+                                                <SelectValue placeholder="Select Gender" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="male">Male</SelectItem>
+                                                <SelectItem value="female">Female</SelectItem>
+                                                <SelectItem value="other">Other</SelectItem>
+                                                <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700">Last Name</label>
+                                    <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Address</Label>
                                     <Input
-                                        value={editFormData.last_name || ''}
-                                        onChange={(e) => setEditFormData({ ...editFormData, last_name: e.target.value })}
+                                        value={editFormData.current_address || ''}
+                                        onChange={(e) => setEditFormData({ ...editFormData, current_address: e.target.value })}
+                                        className="mt-1"
+                                        placeholder="Street, City, Province"
+                                    />
+                                </div>
+                            </TabsContent>
+
+                            {/* Education Tab */}
+                            <TabsContent value="education" className="mt-4 space-y-4">
+                                <div>
+                                    <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Degree Program</Label>
+                                    <Input
+                                        value={editFormData.degree_program || ''}
+                                        onChange={(e) => setEditFormData({ ...editFormData, degree_program: e.target.value })}
                                         className="mt-1"
                                     />
                                 </div>
-                            </div>
 
-                            <div>
-                                <label className="text-sm font-medium text-gray-700">Email</label>
-                                <Input
-                                    type="email"
-                                    value={editFormData.email || ''}
-                                    onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
-                                    className="mt-1"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-sm font-medium text-gray-700">Phone</label>
-                                <Input
-                                    value={editFormData.phone || ''}
-                                    onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-                                    className="mt-1"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-sm font-medium text-gray-700">Degree Program</label>
-                                <Input
-                                    value={editFormData.degree_program || ''}
-                                    onChange={(e) => setEditFormData({ ...editFormData, degree_program: e.target.value })}
-                                    className="mt-1"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-sm font-medium text-gray-700">Graduation Year</label>
-                                    <Input
-                                        type="number"
-                                        value={editFormData.graduation_year || ''}
-                                        onChange={(e) => setEditFormData({ ...editFormData, graduation_year: parseInt(e.target.value) })}
-                                        className="mt-1"
-                                    />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Graduation Year</Label>
+                                        <Input
+                                            type="number"
+                                            value={editFormData.graduation_year || ''}
+                                            onChange={(e) => setEditFormData({ ...editFormData, graduation_year: parseInt(e.target.value) || 0 })}
+                                            className="mt-1"
+                                            min={1900}
+                                            max={new Date().getFullYear() + 10}
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Major</Label>
+                                        <Input
+                                            value={editFormData.major || ''}
+                                            onChange={(e) => setEditFormData({ ...editFormData, major: e.target.value })}
+                                            className="mt-1"
+                                            placeholder="e.g. Information Technology"
+                                        />
+                                    </div>
                                 </div>
+                            </TabsContent>
+
+                            {/* Career Tab */}
+                            <TabsContent value="career" className="mt-4 space-y-4">
                                 <div>
-                                    <label className="text-sm font-medium text-gray-700">Employment Status</label>
-                                    <select
+                                    <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Employment Status</Label>
+                                    <Select
                                         value={editFormData.employment_status || ''}
-                                        onChange={(e) => setEditFormData({ ...editFormData, employment_status: e.target.value })}
-                                        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-maroon-500 focus:ring-maroon-500"
+                                        onValueChange={(v) => setEditFormData({ ...editFormData, employment_status: v })}
                                     >
-                                        <option value="">Select Status</option>
-                                        <option value="employed_full_time">Employed (Full-Time)</option>
-                                        <option value="employed_part_time">Employed (Part-Time)</option>
-                                        <option value="self_employed">Self-Employed</option>
-                                        <option value="unemployed_seeking">Unemployed (Seeking)</option>
-                                        <option value="unemployed_not_seeking">Unemployed (Not Seeking)</option>
-                                        <option value="continuing_education">Continuing Education</option>
-                                        <option value="military_service">Military Service</option>
-                                        <option value="other">Other</option>
-                                    </select>
+                                        <SelectTrigger className="mt-1">
+                                            <SelectValue placeholder="Select Status" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="employed_full_time">Employed (Full-Time)</SelectItem>
+                                            <SelectItem value="employed_part_time">Employed (Part-Time)</SelectItem>
+                                            <SelectItem value="self_employed">Self-Employed</SelectItem>
+                                            <SelectItem value="unemployed_seeking">Unemployed (Seeking)</SelectItem>
+                                            <SelectItem value="unemployed_not_seeking">Unemployed (Not Seeking)</SelectItem>
+                                            <SelectItem value="continuing_education">Continuing Education</SelectItem>
+                                            <SelectItem value="military_service">Military Service</SelectItem>
+                                            <SelectItem value="other">Other</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                            </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-sm font-medium text-gray-700">Current Employer</label>
-                                    <Input
-                                        value={editFormData.current_employer || ''}
-                                        onChange={(e) => setEditFormData({ ...editFormData, current_employer: e.target.value })}
-                                        className="mt-1"
-                                    />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Job Title</Label>
+                                        <Input
+                                            value={editFormData.current_job_title || ''}
+                                            onChange={(e) => setEditFormData({ ...editFormData, current_job_title: e.target.value })}
+                                            className="mt-1"
+                                            placeholder="e.g. Software Engineer"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Employer</Label>
+                                        <Input
+                                            value={editFormData.current_employer || ''}
+                                            onChange={(e) => setEditFormData({ ...editFormData, current_employer: e.target.value })}
+                                            className="mt-1"
+                                            placeholder="e.g. Google Inc."
+                                        />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="text-sm font-medium text-gray-700">Job Title</label>
-                                    <Input
-                                        value={editFormData.current_job_title || ''}
-                                        onChange={(e) => setEditFormData({ ...editFormData, current_job_title: e.target.value })}
-                                        className="mt-1"
-                                    />
-                                </div>
-                            </div>
+                            </TabsContent>
 
-                            <div className="flex justify-end space-x-2 pt-4 border-t">
+                            {/* Footer Actions */}
+                            <div className="flex justify-end space-x-2 pt-4 mt-4 border-t border-gray-200 dark:border-gray-700">
                                 <Button
                                     variant="outline"
                                     onClick={() => setEditModalOpen(false)}
                                     disabled={updating}
+                                    className="dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
                                 >
                                     Cancel
                                 </Button>
                                 <Button
                                     onClick={handleUpdateAlumni}
                                     disabled={updating}
-                                    className="bg-maroon-700 hover:bg-maroon-800"
+                                    className="bg-maroon-700 hover:bg-maroon-800 text-white"
                                 >
-                                    {updating ? 'Updating...' : 'Update Alumni'}
+                                    {updating ? (
+                                        <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Updating...</>
+                                    ) : (
+                                        <><CheckCircle2 className="h-4 w-4 mr-2" /> Update Alumni</>
+                                    )}
                                 </Button>
                             </div>
-                        </div>
+                        </Tabs>
                     )}
                 </DialogContent>
             </Dialog>
@@ -1738,8 +2005,8 @@ export default function AlumniBank({ user }: Props) {
                                 <button
                                     onClick={() => setAddStep(i)}
                                     className={`flex items-center justify-center w-8 h-8 rounded-full text-xs font-bold transition-colors cursor-pointer ${addStep === i ? 'bg-maroon-600 text-white' :
-                                            addStep > i ? 'bg-green-500 text-white' :
-                                                'bg-gray-200 text-gray-500'
+                                        addStep > i ? 'bg-green-500 text-white' :
+                                            'bg-gray-200 text-gray-500'
                                         }`}
                                 >
                                     {addStep > i ? '✓' : i + 1}
@@ -2399,6 +2666,41 @@ export default function AlumniBank({ user }: Props) {
                                 )}
                             </div>
 
+                            {/* Template Type Selector */}
+                            <div className="p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                                    Template Format
+                                </label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setImportConfig(prev => ({ ...prev, template_type: 'old' }))}
+                                        className={`p-3 rounded-lg border-2 text-left transition-all ${importConfig.template_type === 'old'
+                                            ? 'border-maroon-500 bg-maroon-50 dark:bg-maroon-900/20'
+                                            : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                                        }`}
+                                    >
+                                        <p className="font-medium text-sm text-gray-800 dark:text-gray-200">Basic Template</p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                            11 columns — Name, Student ID, Degree, DOB, Address, Email, Phone, Gender
+                                        </p>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setImportConfig(prev => ({ ...prev, template_type: 'new' }))}
+                                        className={`p-3 rounded-lg border-2 text-left transition-all ${importConfig.template_type === 'new'
+                                            ? 'border-maroon-500 bg-maroon-50 dark:bg-maroon-900/20'
+                                            : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                                        }`}
+                                    >
+                                        <p className="font-medium text-sm text-gray-800 dark:text-gray-200">Extended Template</p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                            37 columns — Full registration data incl. employment, eligibility, personal info
+                                        </p>
+                                    </button>
+                                </div>
+                            </div>
+
                             <div className="flex items-center justify-between">
                                 <Button
                                     variant="outline"
@@ -2407,7 +2709,7 @@ export default function AlumniBank({ user }: Props) {
                                     className="text-maroon-700 dark:text-maroon-300"
                                 >
                                     <Download className="h-4 w-4 mr-2" />
-                                    Download Template
+                                    Download {importConfig.template_type === 'new' ? 'Extended' : 'Basic'} Template
                                 </Button>
 
                                 <Button
@@ -2671,6 +2973,31 @@ export default function AlumniBank({ user }: Props) {
                     )}
                 </DialogContent>
             </Dialog>
+
+            <ExportProgressDialog {...exportState} onCancel={cancelExport} />
         </AdminBaseLayout>
+    );
+}
+
+// ─── View Field helper for the detail modal ──────────────────────────────────
+function ViewField({ label, value, icon, badge, fullWidth }: {
+    label: string;
+    value?: string;
+    icon?: React.ReactNode;
+    badge?: React.ReactNode;
+    fullWidth?: boolean;
+}) {
+    return (
+        <div className={fullWidth ? 'sm:col-span-2' : ''}>
+            <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-0.5">{label}</p>
+            {badge ? (
+                <div className="mt-0.5">{badge}</div>
+            ) : (
+                <p className="text-sm text-gray-900 dark:text-gray-200 flex items-center gap-1.5">
+                    {icon && <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">{icon}</span>}
+                    {value || '—'}
+                </p>
+            )}
+        </div>
     );
 }

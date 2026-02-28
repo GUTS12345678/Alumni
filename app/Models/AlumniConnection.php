@@ -59,9 +59,11 @@ class AlumniConnection extends Model
     public static function areConnected($userId1, $userId2)
     {
         return self::where(function($query) use ($userId1, $userId2) {
-            $query->where('sender_id', $userId1)->where('receiver_id', $userId2);
-        })->orWhere(function($query) use ($userId1, $userId2) {
-            $query->where('sender_id', $userId2)->where('receiver_id', $userId1);
+            $query->where(function($q) use ($userId1, $userId2) {
+                $q->where('sender_id', $userId1)->where('receiver_id', $userId2);
+            })->orWhere(function($q) use ($userId1, $userId2) {
+                $q->where('sender_id', $userId2)->where('receiver_id', $userId1);
+            });
         })->where('status', 'accepted')->exists();
     }
 
@@ -71,11 +73,47 @@ class AlumniConnection extends Model
     public static function getConnectionStatus($userId1, $userId2)
     {
         $connection = self::where(function($query) use ($userId1, $userId2) {
-            $query->where('sender_id', $userId1)->where('receiver_id', $userId2);
-        })->orWhere(function($query) use ($userId1, $userId2) {
-            $query->where('sender_id', $userId2)->where('receiver_id', $userId1);
+            $query->where(function($q) use ($userId1, $userId2) {
+                $q->where('sender_id', $userId1)->where('receiver_id', $userId2);
+            })->orWhere(function($q) use ($userId1, $userId2) {
+                $q->where('sender_id', $userId2)->where('receiver_id', $userId1);
+            });
         })->first();
 
-        return $connection ? $connection->status : null;
+        if (!$connection) {
+            return null;
+        }
+
+        // For pending connections, indicate direction relative to $userId1
+        if ($connection->status === 'pending') {
+            return $connection->sender_id == $userId1 ? 'pending' : 'received';
+        }
+
+        return $connection->status;
+    }
+
+    /**
+     * Get connection status and ID between two users
+     */
+    public static function getConnectionInfo($userId1, $userId2)
+    {
+        $connection = self::where(function($query) use ($userId1, $userId2) {
+            $query->where(function($q) use ($userId1, $userId2) {
+                $q->where('sender_id', $userId1)->where('receiver_id', $userId2);
+            })->orWhere(function($q) use ($userId1, $userId2) {
+                $q->where('sender_id', $userId2)->where('receiver_id', $userId1);
+            });
+        })->first();
+
+        if (!$connection) {
+            return ['status' => null, 'connection_id' => null];
+        }
+
+        $status = $connection->status;
+        if ($status === 'pending') {
+            $status = $connection->sender_id == $userId1 ? 'pending' : 'received';
+        }
+
+        return ['status' => $status, 'connection_id' => $connection->id];
     }
 }

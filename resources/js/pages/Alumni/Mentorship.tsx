@@ -110,7 +110,7 @@ export default function Mentorship({ mentors, filters }: Props) {
                                         className="border-beige-300"
                                         value={search}
                                         onChange={(e) => setSearch(e.target.value)}
-                                        onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                                     />
                                     <Select value={expertise} onValueChange={setExpertise}>
                                         <SelectTrigger className="w-40 border-beige-300">
@@ -123,6 +123,11 @@ export default function Mentorship({ mentors, filters }: Props) {
                                             <SelectItem value="engineering">Engineering</SelectItem>
                                             <SelectItem value="design">Design</SelectItem>
                                             <SelectItem value="marketing">Marketing</SelectItem>
+                                            <SelectItem value="education">Education</SelectItem>
+                                            <SelectItem value="healthcare">Healthcare</SelectItem>
+                                            <SelectItem value="finance">Finance</SelectItem>
+                                            <SelectItem value="arts">Arts & Media</SelectItem>
+                                            <SelectItem value="government">Government</SelectItem>
                                         </SelectContent>
                                     </Select>
                                     <Button onClick={handleSearch} className="bg-maroon-700 hover:bg-maroon-800">
@@ -222,15 +227,20 @@ export default function Mentorship({ mentors, filters }: Props) {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-center py-8">
-                                <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                                <h3 className="text-md font-semibold text-gray-700 mb-2">
-                                    Share Your Experience
-                                </h3>
-                                <p className="text-sm text-gray-500 mb-4">
-                                    Help other alumni grow in their careers by becoming a mentor
+                            <div className="space-y-4">
+                                <p className="text-sm text-gray-600">
+                                    Share your experience and help fellow alumni grow in their careers.
                                 </p>
-                                <Button onClick={becomeMentor} className="bg-maroon-700 hover:bg-maroon-800 text-white">
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800 space-y-1">
+                                    <p className="font-medium">As a mentor you can:</p>
+                                    <ul className="list-disc list-inside text-xs space-y-0.5">
+                                        <li>Guide mentees in career decisions</li>
+                                        <li>Share industry insights & expertise</li>
+                                        <li>Expand your professional network</li>
+                                    </ul>
+                                </div>
+                                <Button onClick={becomeMentor} className="w-full bg-maroon-700 hover:bg-maroon-800 text-white">
+                                    <UserPlus className="h-4 w-4 mr-2" />
                                     Sign Up as Mentor
                                 </Button>
                             </div>

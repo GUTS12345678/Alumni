@@ -214,7 +214,7 @@ return new class extends Migration
                 'benefits'               => $job->benefits,
                 'requirements'           => $job->requirements,
                 'qualifications'         => $job->qualifications,
-                'skills_required'        => $job->skills_required,
+                'skills_required'        => $job->skills_required ?? null,
                 'application_deadline'   => $job->application_deadline,
                 'start_date'             => $job->start_date,
                 'background_image'       => $job->background_image,

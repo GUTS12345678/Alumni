@@ -31,6 +31,7 @@ class AlumniImportController extends Controller
             'campus_id' => 'nullable|integer|exists:campuses,id',
             'header_row' => 'nullable|integer|min:1|max:20',
             'data_start_row' => 'nullable|integer|min:2|max:50',
+            'template_type' => 'nullable|in:old,new',
         ]);
 
         if ($validator->fails()) {
@@ -46,8 +47,9 @@ class AlumniImportController extends Controller
             $spreadsheet = IOFactory::load($file->getPathname());
             $sheet = $spreadsheet->getActiveSheet();
             $highestRow = $sheet->getHighestRow();
-            $headerRow = $request->input('header_row', 3);
-            $dataStartRow = $request->input('data_start_row', 4);
+            $templateType = $request->input('template_type', 'old');
+            $headerRow = $templateType === 'new' ? 1 : $request->input('header_row', 3);
+            $dataStartRow = $templateType === 'new' ? 2 : $request->input('data_start_row', 4);
 
             // Try to auto-detect department from header rows
             $detectedDepartment = null;
@@ -87,7 +89,7 @@ class AlumniImportController extends Controller
             }
 
             for ($row = $dataStartRow; $row <= $highestRow; $row++) {
-                $rowData = $this->parseRow($sheet, $row);
+                $rowData = $templateType === 'new' ? $this->parseRowNew($sheet, $row) : $this->parseRow($sheet, $row);
 
                 // Skip completely empty rows
                 if ($this->isEmptyRow($rowData)) {
@@ -189,6 +191,7 @@ class AlumniImportController extends Controller
             'duplicate_action' => 'required|in:skip,update',
             'header_row' => 'nullable|integer|min:1|max:20',
             'data_start_row' => 'nullable|integer|min:2|max:50',
+            'template_type' => 'nullable|in:old,new',
         ]);
 
         if ($validator->fails()) {
@@ -204,8 +207,9 @@ class AlumniImportController extends Controller
             $spreadsheet = IOFactory::load($file->getPathname());
             $sheet = $spreadsheet->getActiveSheet();
             $highestRow = $sheet->getHighestRow();
-            $headerRow = $request->input('header_row', 3);
-            $dataStartRow = $request->input('data_start_row', 4);
+            $templateType = $request->input('template_type', 'old');
+            $headerRow = $templateType === 'new' ? 1 : $request->input('header_row', 3);
+            $dataStartRow = $templateType === 'new' ? 2 : $request->input('data_start_row', 4);
 
             $campusId = $request->campus_id;
             $batchId = $request->batch_id ?: null;
@@ -254,7 +258,7 @@ class AlumniImportController extends Controller
 
             try {
                 for ($row = $dataStartRow; $row <= $highestRow; $row++) {
-                    $rowData = $this->parseRow($sheet, $row);
+                    $rowData = $templateType === 'new' ? $this->parseRowNew($sheet, $row) : $this->parseRow($sheet, $row);
 
                     // Skip empty rows
                     if ($this->isEmptyRow($rowData)) {
@@ -264,18 +268,9 @@ class AlumniImportController extends Controller
                     $summary['total_rows']++;
 
                     try {
-                        $result = $this->processRow(
-                            $rowData,
-                            $row,
-                            $campusId,
-                            $batchId,
-                            $departmentId,
-                            $courses,
-                            $batch,
-                            $duplicateAction,
-                            $filename,
-                            $warnings
-                        );
+                        $result = $templateType === 'new'
+                            ? $this->processRowNew($rowData, $row, $campusId, $batchId, $departmentId, $courses, $batch, $duplicateAction, $filename, $warnings)
+                            : $this->processRow($rowData, $row, $campusId, $batchId, $departmentId, $courses, $batch, $duplicateAction, $filename, $warnings);
 
                         if ($result === 'imported') {
                             $summary['imported']++;
@@ -296,6 +291,20 @@ class AlumniImportController extends Controller
                 }
 
                 DB::commit();
+
+                // Flush analytics caches so imported data reflects immediately
+                try {
+                    $campusIds = \App\Models\Campus::pluck('id')->toArray();
+                    foreach (array_merge(['all'], $campusIds) as $cId) {
+                        \Illuminate\Support\Facades\Cache::forget('dashboard_metrics_' . $cId);
+                        \Illuminate\Support\Facades\Cache::forget('alumni_stats_' . $cId);
+                        \Illuminate\Support\Facades\Cache::forget('analytics_overview_' . $cId);
+                        \Illuminate\Support\Facades\Cache::forget('analytics_time_to_job_' . $cId . '_all');
+                        \Illuminate\Support\Facades\Cache::forget('analytics_comprehensive_' . $cId);
+                    }
+                } catch (\Exception $e) {
+                    \Log::warning('Failed to flush analytics caches after import: ' . $e->getMessage());
+                }
 
                 // Log the import activity
                 if (auth()->check()) {
@@ -717,5 +726,370 @@ class AlumniImportController extends Controller
         }
 
         return response()->download($templatePath, 'Alumni_Import_Template.xlsx');
+    }
+
+    /**
+     * Download the new (extended) import template.
+     * Generates an Excel file with all registration-form columns.
+     */
+    public function downloadTemplateNew()
+    {
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Alumni Import');
+
+        $headers = $this->getNewTemplateHeaders();
+        $col = 'A';
+        foreach ($headers as $header) {
+            $sheet->setCellValue($col . '1', $header);
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+            $sheet->getStyle($col . '1')->getFont()->setBold(true);
+            $sheet->getStyle($col . '1')->getFill()
+                ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+                ->getStartColor()->setRGB('800000');
+            $sheet->getStyle($col . '1')->getFont()->getColor()->setRGB('FFFFFF');
+            $col++;
+        }
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $tempPath = tempnam(sys_get_temp_dir(), 'alumni_tpl_');
+        $writer->save($tempPath);
+
+        return response()->download($tempPath, 'Alumni_Extended_Import_Template.xlsx')
+            ->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Headers for the new (extended) template matching registration form.
+     */
+    private function getNewTemplateHeaders(): array
+    {
+        return [
+            'Last Name',           // A
+            'First Name',          // B
+            'Middle Name',         // C
+            'Maiden Name',         // D
+            'Suffix',              // E
+            'Student ID',          // F
+            'Email',               // G
+            'Phone',               // H
+            'Mobile No',           // I
+            'Gender',              // J
+            'Date of Birth',       // K
+            'Age',                 // L
+            'Place of Birth',      // M
+            'Civil Status',        // N
+            'Spouse Name',         // O
+            'No. of Children',     // P
+            'Residence Address',   // Q
+            'Degree Program',      // R
+            'Major',               // S
+            'Year Graduated',      // T
+            'Enrollment Year',     // U
+            'Honors/Awards',       // V
+            'Presently Employed',  // W (Yes/No)
+            'Employment Status',   // X (employed/self-employed/unemployed/pursuing_education)
+            'Company Name',        // Y
+            'Company Address',     // Z
+            'Present Position',    // AA
+            'Date Hired',          // AB
+            'Years of Service',    // AC
+            'Job Aligned to Course', // AD (Yes/No)
+            'Avg Monthly Income',  // AE
+            'Job Level/Position',  // AF
+            'Major Line of Business', // AG
+            'Employment Location', // AH (local/international)
+            'Not Employed Reason', // AI
+            'Achievements',        // AJ
+            'About Me',            // AK
+        ];
+    }
+
+    /**
+     * Parse a row from the new (extended) template.
+     */
+    private function parseRowNew($sheet, int $row): array
+    {
+        $getValue = function ($col) use ($sheet, $row) {
+            $cell = $sheet->getCell($col . $row);
+            $value = $cell->getValue();
+            return is_string($value) ? trim($value) : $value;
+        };
+
+        $dobRaw = $getValue('K');
+        $dob = !empty($dobRaw) ? $this->parseDate($dobRaw) : null;
+
+        $dateHiredRaw = $getValue('AB');
+        $dateHired = !empty($dateHiredRaw) ? $this->parseDate($dateHiredRaw) : null;
+
+        return [
+            'last_name'            => (string) ($getValue('A') ?? ''),
+            'first_name'           => (string) ($getValue('B') ?? ''),
+            'middle_name'          => (string) ($getValue('C') ?? ''),
+            'maiden_name'          => (string) ($getValue('D') ?? ''),
+            'suffix'               => (string) ($getValue('E') ?? ''),
+            'student_id'           => (string) ($getValue('F') ?? ''),
+            'email'                => (string) ($getValue('G') ?? ''),
+            'phone'                => (string) ($getValue('H') ?? ''),
+            'mobile_no'            => (string) ($getValue('I') ?? ''),
+            'gender'               => (string) ($getValue('J') ?? ''),
+            'birth_date'           => $dob,
+            'age'                  => (string) ($getValue('L') ?? ''),
+            'place_of_birth'       => (string) ($getValue('M') ?? ''),
+            'civil_status'         => (string) ($getValue('N') ?? ''),
+            'spouse_name'          => (string) ($getValue('O') ?? ''),
+            'number_of_children'   => (string) ($getValue('P') ?? ''),
+            'current_address'      => (string) ($getValue('Q') ?? ''),
+            'degree_program'       => (string) ($getValue('R') ?? ''),
+            'major'                => (string) ($getValue('S') ?? ''),
+            'graduation_year'      => (string) ($getValue('T') ?? ''),
+            'enrollment_year'      => (string) ($getValue('U') ?? ''),
+            'honors_awards'        => (string) ($getValue('V') ?? ''),
+            'presently_employed'   => (string) ($getValue('W') ?? ''),
+            'employment_status'    => (string) ($getValue('X') ?? ''),
+            'company_name'         => (string) ($getValue('Y') ?? ''),
+            'company_address'      => (string) ($getValue('Z') ?? ''),
+            'present_position'     => (string) ($getValue('AA') ?? ''),
+            'date_hired'           => $dateHired,
+            'years_of_service'     => (string) ($getValue('AC') ?? ''),
+            'job_aligned_to_course'=> (string) ($getValue('AD') ?? ''),
+            'average_monthly_income'=> (string) ($getValue('AE') ?? ''),
+            'job_level_position'   => (string) ($getValue('AF') ?? ''),
+            'major_line_of_business'=> (string) ($getValue('AG') ?? ''),
+            'employment_location'  => (string) ($getValue('AH') ?? ''),
+            'not_employed_reason'  => (string) ($getValue('AI') ?? ''),
+            'achievements'         => (string) ($getValue('AJ') ?? ''),
+            'about_me'             => (string) ($getValue('AK') ?? ''),
+        ];
+    }
+
+    /**
+     * Process a row from the new (extended) template — creates user + full alumni profile.
+     */
+    private function processRowNew(
+        array $rowData,
+        int $rowNumber,
+        int $campusId,
+        ?int $batchId,
+        ?int $departmentId,
+        $courses,
+        $batch,
+        string $duplicateAction,
+        string $filename,
+        array &$warnings
+    ): string {
+        if (empty($rowData['last_name'])) {
+            throw new \Exception('Missing last name');
+        }
+        if (empty($rowData['first_name'])) {
+            throw new \Exception('Missing first name');
+        }
+
+        // Check for duplicate by student_id
+        $existingProfile = null;
+        if (!empty($rowData['student_id'])) {
+            $existingProfile = AlumniProfile::where('student_id', $rowData['student_id'])->first();
+        }
+
+        if ($existingProfile) {
+            if ($duplicateAction === 'skip') {
+                return 'skipped';
+            }
+            $this->updateExistingProfileNew($existingProfile, $rowData);
+            return 'updated';
+        }
+
+        $gender = $this->mapGender($rowData['gender']);
+
+        // Fuzzy match course
+        $courseId = null;
+        if (!empty($rowData['degree_program'])) {
+            $matchedCourse = $this->fuzzyMatchCourse($rowData['degree_program'], $courses, $departmentId);
+            if ($matchedCourse) {
+                $courseId = $matchedCourse->id;
+            } else {
+                $warnings[] = ['row' => $rowNumber, 'message' => "Course '{$rowData['degree_program']}' not matched — saved as text only"];
+            }
+        }
+
+        // Email
+        $email = $rowData['email'];
+        $isPlaceholderEmail = false;
+        if (empty($email)) {
+            $studentIdSlug = !empty($rowData['student_id'])
+                ? preg_replace('/[^a-zA-Z0-9]/', '', $rowData['student_id'])
+                : strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $rowData['first_name'] . $rowData['last_name'])) . rand(100, 999);
+            $email = strtolower($studentIdSlug) . '@imported.alumni';
+            $isPlaceholderEmail = true;
+            $warnings[] = ['row' => $rowNumber, 'message' => "No email — placeholder: {$email}"];
+        }
+
+        $existingUser = User::where('email', $email)->first();
+        if ($existingUser) {
+            if ($isPlaceholderEmail) {
+                $email = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $rowData['student_id'] ?? '')) . '_' . rand(1000, 9999) . '@imported.alumni';
+            } else {
+                throw new \Exception("Email '{$email}' already exists");
+            }
+        }
+
+        $rawPassword = strtolower(preg_replace('/\s+/', '', $rowData['last_name']));
+        if (strlen($rawPassword) < 8) {
+            $rawPassword = str_pad($rawPassword, 8, '12345678');
+        }
+
+        $displayName = trim($rowData['first_name'] . ' ' . $rowData['last_name']);
+
+        // Map employment status
+        $empStatus = $this->mapEmploymentStatus($rowData['employment_status']);
+        $presentlyEmployed = strtolower(trim($rowData['presently_employed']));
+        $presentlyEmployedValue = in_array($presentlyEmployed, ['yes', 'y', '1', 'true']) ? 'yes'
+            : (in_array($presentlyEmployed, ['no', 'n', '0', 'false']) ? 'no' : null);
+
+        // Map job aligned
+        $jobAligned = strtolower(trim($rowData['job_aligned_to_course']));
+        $jobAlignedValue = in_array($jobAligned, ['yes', 'y', '1', 'true']) ? 'yes'
+            : (in_array($jobAligned, ['no', 'n', '0', 'false']) ? 'no' : null);
+
+        // Graduation year from data or batch
+        $gradYear = !empty($rowData['graduation_year']) ? (int) $rowData['graduation_year']
+            : ($batch ? $batch->graduation_year : null);
+
+        $user = User::create([
+            'name' => $displayName,
+            'email' => $email,
+            'password' => Hash::make($rawPassword),
+            'must_change_password' => true,
+            'role' => 'alumni',
+            'role_id' => 3,
+            'status' => 'active',
+            'campus_id' => $campusId,
+        ]);
+
+        AlumniProfile::create([
+            'user_id' => $user->id,
+            'batch_id' => $batchId,
+            'department_id' => $departmentId,
+            'course_id' => $courseId,
+            'campus_id' => $campusId,
+            'first_name' => $rowData['first_name'],
+            'last_name' => $rowData['last_name'],
+            'middle_name' => $rowData['middle_name'] ?: null,
+            'maiden_name' => $rowData['maiden_name'] ?: null,
+            'suffix' => $rowData['suffix'] ?: null,
+            'student_id' => $rowData['student_id'] ?: null,
+            'degree_program' => $rowData['degree_program'] ?: null,
+            'major' => $rowData['major'] ?: null,
+            'birth_date' => $rowData['birth_date'],
+            'age' => $rowData['age'] ?: null,
+            'gender' => $gender,
+            'place_of_birth' => $rowData['place_of_birth'] ?: null,
+            'civil_status' => $rowData['civil_status'] ?: null,
+            'spouse_name' => $rowData['spouse_name'] ?: null,
+            'number_of_children' => $rowData['number_of_children'] ?: null,
+            'phone' => $rowData['phone'] ?: null,
+            'mobile_no' => $rowData['mobile_no'] ?: null,
+            'alternate_email' => ($isPlaceholderEmail && !empty($rowData['email'])) ? $rowData['email'] : null,
+            'current_address' => $rowData['current_address'] ?: null,
+            'graduation_year' => $gradYear,
+            'enrollment_year' => $rowData['enrollment_year'] ?: null,
+            'honors_awards' => $rowData['honors_awards'] ?: null,
+            'presently_employed' => $presentlyEmployedValue,
+            'employment_status' => $empStatus,
+            'current_employer' => $rowData['company_name'] ?: null,
+            'company_address' => $rowData['company_address'] ?: null,
+            'current_job_title' => $rowData['present_position'] ?: null,
+            'date_hired' => $rowData['date_hired'],
+            'years_of_service' => $rowData['years_of_service'] ?: null,
+            'job_aligned_to_course' => $jobAlignedValue,
+            'average_monthly_income' => $rowData['average_monthly_income'] ?: null,
+            'job_level_position' => $rowData['job_level_position'] ?: null,
+            'major_line_of_business' => $rowData['major_line_of_business'] ?: null,
+            'employment_location_type' => $rowData['employment_location'] ?: null,
+            'unemployment_reason' => $rowData['not_employed_reason'] ?: null,
+            'achievements' => $rowData['achievements'] ?: null,
+            'about_me' => $rowData['about_me'] ?: null,
+            'profile_completed' => false,
+            'import_source' => $filename,
+            'imported_at' => now(),
+        ]);
+
+        return 'imported';
+    }
+
+    /**
+     * Update existing profile with new template data (fill empty fields only).
+     */
+    private function updateExistingProfileNew(AlumniProfile $profile, array $rowData): void
+    {
+        $fieldMap = [
+            'middle_name' => 'middle_name',
+            'maiden_name' => 'maiden_name',
+            'suffix' => 'suffix',
+            'birth_date' => 'birth_date',
+            'age' => 'age',
+            'phone' => 'phone',
+            'mobile_no' => 'mobile_no',
+            'current_address' => 'current_address',
+            'place_of_birth' => 'place_of_birth',
+            'civil_status' => 'civil_status',
+            'spouse_name' => 'spouse_name',
+            'number_of_children' => 'number_of_children',
+            'degree_program' => 'degree_program',
+            'major' => 'major',
+            'enrollment_year' => 'enrollment_year',
+            'honors_awards' => 'honors_awards',
+            'current_employer' => 'company_name',
+            'company_address' => 'company_address',
+            'current_job_title' => 'present_position',
+            'date_hired' => 'date_hired',
+            'years_of_service' => 'years_of_service',
+            'average_monthly_income' => 'average_monthly_income',
+            'job_level_position' => 'job_level_position',
+            'major_line_of_business' => 'major_line_of_business',
+            'achievements' => 'achievements',
+            'about_me' => 'about_me',
+        ];
+
+        $updates = [];
+        foreach ($fieldMap as $dbField => $dataKey) {
+            if (empty($profile->$dbField) && !empty($rowData[$dataKey])) {
+                $updates[$dbField] = $rowData[$dataKey];
+            }
+        }
+
+        if (empty($profile->gender) && !empty($rowData['gender'])) {
+            $updates['gender'] = $this->mapGender($rowData['gender']);
+        }
+
+        if (empty($profile->employment_status) && !empty($rowData['employment_status'])) {
+            $updates['employment_status'] = $this->mapEmploymentStatus($rowData['employment_status']);
+        }
+
+        if (!empty($updates)) {
+            $profile->update($updates);
+        }
+    }
+
+    /**
+     * Map employment status text to enum value.
+     */
+    private function mapEmploymentStatus(string $status): ?string
+    {
+        $status = strtolower(trim($status));
+        if (empty($status)) return null;
+
+        $map = [
+            'employed' => 'employed',
+            'self-employed' => 'self-employed',
+            'self employed' => 'self-employed',
+            'selfemployed' => 'self-employed',
+            'unemployed' => 'unemployed',
+            'pursuing education' => 'pursuing_education',
+            'pursuing_education' => 'pursuing_education',
+            'student' => 'pursuing_education',
+        ];
+
+        return $map[$status] ?? null;
     }
 }

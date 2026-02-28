@@ -215,8 +215,6 @@ export default function CreateSurvey({ user }: Props) {
                 reminder_interval_days: surveyData.reminder_interval_days || 7,
             };
 
-            console.log('Sending survey payload:', payload);
-
             const response = await fetch('/api/v1/admin/surveys', {
                 method: 'POST',
                 headers: {
@@ -228,11 +226,7 @@ export default function CreateSurvey({ user }: Props) {
                 body: JSON.stringify(payload),
             });
 
-            console.log('Response status:', response.status);
-            console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
             const result = await response.json();
-            console.log('Response data:', result);
 
             if (response.ok && result.success) {
                 // If we have questions, save them separately
@@ -280,8 +274,6 @@ export default function CreateSurvey({ user }: Props) {
                     options: question.options || [],
                 };
 
-                console.log(`Saving question ${question.order}:`, questionPayload);
-
                 const questionResponse = await fetch(`/api/v1/admin/surveys/${surveyId}/questions`, {
                     method: 'POST',
                     headers: {
@@ -296,9 +288,6 @@ export default function CreateSurvey({ user }: Props) {
                 if (!questionResponse.ok) {
                     const errorData = await questionResponse.json();
                     console.error(`Question ${question.order} failed:`, errorData);
-                } else {
-                    const successData = await questionResponse.json();
-                    console.log(`Question ${question.order} saved successfully:`, successData);
                 }
             } catch (error) {
                 console.error('Error saving question:', error);

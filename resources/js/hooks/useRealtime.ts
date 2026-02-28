@@ -26,6 +26,21 @@ import { useEffect, useRef } from 'react';
 type EventHandler = (data: any) => void;
 type EventMap = Record<string, EventHandler>;
 
+// Lazy-load echo.ts — only loads pusher-js (~100KB) when first needed
+let echoLoaded = false;
+async function ensureEcho(): Promise<void> {
+    if (echoLoaded || (window as any).Echo) {
+        echoLoaded = true;
+        return;
+    }
+    try {
+        await import('@/echo');
+        echoLoaded = true;
+    } catch {
+        // Echo failed to load — real-time disabled
+    }
+}
+
 interface UseRealtimeOptions {
     /** Channel type: 'private' (default) or 'presence' */
     channelType?: 'private' | 'presence';
@@ -45,34 +60,42 @@ export function useRealtime(
     useEffect(() => {
         if (!enabled || !channelName) return;
 
-        const echo = (window as any).Echo;
-        if (!echo) {
-            console.warn('[useRealtime] Laravel Echo not available. Real-time features disabled.');
-            return;
-        }
-
+        let cancelled = false;
         let channel: any;
-        try {
-            channel = channelType === 'presence'
-                ? echo.join(channelName)
-                : echo.private(channelName);
-        } catch (err) {
-            console.warn(`[useRealtime] Failed to join channel "${channelName}":`, err);
-            return;
-        }
 
-        // Bind all event listeners
-        const eventNames = Object.keys(eventsRef.current);
-        for (const eventName of eventNames) {
-            channel.listen(eventName, (data: any) => {
-                eventsRef.current[eventName]?.(data);
-            });
-        }
+        (async () => {
+            await ensureEcho();
+            if (cancelled) return;
+
+            const echo = (window as any).Echo;
+            if (!echo) {
+                return;
+            }
+
+            try {
+                channel = channelType === 'presence'
+                    ? echo.join(channelName)
+                    : echo.private(channelName);
+            } catch (err) {
+                console.warn(`[useRealtime] Failed to join channel "${channelName}":`, err);
+                return;
+            }
+
+            // Bind all event listeners
+            const eventNames = Object.keys(eventsRef.current);
+            for (const eventName of eventNames) {
+                channel.listen(eventName, (data: any) => {
+                    eventsRef.current[eventName]?.(data);
+                });
+            }
+        })();
 
         // Cleanup: leave channel on unmount
         return () => {
+            cancelled = true;
             try {
-                echo.leave(channelName);
+                const echo = (window as any).Echo;
+                if (echo && channel) echo.leave(channelName);
             } catch {
                 // Ignore cleanup errors
             }

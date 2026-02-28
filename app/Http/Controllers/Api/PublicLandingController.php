@@ -54,7 +54,6 @@ class PublicLandingController extends Controller
         
         $announcements = Content::where('content_type', 'announcement')
             ->where('status', 'published')
-            ->where('is_featured', true) // For landing page, show featured announcements
             ->where(function ($q) {
                 $q->whereNull('expires_at')
                   ->orWhere('expires_at', '>', now());
@@ -67,12 +66,13 @@ class PublicLandingController extends Controller
                 'use_pages',
                 'featured_image',
                 'gallery_images',
+                'is_featured',
                 'priority',
                 'published_at',
                 'created_at'
             ])
-            ->orderBy('priority', 'desc')
             ->orderBy('published_at', 'desc')
+            ->orderBy('created_at', 'desc')
             ->limit($limit)
             ->get();
 
@@ -125,7 +125,6 @@ class PublicLandingController extends Controller
         
         $jobs = Content::where('content_type', 'job')
             ->where('status', 'published')
-            ->where('is_featured', true) // For landing page, show featured jobs
             ->where(function ($q) {
                 $q->whereNull('application_deadline')
                   ->orWhere('application_deadline', '>', now());
@@ -151,8 +150,8 @@ class PublicLandingController extends Controller
                 'created_at',
                 'external_url'
             ])
-            ->orderBy('is_featured', 'desc')
             ->orderBy('published_at', 'desc')
+            ->orderBy('created_at', 'desc')
             ->limit($limit)
             ->get();
 
@@ -367,6 +366,103 @@ class PublicLandingController extends Controller
             'contract' => 'Contract',
             'internship' => 'Internship',
             'temporary' => 'Temporary',
+        ];
+
+        return $labels[$type] ?? ucfirst(str_replace('_', ' ', $type));
+    }
+
+    /**
+     * Get other published content (events, news, blogs, scholarships, resources) for landing page.
+     */
+    public function getContentByTypes(Request $request): JsonResponse
+    {
+        $limit = $request->get('limit', 12);
+        $types = ['event', 'news', 'blog', 'scholarship', 'resource'];
+
+        $items = Content::whereIn('content_type', $types)
+            ->where('status', 'published')
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                  ->orWhere('expires_at', '>', now());
+            })
+            ->select([
+                'id',
+                'title',
+                'slug',
+                'content_type',
+                'content',
+                'pages',
+                'use_pages',
+                'featured_image',
+                'gallery_images',
+                'is_featured',
+                'location',
+                'start_date',
+                'external_url',
+                'published_at',
+                'created_at',
+            ])
+            ->orderBy('published_at', 'desc')
+            ->orderBy('created_at', 'desc')
+            ->limit($limit)
+            ->get();
+
+        $items = $items->map(function ($item) {
+            $galleryImages = $item->gallery_images;
+            if (is_array($galleryImages)) {
+                $galleryImages = array_map(fn($img) => $this->getImageUrl($img), $galleryImages);
+            }
+
+            $pages = $item->pages;
+            if (is_array($pages)) {
+                $pages = array_map(function ($page) {
+                    if (!empty($page['image'])) {
+                        $page['image'] = $this->getImageUrl($page['image']);
+                    }
+                    return $page;
+                }, $pages);
+            }
+
+            return [
+                'id' => $item->id,
+                'title' => $item->title,
+                'slug' => $item->slug,
+                'content_type' => $item->content_type,
+                'content_type_label' => $this->getContentTypeLabel($item->content_type),
+                'excerpt' => \Illuminate\Support\Str::limit(strip_tags($item->content), 150),
+                'full_content' => $item->content,
+                'pages' => $pages,
+                'use_pages' => (bool) $item->use_pages,
+                'featured_image' => $this->getImageUrl($item->featured_image),
+                'gallery_images' => $galleryImages,
+                'is_featured' => $item->is_featured,
+                'location' => $item->location,
+                'event_date' => $item->start_date?->format('M d, Y'),
+                'external_url' => $item->external_url,
+                'published_at' => $item->published_at?->format('M d, Y'),
+                'created_at' => $item->created_at->format('M d, Y'),
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $items,
+        ]);
+    }
+
+    /**
+     * Get content type label.
+     */
+    private function getContentTypeLabel(string $type): string
+    {
+        $labels = [
+            'event' => 'Event',
+            'news' => 'News',
+            'blog' => 'Blog',
+            'scholarship' => 'Scholarship',
+            'resource' => 'Resource',
+            'announcement' => 'Announcement',
+            'job' => 'Job',
         ];
 
         return $labels[$type] ?? ucfirst(str_replace('_', ' ', $type));

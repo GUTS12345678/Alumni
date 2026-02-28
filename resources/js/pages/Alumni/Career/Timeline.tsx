@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Head, router, usePage, Link } from '@inertiajs/react';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
+import { ScrollFadeIn } from '@/components/scroll-animations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TrendingUp, Briefcase, Plus, Calendar, MapPin, Edit, Archive, Building, Award, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -190,31 +191,33 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
             <Head title="Career Timeline" />
 
             <div className="max-w-6xl mx-auto space-y-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                        <TrendingUp className="h-8 w-8 text-maroon-600 dark:text-maroon-400" />
-                        <div>
-                            <h1 className="text-3xl font-bold text-maroon-800 dark:text-maroon-200">Career Timeline</h1>
-                            <p className="text-gray-600 dark:text-gray-400">Track your professional journey</p>
+                <ScrollFadeIn>
+                    {/* Header */}
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                            <TrendingUp className="h-8 w-8 text-maroon-600 dark:text-maroon-400" />
+                            <div>
+                                <h1 className="text-3xl font-bold text-maroon-800 dark:text-maroon-200">Career Timeline</h1>
+                                <p className="text-gray-600 dark:text-gray-400">Track your professional journey</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <Link
+                                href="/alumni/career/archived"
+                                className="text-sm text-maroon-600 dark:text-maroon-400 hover:text-maroon-800 dark:hover:text-maroon-300 hover:underline"
+                            >
+                                View Archived
+                            </Link>
+                            <Button
+                                onClick={openAddModal}
+                                className="bg-maroon-700 hover:bg-maroon-800 dark:bg-maroon-600 dark:hover:bg-maroon-700 text-white"
+                            >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add Position
+                            </Button>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <Link
-                            href="/alumni/career/archived"
-                            className="text-sm text-maroon-600 dark:text-maroon-400 hover:text-maroon-800 dark:hover:text-maroon-300 hover:underline"
-                        >
-                            View Archived
-                        </Link>
-                        <Button
-                            onClick={openAddModal}
-                            className="bg-maroon-700 hover:bg-maroon-800 dark:bg-maroon-600 dark:hover:bg-maroon-700 text-white"
-                        >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add Position
-                        </Button>
-                    </div>
-                </div>
+                </ScrollFadeIn>
 
                 {/* Flash Messages */}
                 {flash?.success && (
@@ -228,204 +231,208 @@ export default function CareerTimeline({ careerHistory, stats }: Props) {
                     </div>
                 )}
 
-                {/* Stats Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card className="border-beige-200 dark:border-gray-700">
-                        <CardContent className="pt-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Total Positions</p>
-                                    <p className="text-2xl font-bold text-maroon-800 dark:text-maroon-200">{stats.total_positions}</p>
-                                </div>
-                                <Briefcase className="h-8 w-8 text-maroon-600 dark:text-maroon-400" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                    <Card className="border-beige-200 dark:border-gray-700">
-                        <CardContent className="pt-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Current Positions</p>
-                                    <p className="text-2xl font-bold text-maroon-800 dark:text-maroon-200">{stats.current_positions}</p>
-                                </div>
-                                <Building className="h-8 w-8 text-maroon-600 dark:text-maroon-400" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                    <Card className="border-beige-200 dark:border-gray-700">
-                        <CardContent className="pt-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm text-gray-600 dark:text-gray-400">Total Experience</p>
-                                    <p className="text-2xl font-bold text-maroon-800 dark:text-maroon-200">
-                                        {formatExperience(stats.total_experience_months)}
-                                    </p>
-                                </div>
-                                <TrendingUp className="h-8 w-8 text-maroon-600 dark:text-maroon-400" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Career History */}
-                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                    <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800 dark:text-maroon-200 flex items-center">
-                            <Briefcase className="h-5 w-5 mr-2" />
-                            Employment History
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        {careerHistory.length === 0 ? (
-                            <div className="text-center py-12">
-                                <Briefcase className="h-16 w-16 text-gray-400 dark:text-gray-600 mx-auto mb-4" />
-                                <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                    No Career History Yet
-                                </h3>
-                                <p className="text-gray-500 dark:text-gray-400 mb-6">
-                                    Add your work experience to build your career timeline
-                                </p>
-                                <Button
-                                    onClick={openAddModal}
-                                    className="bg-maroon-700 hover:bg-maroon-800 dark:bg-maroon-600 dark:hover:bg-maroon-700 text-white"
-                                >
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Add Your First Position
-                                </Button>
-                            </div>
-                        ) : (
-                            <div className="space-y-6">
-                                {careerHistory.map((career, index) => (
-                                    <div
-                                        key={career.id}
-                                        className="relative pl-8 pb-6 border-l-2 border-maroon-200 dark:border-maroon-700 last:border-0"
-                                    >
-                                        {/* Timeline dot */}
-                                        <div className={`absolute left-[-9px] top-0 w-4 h-4 rounded-full border-2 border-white dark:border-gray-900 ${career.is_current ? 'bg-green-500' : 'bg-maroon-600 dark:bg-maroon-500'
-                                            }`} />
-
-                                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
-                                            {/* Header */}
-                                            <div className="flex items-start justify-between mb-4">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <h3 className="text-xl font-semibold text-maroon-800 dark:text-maroon-200">
-                                                            {career.job_title}
-                                                        </h3>
-                                                        {career.is_current && (
-                                                            <Badge className="bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300">
-                                                                Current
-                                                            </Badge>
-                                                        )}
-                                                        {career.employment_type && (
-                                                            <Badge variant="outline" className="border-maroon-300 dark:border-maroon-600 text-maroon-700 dark:text-maroon-300">
-                                                                {employmentTypes[career.employment_type as keyof typeof employmentTypes]}
-                                                            </Badge>
-                                                        )}
-                                                    </div>
-                                                    <p className="text-lg text-gray-700 dark:text-gray-300 font-medium flex items-center gap-2">
-                                                        <Building className="h-4 w-4" />
-                                                        {career.company_name}
-                                                    </p>
-                                                    {career.company_location && (
-                                                        <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2 mt-1">
-                                                            <MapPin className="h-3 w-3" />
-                                                            {career.company_location}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => openEditModal(career)}
-                                                        className="border-maroon-300 dark:border-maroon-600 text-maroon-700 dark:text-maroon-300 hover:bg-maroon-50 dark:hover:bg-maroon-900/30"
-                                                    >
-                                                        <Edit className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => setShowArchiveConfirm(career.id)}
-                                                        className="border-amber-300 dark:border-amber-600 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30"
-                                                        title="Archive this position"
-                                                    >
-                                                        <Archive className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-
-                                            {/* Duration */}
-                                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-4">
-                                                <Calendar className="h-4 w-4" />
-                                                <span>
-                                                    {new Date(career.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                                                    {' - '}
-                                                    {career.is_current ? 'Present' :
-                                                        career.end_date ? new Date(career.end_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Present'
-                                                    }
-                                                </span>
-                                                <span className="text-gray-400 dark:text-gray-500">•</span>
-                                                <span className="font-medium">{career.duration_formatted}</span>
-                                            </div>
-
-                                            {/* Industry */}
-                                            {career.industry && (
-                                                <div className="mb-4">
-                                                    <Badge variant="secondary" className="bg-beige-100 dark:bg-maroon-900/30 text-maroon-800 dark:text-maroon-300">
-                                                        {career.industry}
-                                                    </Badge>
-                                                </div>
-                                            )}
-
-                                            {/* Description */}
-                                            {career.job_description && (
-                                                <p className="text-gray-700 dark:text-gray-300 mb-4 whitespace-pre-line">
-                                                    {career.job_description}
-                                                </p>
-                                            )}
-
-                                            {/* Skills */}
-                                            {career.skills_used && career.skills_used.length > 0 && (
-                                                <div className="mb-4">
-                                                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Skills:</p>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {career.skills_used.map((skill, idx) => (
-                                                            <Badge
-                                                                key={idx}
-                                                                variant="outline"
-                                                                className="border-maroon-200 dark:border-maroon-700 text-maroon-700 dark:text-maroon-300"
-                                                            >
-                                                                {skill}
-                                                            </Badge>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Achievements */}
-                                            {career.achievements && career.achievements.length > 0 && (
-                                                <div>
-                                                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                                                        <Award className="h-4 w-4 text-maroon-600 dark:text-maroon-400" />
-                                                        Key Achievements:
-                                                    </p>
-                                                    <ul className="list-disc list-inside space-y-1">
-                                                        {career.achievements.map((achievement, idx) => (
-                                                            <li key={idx} className="text-gray-700 dark:text-gray-300">
-                                                                {achievement}
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-                                            )}
-                                        </div>
+                <ScrollFadeIn delay={100}>
+                    {/* Stats Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <Card className="border-beige-200 dark:border-gray-700">
+                            <CardContent className="pt-6">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">Total Positions</p>
+                                        <p className="text-2xl font-bold text-maroon-800 dark:text-maroon-200">{stats.total_positions}</p>
                                     </div>
-                                ))}
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                                    <Briefcase className="h-8 w-8 text-maroon-600 dark:text-maroon-400" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card className="border-beige-200 dark:border-gray-700">
+                            <CardContent className="pt-6">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">Current Positions</p>
+                                        <p className="text-2xl font-bold text-maroon-800 dark:text-maroon-200">{stats.current_positions}</p>
+                                    </div>
+                                    <Building className="h-8 w-8 text-maroon-600 dark:text-maroon-400" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card className="border-beige-200 dark:border-gray-700">
+                            <CardContent className="pt-6">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">Total Experience</p>
+                                        <p className="text-2xl font-bold text-maroon-800 dark:text-maroon-200">
+                                            {formatExperience(stats.total_experience_months)}
+                                        </p>
+                                    </div>
+                                    <TrendingUp className="h-8 w-8 text-maroon-600 dark:text-maroon-400" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </ScrollFadeIn>
+
+                <ScrollFadeIn delay={150}>
+                    {/* Career History */}
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                        <CardHeader>
+                            <CardTitle className="text-xl text-maroon-800 dark:text-maroon-200 flex items-center">
+                                <Briefcase className="h-5 w-5 mr-2" />
+                                Employment History
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            {careerHistory.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <Briefcase className="h-16 w-16 text-gray-400 dark:text-gray-600 mx-auto mb-4" />
+                                    <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                        No Career History Yet
+                                    </h3>
+                                    <p className="text-gray-500 dark:text-gray-400 mb-6">
+                                        Add your work experience to build your career timeline
+                                    </p>
+                                    <Button
+                                        onClick={openAddModal}
+                                        className="bg-maroon-700 hover:bg-maroon-800 dark:bg-maroon-600 dark:hover:bg-maroon-700 text-white"
+                                    >
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        Add Your First Position
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {careerHistory.map((career, index) => (
+                                        <div
+                                            key={career.id}
+                                            className="relative pl-8 pb-6 border-l-2 border-maroon-200 dark:border-maroon-700 last:border-0"
+                                        >
+                                            {/* Timeline dot */}
+                                            <div className={`absolute left-[-9px] top-0 w-4 h-4 rounded-full border-2 border-white dark:border-gray-900 ${career.is_current ? 'bg-green-500' : 'bg-maroon-600 dark:bg-maroon-500'
+                                                }`} />
+
+                                            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
+                                                {/* Header */}
+                                                <div className="flex items-start justify-between mb-4">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <h3 className="text-xl font-semibold text-maroon-800 dark:text-maroon-200">
+                                                                {career.job_title}
+                                                            </h3>
+                                                            {career.is_current && (
+                                                                <Badge className="bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300">
+                                                                    Current
+                                                                </Badge>
+                                                            )}
+                                                            {career.employment_type && (
+                                                                <Badge variant="outline" className="border-maroon-300 dark:border-maroon-600 text-maroon-700 dark:text-maroon-300">
+                                                                    {employmentTypes[career.employment_type as keyof typeof employmentTypes]}
+                                                                </Badge>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-lg text-gray-700 dark:text-gray-300 font-medium flex items-center gap-2">
+                                                            <Building className="h-4 w-4" />
+                                                            {career.company_name}
+                                                        </p>
+                                                        {career.company_location && (
+                                                            <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-2 mt-1">
+                                                                <MapPin className="h-3 w-3" />
+                                                                {career.company_location}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => openEditModal(career)}
+                                                            className="border-maroon-300 dark:border-maroon-600 text-maroon-700 dark:text-maroon-300 hover:bg-maroon-50 dark:hover:bg-maroon-900/30"
+                                                        >
+                                                            <Edit className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => setShowArchiveConfirm(career.id)}
+                                                            className="border-amber-300 dark:border-amber-600 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/30"
+                                                            title="Archive this position"
+                                                        >
+                                                            <Archive className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Duration */}
+                                                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-4">
+                                                    <Calendar className="h-4 w-4" />
+                                                    <span>
+                                                        {new Date(career.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                                                        {' - '}
+                                                        {career.is_current ? 'Present' :
+                                                            career.end_date ? new Date(career.end_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Present'
+                                                        }
+                                                    </span>
+                                                    <span className="text-gray-400 dark:text-gray-500">•</span>
+                                                    <span className="font-medium">{career.duration_formatted}</span>
+                                                </div>
+
+                                                {/* Industry */}
+                                                {career.industry && (
+                                                    <div className="mb-4">
+                                                        <Badge variant="secondary" className="bg-beige-100 dark:bg-maroon-900/30 text-maroon-800 dark:text-maroon-300">
+                                                            {career.industry}
+                                                        </Badge>
+                                                    </div>
+                                                )}
+
+                                                {/* Description */}
+                                                {career.job_description && (
+                                                    <p className="text-gray-700 dark:text-gray-300 mb-4 whitespace-pre-line">
+                                                        {career.job_description}
+                                                    </p>
+                                                )}
+
+                                                {/* Skills */}
+                                                {career.skills_used && career.skills_used.length > 0 && (
+                                                    <div className="mb-4">
+                                                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Skills:</p>
+                                                        <div className="flex flex-wrap gap-2">
+                                                            {career.skills_used.map((skill, idx) => (
+                                                                <Badge
+                                                                    key={idx}
+                                                                    variant="outline"
+                                                                    className="border-maroon-200 dark:border-maroon-700 text-maroon-700 dark:text-maroon-300"
+                                                                >
+                                                                    {skill}
+                                                                </Badge>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Achievements */}
+                                                {career.achievements && career.achievements.length > 0 && (
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                                                            <Award className="h-4 w-4 text-maroon-600 dark:text-maroon-400" />
+                                                            Key Achievements:
+                                                        </p>
+                                                        <ul className="list-disc list-inside space-y-1">
+                                                            {career.achievements.map((achievement, idx) => (
+                                                                <li key={idx} className="text-gray-700 dark:text-gray-300">
+                                                                    {achievement}
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </ScrollFadeIn>
             </div>
 
             {/* Add/Edit Modal */}

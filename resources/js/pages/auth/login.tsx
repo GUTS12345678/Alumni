@@ -5,7 +5,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../components/ui/dialog';
-import { GraduationCap, Eye, EyeOff, RefreshCw, Mail, Lock as LockIcon, AlertCircle, Smartphone, Users, TrendingUp, Building2, Home, IdCard, ArrowRight, CheckCircle2, XCircle } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, RefreshCw, Mail, Lock as LockIcon, AlertCircle, Smartphone, Users, TrendingUp, Home, IdCard, ArrowRight, CheckCircle2, XCircle, Sparkles, Globe, Shield, Briefcase, Award } from 'lucide-react';
 import axios from 'axios';
 
 interface LoginErrors {
@@ -33,8 +33,6 @@ export default function Login() {
     const [showPassword, setShowPassword] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errors, setErrors] = useState<LoginErrors>({});
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const [csrfError, setCsrfError] = useState(false);
     const [show2FAInput, setShow2FAInput] = useState(false);
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [errorModalMessage, setErrorModalMessage] = useState('');
@@ -60,10 +58,15 @@ export default function Login() {
         }
     }, []);
 
+    // Track whether login is in progress to cancel pending requests
+    const [loginInProgress, setLoginInProgress] = useState(false);
+
     useEffect(() => {
         const checkLoginExists = async () => {
-            if (!formData.login) {
-                setLoginValidation({ checking: false, exists: false, message: '', isEmail: false });
+            if (!formData.login || loginInProgress) {
+                if (!formData.login) {
+                    setLoginValidation({ checking: false, exists: false, message: '', isEmail: false });
+                }
                 return;
             }
 
@@ -106,7 +109,7 @@ export default function Login() {
 
         const timer = setTimeout(checkLoginExists, 800);
         return () => clearTimeout(timer);
-    }, [formData.login]);
+    }, [formData.login, loginInProgress]);
 
     const handleInputChange = (key: string, value: string | boolean) => {
         setFormData(prev => ({ ...prev, [key]: value }));
@@ -153,7 +156,7 @@ export default function Login() {
         if (!validateForm()) return;
 
         setIsSubmitting(true);
-        setCsrfError(false);
+        setLoginInProgress(true);
         setErrors({});
 
         const isEmail = /\S+@\S+\.\S+/.test(formData.login);
@@ -164,13 +167,10 @@ export default function Login() {
             otp_code: formData.otp_code,
             remember: false,
         }, {
-            preserveState: true,
-            preserveScroll: true,
             onError: (errors: LoginErrors) => {
                 console.error('Login error:', errors);
 
                 if (errors.message && (errors.message.includes('419') || errors.message.includes('expired'))) {
-                    setCsrfError(true);
                     setErrorModalMessage('Your session has expired. Please refresh the page and try again.');
                     setShowErrorModal(true);
                 }
@@ -204,11 +204,12 @@ export default function Login() {
                 setIsSubmitting(false);
             },
             onSuccess: () => {
-                console.log('Login successful - redirecting...');
+                // Server uses Inertia::location() for a full-page redirect
+                // which handles the session cookie properly.
             },
             onFinish: () => {
-                console.log('Login finished');
                 setIsSubmitting(false);
+                setLoginInProgress(false);
             },
         });
     };
@@ -226,165 +227,132 @@ export default function Login() {
             <Head title="Login - Alumni Tracer System" />
 
             <style>{`
-                @keyframes blob {
-                    0%, 100% { transform: translate(0px, 0px) scale(1); }
-                    33% { transform: translate(30px, -50px) scale(1.1); }
-                    66% { transform: translate(-20px, 20px) scale(0.9); }
+                @keyframes float {
+                    0%, 100% { transform: translateY(0px); }
+                    50% { transform: translateY(-6px); }
                 }
-                .animate-blob {
-                    animation: blob 7s infinite;
+                @keyframes count-up {
+                    from { opacity: 0; transform: translateY(8px); }
+                    to { opacity: 1; transform: translateY(0); }
                 }
-                .animation-delay-2000 {
-                    animation-delay: 2s;
+                .animate-float {
+                    animation: float 3s ease-in-out infinite;
                 }
-                .animation-delay-4000 {
-                    animation-delay: 4s;
-                }
-                .stat-card {
-                    backdrop-filter: blur(10px);
-                    background: rgba(255, 255, 255, 0.6);
-                    border: 1px solid rgba(139, 0, 0, 0.1);
-                    transition: all 0.3s ease;
-                }
-                .stat-card:hover {
-                    background: rgba(255, 255, 255, 0.8);
-                    border-color: rgba(139, 0, 0, 0.2);
-                    transform: translateY(-2px);
-                    box-shadow: 0 10px 30px rgba(139, 0, 0, 0.1);
-                }
-                :is(.dark *) .stat-card {
-                    background: rgba(31, 41, 55, 0.6);
-                    border-color: rgba(75, 85, 99, 0.4);
-                }
-                :is(.dark *) .stat-card:hover {
-                    background: rgba(31, 41, 55, 0.8);
-                    border-color: rgba(107, 114, 128, 0.5);
-                    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-                }
-                .feature-item {
-                    position: relative;
-                    overflow: hidden;
-                }
-                .feature-item::before {
-                    content: '';
-                    position: absolute;
-                    top: 0;
-                    left: -100%;
-                    width: 100%;
-                    height: 100%;
-                    background: linear-gradient(90deg, transparent, rgba(139, 0, 0, 0.05), transparent);
-                    transition: left 0.5s;
-                }
-                .feature-item:hover::before {
-                    left: 100%;
+                .stat-number {
+                    animation: count-up 0.6s ease-out forwards;
                 }
             `}</style>
 
-            <div className="min-h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex relative overflow-x-hidden">
-                {/* Animated Background Blobs */}
-                <div className="absolute inset-0">
-                    <div className="absolute top-0 -left-4 w-72 h-72 bg-maroon-200 dark:bg-maroon-800 rounded-full mix-blend-multiply dark:mix-blend-normal filter blur-xl opacity-20 dark:opacity-30 animate-blob"></div>
-                    <div className="absolute top-0 -right-4 w-72 h-72 bg-beige-200 dark:bg-gray-700 rounded-full mix-blend-multiply dark:mix-blend-normal filter blur-xl opacity-20 dark:opacity-30 animate-blob animation-delay-2000"></div>
-                    <div className="absolute -bottom-8 left-20 w-72 h-72 bg-maroon-300 dark:bg-maroon-900 rounded-full mix-blend-multiply dark:mix-blend-normal filter blur-xl opacity-20 dark:opacity-30 animate-blob animation-delay-4000"></div>
-                </div>
+            <div className="h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex relative overflow-hidden">
 
                 {/* Left Side - Professional Branding */}
-                <div className="hidden lg:flex lg:w-1/2 flex-col justify-center px-12 xl:px-20 relative z-10">
-                    <div className="max-w-xl space-y-10">
-                        {/* Logo Section */}
-                        <div className="space-y-6">
-                            <div className="flex items-center space-x-4">
-                                <div className="relative">
-                                    <div className="w-16 h-16 bg-gradient-to-br from-maroon-600 to-maroon-800 rounded-2xl flex items-center justify-center shadow-2xl border border-maroon-500/50">
-                                        <GraduationCap className="h-9 w-9 text-white" />
+                <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
+                    {/* Full maroon background with gradient */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-maroon-800 via-maroon-900 to-maroon-950"></div>
+                    {/* Decorative pattern overlay */}
+                    <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '32px 32px' }}></div>
+                    {/* Decorative circles */}
+                    <div className="absolute -top-20 -right-20 w-80 h-80 bg-maroon-700/20 rounded-full blur-3xl"></div>
+                    <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-maroon-600/15 rounded-full blur-3xl"></div>
+                    <div className="absolute top-1/3 right-10 w-40 h-40 bg-yellow-500/5 rounded-full blur-2xl"></div>
+
+                    <div className="relative z-10 flex flex-col justify-center px-10 xl:px-14 w-full h-full">
+                        <div className="max-w-lg space-y-5">
+                            {/* Logo + Title */}
+                            <div className="space-y-3">
+                                <div className="flex items-center space-x-3">
+                                    <div className="relative animate-float">
+                                        <div className="w-13 h-13 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/20 shadow-2xl">
+                                            <GraduationCap className="h-7 w-7 text-white" />
+                                        </div>
                                     </div>
-                                    <div className="absolute -inset-1 bg-gradient-to-br from-maroon-600 to-maroon-800 rounded-2xl blur-lg opacity-50"></div>
-                                </div>
-                                <div>
-                                    <h1 className="text-4xl font-bold text-maroon-900 dark:text-white tracking-tight">Alumni Tracer</h1>
-                                    <p className="text-lg text-maroon-700 dark:text-gray-300 font-light tracking-wide">System</p>
-                                </div>
-                            </div>
-                            <p className="text-lg text-maroon-700 dark:text-gray-300 leading-relaxed">
-                                Stay connected, track your career journey, and contribute to the growth of our alumni community.
-                            </p>
-                        </div>
-
-                        {/* Feature Grid */}
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="feature-item stat-card rounded-xl p-5 group cursor-pointer">
-                                <div className="flex items-center space-x-3 mb-2">
-                                    <div className="w-10 h-10 bg-maroon-600/20 rounded-lg flex items-center justify-center group-hover:bg-maroon-600/30 transition-colors">
-                                        <Users className="h-5 w-5 text-maroon-400" />
+                                    <div>
+                                        <h1 className="text-3xl font-bold text-white tracking-tight">Alumni Tracer</h1>
+                                        <p className="text-maroon-200 font-light tracking-wider text-xs uppercase">System</p>
                                     </div>
-                                    <h3 className="font-semibold text-maroon-900 dark:text-white text-sm">Connect</h3>
                                 </div>
-                                <p className="text-xs text-maroon-600 dark:text-gray-400">Build your professional network</p>
+                                <p className="text-sm text-maroon-100/80 leading-relaxed max-w-sm">
+                                    Stay connected, track your career journey, and contribute to the growth of our alumni community.
+                                </p>
                             </div>
 
-                            <div className="feature-item stat-card rounded-xl p-5 group cursor-pointer">
-                                <div className="flex items-center space-x-3 mb-2">
-                                    <div className="w-10 h-10 bg-yellow-600/20 rounded-lg flex items-center justify-center group-hover:bg-yellow-600/30 transition-colors">
-                                        <TrendingUp className="h-5 w-5 text-yellow-400" />
+                            {/* Stats Row */}
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3.5 border border-white/10 text-center group hover:bg-white/15 transition-all duration-300">
+                                    <div className="text-2xl font-bold text-white stat-number">{stats?.totalAlumni?.toLocaleString() || '0'}<span className="text-yellow-400">+</span></div>
+                                    <div className="text-[10px] text-maroon-200 uppercase tracking-wider font-medium mt-0.5">Alumni</div>
+                                </div>
+                                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3.5 border border-white/10 text-center group hover:bg-white/15 transition-all duration-300">
+                                    <div className="text-2xl font-bold text-white stat-number">{stats?.employmentRate ?? 0}<span className="text-green-400">%</span></div>
+                                    <div className="text-[10px] text-maroon-200 uppercase tracking-wider font-medium mt-0.5">Employed</div>
+                                </div>
+                                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3.5 border border-white/10 text-center group hover:bg-white/15 transition-all duration-300">
+                                    <div className="text-2xl font-bold text-white stat-number">{stats?.industries ?? 0}<span className="text-blue-400">+</span></div>
+                                    <div className="text-[10px] text-maroon-200 uppercase tracking-wider font-medium mt-0.5">Industries</div>
+                                </div>
+                            </div>
+
+                            {/* Feature List */}
+                            <div className="space-y-2">
+                                <div className="flex items-center space-x-3 px-3.5 py-2.5 rounded-lg bg-white/5 border border-white/[0.07] hover:bg-white/10 transition-all duration-300 group">
+                                    <div className="w-9 h-9 bg-blue-500/20 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500/30 transition-colors">
+                                        <Users className="h-4 w-4 text-blue-300" />
                                     </div>
-                                    <h3 className="font-semibold text-maroon-900 dark:text-white text-sm">Track Progress</h3>
-                                </div>
-                                <p className="text-xs text-maroon-600 dark:text-gray-400">Monitor your career growth</p>
-                            </div>
-
-                            <div className="feature-item stat-card rounded-xl p-5 group cursor-pointer">
-                                <div className="flex items-center space-x-3 mb-2">
-                                    <div className="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center group-hover:bg-blue-600/30 transition-colors">
-                                        <Building2 className="h-5 w-5 text-blue-400" />
+                                    <div className="min-w-0">
+                                        <h3 className="text-white font-medium text-sm leading-tight">Professional Network</h3>
+                                        <p className="text-maroon-200/60 text-xs leading-tight">Connect with alumni across industries</p>
                                     </div>
-                                    <h3 className="font-semibold text-maroon-900 dark:text-white text-sm">Global Reach</h3>
                                 </div>
-                                <p className="text-xs text-maroon-600 dark:text-gray-400">Connect worldwide</p>
-                            </div>
-
-                            <div className="feature-item stat-card rounded-xl p-5 group cursor-pointer">
-                                <div className="flex items-center space-x-3 mb-2">
-                                    <div className="w-10 h-10 bg-green-600/20 rounded-lg flex items-center justify-center group-hover:bg-green-600/30 transition-colors">
-                                        <TrendingUp className="h-5 w-5 text-green-400" />
+                                <div className="flex items-center space-x-3 px-3.5 py-2.5 rounded-lg bg-white/5 border border-white/[0.07] hover:bg-white/10 transition-all duration-300 group">
+                                    <div className="w-9 h-9 bg-green-500/20 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-green-500/30 transition-colors">
+                                        <TrendingUp className="h-4 w-4 text-green-300" />
                                     </div>
-                                    <h3 className="font-semibold text-maroon-900 dark:text-white text-sm">Opportunities</h3>
+                                    <div className="min-w-0">
+                                        <h3 className="text-white font-medium text-sm leading-tight">Career Tracking</h3>
+                                        <p className="text-maroon-200/60 text-xs leading-tight">Monitor employment trends and growth</p>
+                                    </div>
                                 </div>
-                                <p className="text-xs text-maroon-600 dark:text-gray-400">Discover career paths</p>
+                                <div className="flex items-center space-x-3 px-3.5 py-2.5 rounded-lg bg-white/5 border border-white/[0.07] hover:bg-white/10 transition-all duration-300 group">
+                                    <div className="w-9 h-9 bg-yellow-500/20 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-yellow-500/30 transition-colors">
+                                        <Briefcase className="h-4 w-4 text-yellow-300" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h3 className="text-white font-medium text-sm leading-tight">Job Opportunities</h3>
+                                        <p className="text-maroon-200/60 text-xs leading-tight">Discover career paths and postings</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center space-x-3 px-3.5 py-2.5 rounded-lg bg-white/5 border border-white/[0.07] hover:bg-white/10 transition-all duration-300 group">
+                                    <div className="w-9 h-9 bg-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-purple-500/30 transition-colors">
+                                        <Award className="h-4 w-4 text-purple-300" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h3 className="text-white font-medium text-sm leading-tight">Achievements & Surveys</h3>
+                                        <p className="text-maroon-200/60 text-xs leading-tight">Contribute data that shapes the future</p>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
 
-                        {/* Statistics */}
-                        <div className="stat-card rounded-xl p-6">
-                            <div className="grid grid-cols-3 gap-6">
-                                <div className="text-center">
-                                    <div className="text-3xl font-bold text-maroon-900 dark:text-white mb-1">{stats?.totalAlumni?.toLocaleString() || '0'}+</div>
-                                    <div className="text-xs text-maroon-600 dark:text-gray-400 uppercase tracking-wide">Alumni Members</div>
+                            {/* Bottom trust badges */}
+                            <div className="flex items-center gap-5 pt-1">
+                                <div className="flex items-center gap-1.5 text-maroon-200/50 text-[11px]">
+                                    <Shield className="h-3.5 w-3.5" />
+                                    <span>Encrypted</span>
                                 </div>
-                                <div className="text-center border-x border-maroon-200 dark:border-gray-600">
-                                    <div className="text-3xl font-bold text-maroon-900 dark:text-white mb-1">{stats?.employmentRate ?? 0}%</div>
-                                    <div className="text-xs text-maroon-600 dark:text-gray-400 uppercase tracking-wide">Employment Rate</div>
+                                <div className="flex items-center gap-1.5 text-maroon-200/50 text-[11px]">
+                                    <Globe className="h-3.5 w-3.5" />
+                                    <span>Accessible Anywhere</span>
                                 </div>
-                                <div className="text-center">
-                                    <div className="text-3xl font-bold text-maroon-900 dark:text-white mb-1">{stats?.industries ?? 0}+</div>
-                                    <div className="text-xs text-maroon-600 dark:text-gray-400 uppercase tracking-wide">Industries</div>
+                                <div className="flex items-center gap-1.5 text-maroon-200/50 text-[11px]">
+                                    <Sparkles className="h-3.5 w-3.5" />
+                                    <span>Real-time Analytics</span>
                                 </div>
                             </div>
-                        </div>
-
-                        {/* Security Badge */}
-                        <div className="flex items-center space-x-3 text-maroon-600 dark:text-gray-400 text-sm">
-                            <div className="w-8 h-8 bg-maroon-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
-                                <svg className="w-4 h-4 text-maroon-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                </svg>
-                            </div>
-                            <span>Enterprise-grade security & data protection</span>
                         </div>
                     </div>
                 </div>
 
                 {/* Right Side - Login Form */}
-                <div className="w-full lg:w-1/2 flex items-center justify-center px-6 py-12 relative z-10">
+                <div className="w-full lg:w-1/2 flex items-center justify-center px-6 py-8 relative z-10 overflow-y-auto">
                     <div className="w-full max-w-md">
                         {/* Mobile Logo */}
                         <div className="lg:hidden text-center mb-10">
@@ -401,12 +369,12 @@ export default function Login() {
                         </div>
 
                         <Card className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl border-maroon-100 dark:border-gray-700 shadow-2xl">
-                            <CardHeader className="pb-6 pt-8 px-8 border-b border-gray-100 dark:border-gray-700">
+                            <CardHeader className="pb-4 pt-6 px-7 border-b border-gray-100 dark:border-gray-700">
                                 <CardTitle className="text-2xl text-gray-900 dark:text-white font-bold text-center">Welcome Back</CardTitle>
                                 <CardDescription className="text-gray-600 dark:text-gray-400 text-center">Sign in to access your portal</CardDescription>
                             </CardHeader>
 
-                            <CardContent className="p-8">
+                            <CardContent className="p-7">
                                 <Dialog open={showErrorModal} onOpenChange={setShowErrorModal}>
                                     <DialogContent className="sm:max-w-md">
                                         <DialogHeader>
@@ -599,12 +567,10 @@ export default function Login() {
                             </CardContent>
                         </Card>
 
-                        <div className="mt-6 text-center">
-                            <div className="inline-flex items-center px-4 py-2 bg-maroon-50 dark:bg-gray-800 backdrop-blur-sm rounded-full border border-maroon-200 dark:border-gray-700">
-                                <svg className="w-4 h-4 text-maroon-600 dark:text-gray-300 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                                </svg>
-                                <span className="text-xs text-maroon-900 dark:text-gray-300 font-medium">Secure & Encrypted Connection</span>
+                        <div className="mt-4 text-center">
+                            <div className="inline-flex items-center px-3 py-1.5 bg-maroon-50/80 dark:bg-gray-800 backdrop-blur-sm rounded-full border border-maroon-200/50 dark:border-gray-700">
+                                <Shield className="w-3.5 h-3.5 text-maroon-500 dark:text-gray-400 mr-1.5" />
+                                <span className="text-[11px] text-maroon-700 dark:text-gray-300 font-medium">Secure & Encrypted Connection</span>
                             </div>
                         </div>
                     </div>

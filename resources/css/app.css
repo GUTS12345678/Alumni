@@ -186,12 +186,30 @@
         }
     }
 
-    /* Allow scrolling on public pages like landing page */
-    html.public-page,
-    html.public-page body,
-    html.public-page #app {
-        @apply overflow-auto;
+    /* Prevent background scrolling when a modal/dialog/sheet is open */
+    html[data-scroll-locked] [data-slot="sidebar-inset"],
+    html[data-scroll-locked] main {
+        overflow: hidden !important;
+    }
+
+    /* Allow scrolling on public pages like landing page — single scroll container */
+    html.public-page {
+        overflow: hidden;
+        height: 100%;
         scroll-behavior: smooth;
+    }
+
+    html.public-page body {
+        overflow-y: auto;
+        overflow-x: hidden;
+        height: 100%;
+        scroll-behavior: smooth;
+    }
+
+    html.public-page #app {
+        height: auto;
+        min-height: 100%;
+        overflow: visible;
     }
 
     /* Section flash animation for navigation */
@@ -276,24 +294,20 @@
     @keyframes fade-in-up {
         from {
             opacity: 0;
-            transform: translateY(16px);
         }
 
         to {
             opacity: 1;
-            transform: translateY(0);
         }
     }
 
     @keyframes scale-in {
         from {
             opacity: 0;
-            transform: scale(0.95);
         }
 
         to {
             opacity: 1;
-            transform: scale(1);
         }
     }
 
@@ -521,4 +535,16 @@
 
 .dark *::-webkit-scrollbar-thumb:hover {
     background-color: rgba(200, 160, 160, 0.5);
+}
+
+/* Lock page scroll when any modal overlay is open */
+body:has([data-modal-overlay]),
+body:has(.fixed.inset-0.z-50) {
+    overflow: hidden !important;
+}
+
+/* Also lock the main content scroll container used in admin/alumni layouts */
+main:has(.fixed.inset-0.z-50),
+main:has([data-modal-overlay]) {
+    overflow: hidden !important;
 }

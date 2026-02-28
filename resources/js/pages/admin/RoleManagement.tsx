@@ -97,6 +97,17 @@ export default function RoleManagement() {
     // View state
     const [viewingRole, setViewingRole] = useState<Role | null>(null);
 
+    // View Users by Permission state
+    const [showUsersModal, setShowUsersModal] = useState(false);
+    const [selectedPermission, setSelectedPermission] = useState<Permission | null>(null);
+    const [usersWithPermission, setUsersWithPermission] = useState<{ id: number; name: string; email: string; role_name?: string; role_display_name?: string; access_source?: string }[]>([]);
+    const [loadingUsers, setLoadingUsers] = useState(false);
+
+    // Inline editing in view dialog
+    const [inlineEditing, setInlineEditing] = useState(false);
+    const [inlinePermissions, setInlinePermissions] = useState<Set<number>>(new Set());
+    const [savingInline, setSavingInline] = useState(false);
+
     const fetchRoles = useCallback(async () => {
         try {
             const response = await fetch('/api/v1/admin/roles', {
@@ -386,6 +397,96 @@ export default function RoleManagement() {
             month: 'short',
             day: 'numeric',
         });
+    };
+
+    // Risk-level assessment for permissions
+    const getPermissionRiskLevel = (permissionName: string): 'low' | 'medium' | 'high' => {
+        const highRisk = ['delete', 'destroy', 'revoke', 'bulk_delete', 'manage', 'impersonate'];
+        const mediumRisk = ['create', 'update', 'edit', 'change', 'send', 'export'];
+        const lower = permissionName.toLowerCase();
+        if (highRisk.some(k => lower.includes(k))) return 'high';
+        if (mediumRisk.some(k => lower.includes(k))) return 'medium';
+        return 'low';
+    };
+
+    const getRiskBadgeStyles = (risk: 'low' | 'medium' | 'high') => {
+        const styles = {
+            low: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700',
+            medium: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700',
+            high: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700',
+        };
+        const labels = { low: 'viewing', medium: 'actions', high: 'critical' };
+        return { className: styles[risk], label: labels[risk] };
+    };
+
+    // View Users by Permission
+    const viewUsersWithPermission = async (perm: Permission) => {
+        setSelectedPermission(perm);
+        setShowUsersModal(true);
+        setLoadingUsers(true);
+        try {
+            const response = await fetch(`/api/v1/admin/permissions/${perm.id}/users`, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'include',
+            });
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success) setUsersWithPermission(data.data);
+            }
+        } catch (error) {
+            console.error('Error fetching users:', error);
+        } finally {
+            setLoadingUsers(false);
+        }
+    };
+
+    // Inline permission toggle in view dialog
+    const toggleInlinePermission = (permId: number) => {
+        setInlinePermissions(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(permId)) newSet.delete(permId);
+            else newSet.add(permId);
+            return newSet;
+        });
+    };
+
+    const saveInlinePermissions = async () => {
+        if (!viewingRole) return;
+        setSavingInline(true);
+        try {
+            const response = await fetch(`/api/v1/admin/roles/${viewingRole.id}/permissions`, {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': getCsrfToken(),
+                },
+                credentials: 'include',
+                body: JSON.stringify({ permission_ids: Array.from(inlinePermissions) }),
+            });
+            if (response.ok) {
+                toast({ title: 'Permissions Updated', description: `Permissions for "${viewingRole.display_name}" saved.` });
+                setInlineEditing(false);
+                fetchRoles();
+                fetchStats();
+                // Update the viewing role locally
+                setViewingRole(prev => prev ? { ...prev, permissions: Array.from(inlinePermissions) } : null);
+            } else {
+                toast({ title: 'Error', description: 'Failed to save permissions.', variant: 'destructive' });
+            }
+        } catch {
+            toast({ title: 'Error', description: 'Failed to save permissions.', variant: 'destructive' });
+        } finally {
+            setSavingInline(false);
+        }
+    };
+
+    const startInlineEditing = () => {
+        if (viewingRole) {
+            setInlinePermissions(new Set(viewingRole.permissions));
+            setInlineEditing(true);
+        }
     };
 
     return (
@@ -733,14 +834,25 @@ export default function RoleManagement() {
                                                                             )}
                                                                         </div>
                                                                         <div className="flex-1 min-w-0">
-                                                                            <p
-                                                                                className={cn(
-                                                                                    'font-medium text-sm',
-                                                                                    isSelected ? 'text-maroon-800 dark:text-gray-200' : 'text-gray-800 dark:text-gray-200'
-                                                                                )}
-                                                                            >
-                                                                                {perm.display_name}
-                                                                            </p>
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <p
+                                                                                    className={cn(
+                                                                                        'font-medium text-sm',
+                                                                                        isSelected ? 'text-maroon-800 dark:text-gray-200' : 'text-gray-800 dark:text-gray-200'
+                                                                                    )}
+                                                                                >
+                                                                                    {perm.display_name}
+                                                                                </p>
+                                                                                {(() => {
+                                                                                    const risk = getPermissionRiskLevel(perm.name);
+                                                                                    const rb = getRiskBadgeStyles(risk);
+                                                                                    return (
+                                                                                        <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded border ${rb.className}`}>
+                                                                                            {rb.label}
+                                                                                        </span>
+                                                                                    );
+                                                                                })()}
+                                                                            </div>
                                                                             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-mono">
                                                                                 {perm.name}
                                                                             </p>
@@ -853,25 +965,125 @@ export default function RoleManagement() {
 
                                 {/* Permissions List */}
                                 <div>
-                                    <h4 className="font-semibold mb-3">
-                                        Assigned Permissions ({viewingRole.permissions_details.length})
-                                    </h4>
-                                    {viewingRole.permissions_details.length === 0 ? (
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h4 className="font-semibold">
+                                            Permissions ({viewingRole.permissions_details.length})
+                                        </h4>
+                                        {!viewingRole.is_system_role || viewingRole.name !== 'super_admin' ? (
+                                            inlineEditing ? (
+                                                <div className="flex gap-2">
+                                                    <Button variant="outline" size="sm" onClick={() => setInlineEditing(false)}>
+                                                        Cancel
+                                                    </Button>
+                                                    <Button size="sm" onClick={saveInlinePermissions} disabled={savingInline}>
+                                                        {savingInline && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                                                        <Save className="h-3 w-3 mr-1" />
+                                                        Save
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <Button variant="outline" size="sm" onClick={startInlineEditing}>
+                                                    <Edit className="h-3 w-3 mr-1" />
+                                                    Quick Edit
+                                                </Button>
+                                            )
+                                        ) : null}
+                                    </div>
+
+                                    {inlineEditing ? (
+                                        /* Toggle switch view for quick editing */
+                                        <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
+                                            {Object.entries(groupPermissionsByCategory(permissions)).map(([cat, catPerms]) => {
+                                                const catPermIds = catPerms.map(p => p.id);
+                                                const allOn = catPermIds.every(id => inlinePermissions.has(id));
+                                                return (
+                                                    <div key={cat} className="border border-beige-200 dark:border-gray-700 rounded-lg p-3">
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <Shield className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                                                                <span className="font-semibold text-sm">{cat}</span>
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    {catPermIds.filter(id => inlinePermissions.has(id)).length}/{catPerms.length}
+                                                                </span>
+                                                            </div>
+                                                            <Button
+                                                                variant="ghost" size="sm" className="h-6 text-xs"
+                                                                onClick={() => {
+                                                                    setInlinePermissions(prev => {
+                                                                        const s = new Set(prev);
+                                                                        if (allOn) catPermIds.forEach(id => s.delete(id));
+                                                                        else catPermIds.forEach(id => s.add(id));
+                                                                        return s;
+                                                                    });
+                                                                }}
+                                                            >
+                                                                {allOn ? 'Deselect All' : 'Select All'}
+                                                            </Button>
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            {catPerms.map(perm => {
+                                                                const isOn = inlinePermissions.has(perm.id);
+                                                                const risk = getPermissionRiskLevel(perm.name);
+                                                                const riskBadge = getRiskBadgeStyles(risk);
+                                                                return (
+                                                                    <div key={perm.id} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                            <span className="text-sm font-medium truncate">{perm.display_name}</span>
+                                                                            <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded border ${riskBadge.className}`}>
+                                                                                {riskBadge.label}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <button
+                                                                                onClick={(e) => { e.stopPropagation(); viewUsersWithPermission(perm); }}
+                                                                                className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded-full text-blue-700 dark:text-blue-300 transition-colors font-medium"
+                                                                            >
+                                                                                <Users className="h-3 w-3" />
+                                                                                Users
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => toggleInlinePermission(perm.id)}
+                                                                                className={cn(
+                                                                                    'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                                                                                    isOn ? 'bg-maroon-600' : 'bg-gray-300 dark:bg-gray-600'
+                                                                                )}
+                                                                            >
+                                                                                <span className={cn(
+                                                                                    'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                                                                                    isOn ? 'translate-x-6' : 'translate-x-1'
+                                                                                )} />
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : viewingRole.permissions_details.length === 0 ? (
                                         <p className="text-sm text-muted-foreground">
                                             No permissions assigned to this role.
                                         </p>
                                     ) : (
                                         <div className="flex flex-wrap gap-2">
-                                            {viewingRole.permissions_details.map((perm) => (
-                                                <Badge
-                                                    key={perm.id}
-                                                    variant="outline"
-                                                    className="text-xs"
-                                                >
-                                                    <Key className="h-3 w-3 mr-1" />
-                                                    {perm.display_name}
-                                                </Badge>
-                                            ))}
+                                            {viewingRole.permissions_details.map((perm) => {
+                                                const risk = getPermissionRiskLevel(perm.name);
+                                                const riskBadge = getRiskBadgeStyles(risk);
+                                                return (
+                                                    <Badge
+                                                        key={perm.id}
+                                                        variant="outline"
+                                                        className={cn('text-xs cursor-pointer hover:opacity-80', riskBadge.className)}
+                                                        onClick={() => viewUsersWithPermission({ ...perm, category: '', description: '' } as Permission)}
+                                                        title="Click to view users with this permission"
+                                                    >
+                                                        <Key className="h-3 w-3 mr-1" />
+                                                        {perm.display_name}
+                                                    </Badge>
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
@@ -896,6 +1108,61 @@ export default function RoleManagement() {
                 </DialogContent>
             </Dialog>
             <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
+
+            {/* View Users by Permission Modal */}
+            <Dialog open={showUsersModal} onOpenChange={setShowUsersModal}>
+                <DialogContent className="sm:max-w-2xl max-h-[85vh]">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Users className="h-5 w-5" />
+                            Users with "{selectedPermission?.display_name}"
+                        </DialogTitle>
+                        <DialogDescription>
+                            {selectedPermission?.description || 'View all users who have this permission through their role or custom grants.'}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="overflow-y-auto max-h-[60vh]">
+                        {loadingUsers ? (
+                            <div className="flex items-center justify-center py-12">
+                                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : usersWithPermission.length === 0 ? (
+                            <div className="text-center py-12 text-muted-foreground">
+                                <Users className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                                <p className="font-medium">No users have this permission</p>
+                                <p className="text-sm mt-1">Assign this permission to a role to grant access</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {usersWithPermission.map((u) => (
+                                    <div key={u.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <div className="flex items-center gap-3">
+                                            <div className="h-10 w-10 bg-gradient-to-br from-maroon-600 to-maroon-700 rounded-full flex items-center justify-center text-white font-bold shadow-sm">
+                                                {(u.name || u.email || 'U').charAt(0).toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <p className="font-medium text-sm">{u.name || 'No Name'}</p>
+                                                <p className="text-xs text-muted-foreground">{u.email}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {u.role_display_name && (
+                                                <Badge variant="secondary" className="text-xs">
+                                                    {u.role_display_name}
+                                                </Badge>
+                                            )}
+                                            {u.access_source === 'custom_grant' && (
+                                                <Badge className="bg-purple-100 text-purple-700 text-xs">Custom</Badge>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </AdminBaseLayout>
     );
 }

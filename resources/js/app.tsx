@@ -1,6 +1,6 @@
 import '../css/app.css';
-// Initialize Laravel Echo for real-time features (notifications, live updates)
-import './echo';
+// Laravel Echo is lazy-loaded when needed (see NotificationListener / useRealtime)
+// This avoids loading ~100KB of pusher-js on every page
 
 import axios from 'axios';
 import { createInertiaApp } from '@inertiajs/react';
@@ -87,10 +87,21 @@ createInertiaApp({
     document.addEventListener('inertia:error', (event: any) => {
         const response = event.detail.response;
 
-        // Handle 419 CSRF token mismatch
+        // Handle 419 CSRF token mismatch — only reload if not navigating away
+        // (e.g., after login the page is already navigating to /dashboard)
         if (response?.status === 419) {
             event.preventDefault();
-            window.location.reload();
+            // The axios interceptor already retries with a fresh CSRF token.
+            // Only reload as a last resort if the user is still on the same page.
+            setTimeout(() => {
+                // If we're still on the same URL after 500ms, reload to get a fresh token
+                const currentUrl = window.location.href;
+                setTimeout(() => {
+                    if (window.location.href === currentUrl) {
+                        window.location.reload();
+                    }
+                }, 500);
+            }, 0);
         }
     });
 });

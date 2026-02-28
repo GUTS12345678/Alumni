@@ -41,7 +41,16 @@ class RateLimiter
         $key = $this->resolveRequestSignature($request, $type);
         $limit = $this->limits[$type] ?? $this->limits['default'];
         
-        $attempts = Cache::get($key, 0);
+        try {
+            $attempts = Cache::get($key, 0);
+        } catch (\Exception $e) {
+            // If cache is unavailable, allow the request through rather than blocking the entire app
+            Log::warning('RateLimiter: Cache unavailable, skipping rate limit check', [
+                'error' => $e->getMessage(),
+                'path' => $request->path(),
+            ]);
+            return $next($request);
+        }
         
         if ($attempts >= $limit['attempts']) {
             // Log potential abuse
@@ -69,7 +78,11 @@ class RateLimiter
         }
 
         // Increment attempts
-        Cache::put($key, $attempts + 1, now()->addSeconds($limit['decay']));
+        try {
+            Cache::put($key, $attempts + 1, now()->addSeconds($limit['decay']));
+        } catch (\Exception $e) {
+            Log::warning('RateLimiter: Failed to increment attempts', ['error' => $e->getMessage()]);
+        }
 
         $response = $next($request);
 
@@ -77,7 +90,7 @@ class RateLimiter
         return $response->withHeaders([
             'X-RateLimit-Limit' => $limit['attempts'],
             'X-RateLimit-Remaining' => max(0, $limit['attempts'] - $attempts - 1),
-            'X-RateLimit-Reset' => Cache::get("{$key}:reset", now()->addSeconds($limit['decay'])->timestamp),
+            'X-RateLimit-Reset' => now()->addSeconds($limit['decay'])->timestamp,
         ]);
     }
 
@@ -95,23 +108,24 @@ class RateLimiter
      */
     protected function checkForBruteForce(Request $request, string $type): void
     {
-        // Track IPs that consistently hit rate limits
-        $bruteForceKey = "brute_force:{$request->ip()}";
-        $bruteForceCount = Cache::increment($bruteForceKey);
-        
-        if ($bruteForceCount === 1) {
-            Cache::put($bruteForceKey, 1, now()->addHours(24));
-        }
+        try {
+            // Track IPs that consistently hit rate limits
+            $bruteForceKey = "brute_force:{$request->ip()}";
+            $bruteForceCount = Cache::get($bruteForceKey, 0) + 1;
+            Cache::put($bruteForceKey, $bruteForceCount, now()->addHours(24));
 
-        // If same IP hits rate limits multiple times, log as potential attack
-        if ($bruteForceCount >= 5) {
-            Log::alert('Potential brute force attack detected', [
-                'ip' => $request->ip(),
-                'user_agent' => $request->userAgent(),
-                'path' => $request->path(),
-                'type' => $type,
-                'brute_force_count' => $bruteForceCount,
-            ]);
+            // If same IP hits rate limits multiple times, log as potential attack
+            if ($bruteForceCount >= 5) {
+                Log::alert('Potential brute force attack detected', [
+                    'ip' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
+                    'path' => $request->path(),
+                    'type' => $type,
+                    'brute_force_count' => $bruteForceCount,
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('RateLimiter: Failed to check brute force', ['error' => $e->getMessage()]);
         }
     }
 }

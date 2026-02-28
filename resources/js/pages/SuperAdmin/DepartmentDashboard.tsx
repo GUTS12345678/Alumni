@@ -27,6 +27,8 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { useExport } from '@/hooks/useExport';
+import { ExportProgressDialog } from '@/components/ExportProgressDialog';
 
 interface Course {
     id: number;
@@ -136,6 +138,8 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
 
     // Campus context
     const { campuses, selectedCampus } = useCampus();
+
+    const { exportData, cancelExport, ...exportState } = useExport();
 
     // Course form states
     const [courseFormData, setCourseFormData] = useState({
@@ -255,36 +259,14 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
     }, [fetchDepartmentData, fetchCourses, fetchAlumni, fetchAnalytics]);
 
     const handleExportAnalytics = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
-        try {
-            const response = await fetch(`/api/v1/admin/departments/${departmentId}/analytics/export?format=${format}`, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/octet-stream',
-                    'X-CSRF-TOKEN': getCsrfToken()
-                },
-                credentials: 'same-origin'
-            });
+        if (!departmentId) return;
 
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                const extension = format === 'excel' ? 'xlsx' : format;
-                a.download = `department_analytics_${department?.code}_${new Date().toISOString().split('T')[0]}.${extension}`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-            } else {
-                console.error('Export failed:', response.status);
-                alert('Failed to export analytics. Please try again.');
-            }
-        } catch (error) {
-            console.error('Export error:', error);
-            alert('An error occurred while exporting. Please try again.');
-        }
+        exportData({
+            url: `/api/v1/admin/departments/${departmentId}/analytics/export`,
+            filename: `department_analytics_${department?.code || departmentId}`,
+            format,
+            onError: () => alert('Failed to export analytics. Please try again.'),
+        });
     };
 
     const handleCreateCourse = async (e: React.FormEvent) => {
@@ -1257,6 +1239,7 @@ export default function DepartmentDashboard({ auth, departmentId }: PageProps) {
                     </div>
                 </div>
             )}
+            <ExportProgressDialog {...exportState} onCancel={cancelExport} />
         </AdminBaseLayout>
     );
 }

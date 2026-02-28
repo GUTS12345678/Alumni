@@ -6,7 +6,6 @@ use App\Http\Middleware\AdminMiddleware;
 use App\Http\Middleware\AlumniMiddleware;
 use App\Http\Middleware\SuperAdminMiddleware;
 use App\Http\Middleware\CheckPermission;
-use App\Http\Middleware\TrustProxies;
 use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\RateLimiter;
 use App\Http\Middleware\SqlInjectionPrevention;
@@ -30,12 +29,21 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
-        // Exclude API routes from CSRF verification.
-        // API routes are already protected by Sanctum token authentication.
-        // Public registration/survey routes also need exemption since
-        // they are accessed without a prior session/CSRF cookie.
+        // Trust all proxies (Cloudflare Tunnel sends X-Forwarded-* headers)
+        $middleware->trustProxies(at: '*', headers:
+            \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR |
+            \Illuminate\Http\Request::HEADER_X_FORWARDED_HOST |
+            \Illuminate\Http\Request::HEADER_X_FORWARDED_PORT |
+            \Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO |
+            \Illuminate\Http\Request::HEADER_X_FORWARDED_AWS_ELB
+        );
+
+        // Exclude routes from CSRF verification.
+        // API routes are protected by Sanctum token auth.
+        // Broadcasting auth is protected by session auth.
         $middleware->validateCsrfTokens(except: [
             '/logout',
+            '/broadcasting/auth',
             'api/*',
             'api/v1/*',
         ]);

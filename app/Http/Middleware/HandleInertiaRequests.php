@@ -2,7 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 use Tighten\Ziggy\Ziggy;
@@ -37,24 +36,16 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
-        [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
-
         $user = $request->user();
         
-        // Refresh user from database to get latest data
-        if ($user) {
-            $user->refresh();
-        }
-        
-        // Load alumni profile if user is alumni
-        if ($user && $user->role === 'alumni') {
+        // Load alumni profile if user is alumni (uses existing user instance, no extra query)
+        if ($user && $user->role === 'alumni' && !$user->relationLoaded('alumniProfile')) {
             $user->load('alumniProfile');
         }
 
         return [
             ...parent::share($request),
             'name' => config('app.name'),
-            'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user' => $user,
             ],

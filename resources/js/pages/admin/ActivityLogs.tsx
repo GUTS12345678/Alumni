@@ -42,6 +42,8 @@ import {
     X,
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
+import { useExport } from '@/hooks/useExport';
+import { ExportProgressDialog } from '@/components/ExportProgressDialog';
 
 interface ActivityLog {
     id: number;
@@ -94,6 +96,7 @@ export default function ActivityLogs({ user }: Props) {
     const [stats, setStats] = useState<ActivityStats | null>(null);
     const [selectedLog, setSelectedLog] = useState<ActivityLog | null>(null);
     const [detailOpen, setDetailOpen] = useState(false);
+    const { exportData, cancelExport, ...exportState } = useExport();
 
     const fetchActivities = async () => {
         try {
@@ -259,58 +262,19 @@ export default function ActivityLogs({ user }: Props) {
     };
 
     const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
-        try {
-            const token = localStorage.getItem('auth_token');
-            const params = new URLSearchParams();
-            if (searchTerm) params.append('search', searchTerm);
-            if (actionFilter !== 'all') params.append('action', actionFilter);
-            if (userFilter !== 'all') params.append('user_id', userFilter);
-            if (dateFilter !== 'all') params.append('date_filter', dateFilter);
-            params.append('format', format);
+        const params: Record<string, string> = {};
+        if (searchTerm) params.search = searchTerm;
+        if (actionFilter !== 'all') params.action = actionFilter;
+        if (userFilter !== 'all') params.user_id = userFilter;
+        if (dateFilter !== 'all') params.date_filter = dateFilter;
 
-            // Try multiple export endpoints
-            let response;
-            try {
-                response = await fetch(`/api/v1/admin/activity-logs/export?${params}`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Accept': 'application/json',
-                    },
-                });
-
-                if (!response.ok && response.status === 404) {
-                    response = await fetch(`/admin/activity/export?${params}`, {
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Accept': 'application/json',
-                        },
-                    });
-                }
-            } catch (fetchError) {
-                console.error('Export fetch error:', fetchError);
-                alert('Export functionality is not available');
-                return;
-            }
-
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                const extension = format === 'excel' ? 'xlsx' : format;
-                a.download = `activity-logs-${new Date().toISOString().split('T')[0]}.${extension}`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-            } else {
-                alert('Export failed. Feature may not be implemented yet.');
-            }
-        } catch (error) {
-            console.error('Export error:', error);
-            alert('Export failed due to an error.');
-        }
+        exportData({
+            url: '/api/v1/admin/activity-logs/export',
+            params,
+            filename: 'activity-logs',
+            format,
+            onError: () => alert('Export functionality is not available'),
+        });
     };
 
     if (loading) {
@@ -782,6 +746,7 @@ export default function ActivityLogs({ user }: Props) {
                     </DialogContent>
                 </Dialog>
             </div>
+            <ExportProgressDialog {...exportState} onCancel={cancelExport} />
         </AdminBaseLayout>
     );
 }

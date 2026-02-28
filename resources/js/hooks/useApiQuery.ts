@@ -127,12 +127,15 @@ export function useApiQuery<T = any>(
         };
     }, [fetchData]);
 
-    // Polling
+    // Polling (pauses when tab is hidden to reduce server load)
     useEffect(() => {
         if (!pollingInterval || pollingInterval <= 0 || !enabled) return;
 
         const interval = setInterval(() => {
-            fetchData(true);
+            // Only poll when the tab is visible
+            if (document.visibilityState === 'visible') {
+                fetchData(true);
+            }
         }, pollingInterval);
 
         return () => clearInterval(interval);

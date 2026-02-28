@@ -12,13 +12,9 @@ declare global {
 window.Pusher = Pusher;
 
 /**
- * Laravel Echo configuration for Reverb WebSocket
- * 
- * This enables real-time features like:
- * - Instant message delivery
- * - Typing indicators
- * - Online presence
- * - Live notifications
+ * Laravel Echo initialization.
+ * This module is lazy-loaded — only imported when components need real-time features.
+ * This keeps ~100KB of pusher-js out of the initial page load.
  */
 
 let echo: Echo<'reverb'> | null = null;
@@ -36,11 +32,15 @@ try {
         forceTLS: wsScheme === 'https',
         enabledTransports: wsScheme === 'https' ? ['wss'] : ['ws', 'wss'],
         authEndpoint: '/broadcasting/auth',
+        auth: {
+            headers: {
+                'X-CSRF-TOKEN': document.head.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        },
     });
 
     window.Echo = echo;
-
-    console.log('Laravel Echo initialized successfully');
 } catch (error) {
     console.warn('Laravel Echo failed to initialize. Real-time features will be unavailable.', error);
     // Create a mock Echo object to prevent errors in components that use it

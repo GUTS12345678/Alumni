@@ -1,4 +1,5 @@
 import React from 'react';
+import { BackToTop } from '@/components/ui/back-to-top';
 import { Head, useForm } from '@inertiajs/react';
 import { Shield, ArrowLeft, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -105,6 +106,7 @@ export default function TwoFactorChallenge() {
                     </div>
                 </div>
             </div>
+            <BackToTop />
         </>
     );
 }

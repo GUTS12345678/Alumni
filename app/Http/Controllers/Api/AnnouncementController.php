@@ -13,9 +13,11 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
+use App\Traits\ExportsPdf;
 
 class AnnouncementController extends Controller
 {
+    use ExportsPdf;
     /**
      * Get announcements for the authenticated user (alumni).
      */
@@ -669,9 +671,7 @@ class AnnouncementController extends Controller
 </body>
 </html>';
 
-        return response($html, 200)
-            ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'attachment; filename="announcements_' . date('Y-m-d_His') . '.pdf"');
+        return $this->renderPdf($html, 'announcements_' . date('Y-m-d_His') . '.pdf');
     }
 
     private function escapeCsvField($field)

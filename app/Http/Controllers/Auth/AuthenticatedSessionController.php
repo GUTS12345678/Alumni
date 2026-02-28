@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class AuthenticatedSessionController extends Controller
 {
@@ -19,9 +20,13 @@ class AuthenticatedSessionController extends Controller
      */
     public function create(Request $request): Response
     {
-        // If accessing login directly, clear any stale intended URL
-        if (!$request->session()->has('url.intended')) {
-            $request->session()->forget('url.intended');
+        // Clear stale intended URLs that would redirect back to public pages
+        if ($request->session()->has('url.intended')) {
+            $intended = $request->session()->get('url.intended');
+            $publicUrls = [url('/'), route('home'), url('/login'), route('login')];
+            if (in_array(rtrim($intended, '/'), array_map(fn($u) => rtrim($u, '/'), $publicUrls))) {
+                $request->session()->forget('url.intended');
+            }
         }
 
         // Compute real stats for the login page
@@ -32,12 +37,12 @@ class AuthenticatedSessionController extends Controller
         $employmentRate = $totalAlumniProfiles > 0 ? round(($employedAlumni / $totalAlumniProfiles) * 100) : 0;
 
         $stats = [
-            'totalAlumni'    => \App\Models\User::where('role_id', 3)->count(),
+            'totalAlumni'    => \App\Models\User::where('role', 'alumni')->count(),
             'employmentRate' => $employmentRate,
-            'industries'     => \App\Models\CareerHistory::whereNotNull('industry')
-                ->where('industry', '!=', '')
-                ->distinct('industry')
-                ->count('industry'),
+            'industries'     => \App\Models\AlumniProfile::whereNotNull('company_industry')
+                ->where('company_industry', '!=', '')
+                ->distinct('company_industry')
+                ->count('company_industry'),
         ];
 
         return Inertia::render('auth/login', [
@@ -50,17 +55,16 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      */
-    public function store(LoginRequest $request): RedirectResponse
+    public function store(LoginRequest $request): SymfonyResponse
     {
         $request->authenticate();
 
-        // Check if user has 2FA enabled
         $user = $request->user();
+
+        // Check if user has 2FA enabled
         if ($user && $user->google2fa_secret) {
-            // Don't log in yet, store user ID for 2FA verification
             Auth::guard('web')->logout();
             session(['2fa:user:id' => $user->id]);
-            
             return redirect()->route('two-factor.challenge');
         }
 
@@ -69,13 +73,40 @@ class AuthenticatedSessionController extends Controller
         // Log successful login
         ActivityLog::logLogin($user->id, $request->ip());
 
-        // Check if user must change their password (imported alumni)
+        // Determine redirect target
         if ($user->must_change_password) {
-            return redirect()->route('force-change-password');
+            $target = route('force-change-password');
+        } else {
+            // Pull intended URL, but sanitize it first
+            $intended = session()->pull('url.intended');
+            
+            // Only use intended URL if it's a valid protected page (not public/login pages)
+            if ($intended) {
+                $publicUrls = [url('/'), route('home'), url('/login'), route('login')];
+                $normalizedIntended = rtrim($intended, '/');
+                $normalizedPublic = array_map(fn($u) => rtrim($u, '/'), $publicUrls);
+                
+                // Discard if it's a public page
+                if (in_array($normalizedIntended, $normalizedPublic)) {
+                    $intended = null;
+                }
+            }
+            
+            if ($intended) {
+                $target = $intended;
+            } elseif (in_array($user->role, ['super_admin', 'admin'])) {
+                $target = route('admin.dashboard');
+            } elseif ($user->role === 'alumni') {
+                $target = route('alumni.dashboard');
+            } else {
+                $target = route('dashboard');
+            }
         }
 
-        // Use the central dashboard route which handles role-based redirects
-        return redirect()->intended(route('dashboard'));
+        // Use Inertia::location() to force a full-page redirect.
+        // This ensures the browser does a real navigation (not XHR)
+        // so the new session cookie from regenerate() is properly applied.
+        return Inertia::location($target);
     }
 
     /**

@@ -153,11 +153,9 @@ export default function DepartmentSettings({ auth }: PageProps) {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('Upload response:', data); // Debug log
                 if (data.success) {
                     // Update selected department with new image URL
                     const imageUrl = data.data.url;
-                    console.log('Setting image URL:', imageUrl, 'for type:', type); // Debug log
                     setSelectedDepartment(prev => {
                         if (!prev) return null;
                         return {
@@ -249,6 +247,7 @@ export default function DepartmentSettings({ auth }: PageProps) {
                 name: selectedDepartment.name,
                 code: selectedDepartment.code,
                 description: selectedDepartment.description,
+                status: selectedDepartment.status,
                 primary_color: selectedDepartment.primary_color,
                 secondary_color: selectedDepartment.secondary_color,
                 custom_css: selectedDepartment.custom_css,

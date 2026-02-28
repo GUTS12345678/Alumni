@@ -38,7 +38,7 @@ class CareerVersionController extends Controller
 
         $users = $query->paginate(20);
 
-        return Inertia::render('Admin/CareerVersions/Index', [
+        return Inertia::render('admin/CareerVersions/Index', [
             'users' => $users,
             'filters' => [
                 'search' => $search,
@@ -63,7 +63,7 @@ class CareerVersionController extends Controller
             ->ordered()
             ->get();
 
-        return Inertia::render('Admin/CareerVersions/Show', [
+        return Inertia::render('admin/CareerVersions/Show', [
             'alumniUser' => $user,
             'careerHistories' => $careerHistories,
         ]);
@@ -83,7 +83,7 @@ class CareerVersionController extends Controller
             ->orderBy('version_number', 'desc')
             ->get();
 
-        return Inertia::render('Admin/CareerVersions/Versions', [
+        return Inertia::render('admin/CareerVersions/Versions', [
             'careerHistory' => $careerHistory,
             'versions' => $versions,
         ]);

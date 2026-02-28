@@ -8,7 +8,6 @@ use Inertia\Inertia;
 // Register broadcasting auth endpoint (required for private/presence channels)
 Broadcast::routes(['middleware' => ['web', 'auth']]);
 
-
 // Landing Page
 Route::get('/', function () {
     // Calculate employment rate from alumni data
@@ -20,14 +19,14 @@ Route::get('/', function () {
     ])->count();
     $employmentRate = $totalAlumni > 0 ? round(($employedAlumni / $totalAlumni) * 100) : 0;
 
-    // Count unique industries from career history
-    $industries = \App\Models\CareerHistory::whereNotNull('industry')
-        ->where('industry', '!=', '')
-        ->distinct('industry')
-        ->count('industry');
+    // Count unique industries from alumni profiles
+    $industries = \App\Models\AlumniProfile::whereNotNull('company_industry')
+        ->where('company_industry', '!=', '')
+        ->distinct('company_industry')
+        ->count('company_industry');
     
     $stats = [
-        'totalAlumni' => \App\Models\User::where('role_id', 3)->count(),
+        'totalAlumni' => \App\Models\User::where('role', 'alumni')->count(),
         'employmentRate' => $employmentRate,
         'activeJobs' => \App\Models\JobPosting::where('status', 'published')->count(),
         'surveysCompleted' => \App\Models\Survey::where('status', 'active')->count(),
@@ -90,11 +89,8 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
         ]);
     })->name('admin.surveys.create');
 
-    Route::get('/admin/questions', function () {
-        return Inertia::render('admin/Questions', [
-            'user' => Auth::user()
-        ]);
-    })->name('admin.questions');
+    // Questions are managed within surveys (no separate page needed)
+    // Route::get('/admin/questions', ...) - removed, questions managed in survey editor
 
     Route::get('/admin/survey-analytics', function () {
         return Inertia::render('admin/SurveyAnalytics', [
@@ -110,11 +106,7 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
     })->name('admin.users');
 
     Route::get('/admin/permissions', function () {
-        return Inertia::render('SuperAdmin/PermissionMatrix', [
-            'auth' => [
-                'user' => Auth::user()
-            ]
-        ]);
+        return Inertia::render('admin/RoleManagement');
     })->name('admin.permissions');
 
     // Role Management Routes
@@ -127,25 +119,15 @@ Route::middleware(['web', 'auth', 'admin'])->group(function () {
     })->name('admin.roles');
 
     Route::get('/admin/roles/create', function () {
-        return Inertia::render('admin/RoleForm', [
-            'user' => Auth::user(),
-            'mode' => 'create'
-        ]);
+        return redirect()->route('admin.roles');
     })->name('admin.roles.create');
 
     Route::get('/admin/roles/{id}', function ($id) {
-        return Inertia::render('admin/RoleView', [
-            'user' => Auth::user(),
-            'roleId' => $id
-        ]);
+        return redirect()->route('admin.roles');
     })->name('admin.roles.view');
 
     Route::get('/admin/roles/{id}/edit', function ($id) {
-        return Inertia::render('admin/RoleForm', [
-            'user' => Auth::user(),
-            'roleId' => $id,
-            'mode' => 'edit'
-        ]);
+        return redirect()->route('admin.roles');
     })->name('admin.roles.edit');
 
     Route::get('/admin/activity', function () {
@@ -304,13 +286,9 @@ Route::middleware(['web', 'auth', 'super_admin'])->prefix('super-admin')->group(
         ]);
     })->name('super-admin.courses');
 
-    // Permission Management
+    // Permission Management - redirects to Role Management
     Route::get('/permissions', function () {
-        return Inertia::render('SuperAdmin/PermissionMatrix', [
-            'auth' => [
-                'user' => Auth::user()
-            ]
-        ]);
+        return Inertia::render('admin/RoleManagement');
     })->name('super-admin.permissions');
 
     // System Analytics
@@ -340,14 +318,7 @@ Route::middleware(['web', 'auth', 'super_admin'])->prefix('super-admin')->group(
         ]);
     })->name('super-admin.settings');
     
-    // Legacy System Settings (keep old route for backward compatibility)
-    Route::get('/settings-old', function () {
-        return Inertia::render('SuperAdmin/SystemSettings', [
-            'auth' => [
-                'user' => Auth::user()
-            ]
-        ]);
-    })->name('super-admin.settings-old');
+    // Legacy System Settings removed (use /super-admin/settings instead)
 
     // Career History Versions Management
     Route::get('/career-versions', [\App\Http\Controllers\Admin\CareerVersionController::class, 'index'])
@@ -415,9 +386,7 @@ Route::middleware(['web', 'auth', 'alumni'])->group(function () {
         ]);
     })->name('alumni.settings');
     
-    // Legacy Settings Routes (keep for backward compatibility)
-    Route::get('/alumni/settings-old', [App\Http\Controllers\Alumni\SettingsController::class, 'index'])
-        ->name('alumni.settings-old');
+    // Legacy Settings API Routes
     Route::put('/alumni/settings/password', [App\Http\Controllers\Alumni\SettingsController::class, 'updatePassword'])
         ->name('alumni.settings.password');
     Route::put('/alumni/settings/notifications', [App\Http\Controllers\Alumni\SettingsController::class, 'updateNotifications'])
@@ -434,9 +403,7 @@ Route::middleware(['web', 'auth', 'alumni'])->group(function () {
         return Inertia::render('Alumni/Surveys/SurveyHistory');
     })->name('alumni.surveys.history');
     
-    Route::get('/alumni/survey-history', function () {
-        return Inertia::render('Alumni/Surveys/SurveyHistory');
-    })->name('alumni.survey.history');
+    // Removed duplicate survey-history route (use /alumni/surveys/history instead)
 
     Route::get('/alumni/surveys/{surveyId}/take', function ($surveyId) {
         return Inertia::render('Alumni/Surveys/TakeSurvey', [
@@ -522,6 +489,8 @@ Route::middleware(['web', 'auth', 'alumni'])->group(function () {
         ->name('alumni.network.reject');
     Route::delete('/alumni/network/{id}', [App\Http\Controllers\Alumni\NetworkController::class, 'removeConnection'])
         ->name('alumni.network.remove');
+    Route::get('/alumni/network/profile/{id}', [App\Http\Controllers\Alumni\NetworkController::class, 'viewProfile'])
+        ->name('alumni.network.profile');
 
     Route::get('/alumni/messages', function () {
         return Inertia::render('Alumni/Messages');

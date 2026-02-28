@@ -52,10 +52,11 @@ class TwoFactorController extends Controller
             Auth::login($user);
             session()->forget('2fa:user:id');
             $request->session()->regenerate();
-            
+            $request->session()->save();
+
             // Log successful login after 2FA verification
             ActivityLog::logLogin($user->id, $request->ip());
-            
+
             return redirect()->intended('/dashboard');
         }
 

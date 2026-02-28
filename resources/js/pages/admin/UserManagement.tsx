@@ -51,7 +51,10 @@ import {
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import { useCampus } from '@/contexts/CampusContext';
 import { useAdminChannel } from '@/hooks/useAdminChannel';
+import { useExport } from '@/hooks/useExport';
+import { ExportProgressDialog } from '@/components/ExportProgressDialog';
 import axios from 'axios';
+import { ScrollFadeIn } from '@/components/scroll-animations';
 
 interface User {
     id: number;
@@ -92,6 +95,7 @@ interface Props {
 export default function UserManagement({ user }: Props) {
     // Campus context for filtering
     const { selectedCampus } = useCampus();
+    const { exportData, cancelExport, ...exportState } = useExport();
 
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
@@ -310,50 +314,20 @@ export default function UserManagement({ user }: Props) {
     }, [currentPage, searchTerm, roleFilter, statusFilter]);
 
     const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
-        try {
-            const params = new URLSearchParams();
-            params.append('format', format);
-            if (searchTerm) params.append('search', searchTerm);
-            if (roleFilter !== 'all') params.append('role', roleFilter);
-            if (statusFilter !== 'all') params.append('status', statusFilter);
-            if (sortBy) params.append('sort', sortBy);
-            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
+        const params: Record<string, string> = {};
+        if (searchTerm) params.search = searchTerm;
+        if (roleFilter !== 'all') params.role = roleFilter;
+        if (statusFilter !== 'all') params.status = statusFilter;
+        if (sortBy) params.sort = sortBy;
+        if (selectedCampus?.id) params.campus_id = selectedCampus.id.toString();
 
-            const token = localStorage.getItem('auth_token');
-            if (!token) {
-                window.location.href = '/login';
-                return;
-            }
-
-            const response = await fetch(`/api/v1/admin/users/export?${params}`, {
-                credentials: 'include',
-                headers: {
-                    'Accept': 'application/octet-stream',
-                    'Authorization': `Bearer ${token}`,
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-            });
-
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                const extension = format === 'excel' ? 'xlsx' : format;
-                a.download = `users-${new Date().toISOString().split('T')[0]}.${extension}`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-            } else {
-                console.error('Export failed:', response.status);
-                alert('Failed to export users. Please try again.');
-            }
-        } catch (err) {
-            console.error('Export error:', err);
-            alert('An error occurred while exporting. Please try again.');
-        }
+        exportData({
+            url: '/api/v1/admin/users/export',
+            params,
+            filename: 'users',
+            format,
+            onError: () => alert('Failed to export users. Please try again.'),
+        });
     };
 
     useEffect(() => {
@@ -800,518 +774,526 @@ export default function UserManagement({ user }: Props) {
     return (
         <AdminBaseLayout title="User Management" user={user}>
             <div className="space-y-6">
-                {/* Header with Actions */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
-                        <h2 className="text-2xl font-bold text-maroon-800 dark:text-gray-200">Admin Users</h2>
-                        <p className="text-maroon-600 dark:text-gray-400">Manage admin users and permissions</p>
-                    </div>
+                <ScrollFadeIn>
+                    {/* Header with Actions */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div>
+                            <h2 className="text-2xl font-bold text-maroon-800 dark:text-gray-200">Admin Users</h2>
+                            <p className="text-maroon-600 dark:text-gray-400">Manage admin users and permissions</p>
+                        </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                            onClick={() => fetchUsers()}
-                            variant="outline"
-                            size="sm"
-                            disabled={refreshing}
-                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
-                        >
-                            <RefreshCw className={`h-4 w-4 sm:mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                            <span className="hidden sm:inline">Refresh</span>
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                                onClick={() => fetchUsers()}
+                                variant="outline"
+                                size="sm"
+                                disabled={refreshing}
+                                className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
+                            >
+                                <RefreshCw className={`h-4 w-4 sm:mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                                <span className="hidden sm:inline">Refresh</span>
+                            </Button>
 
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="border-green-300 text-green-700 hover:bg-green-50"
-                                >
-                                    <Download className="h-4 w-4 sm:mr-2" />
-                                    <span className="hidden sm:inline">Export</span>
-                                    <ChevronDown className="h-4 w-4 sm:ml-2" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleExport('csv')}>
-                                    <FileText className="h-4 w-4 mr-2" />
-                                    Export as CSV
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleExport('excel')}>
-                                    <FileText className="h-4 w-4 mr-2" />
-                                    Export as Excel
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleExport('pdf')}>
-                                    <FileText className="h-4 w-4 mr-2" />
-                                    Export as PDF
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        <Button
-                            onClick={() => {
-                                setAddFormData({ name: '', email: '', password: '', role: 'alumni', status: 'active' });
-                                setShowAddUserDialog(true);
-                            }}
-                            className="bg-maroon-700 hover:bg-maroon-800 text-white"
-                            size="sm"
-                        >
-                            <Plus className="h-4 w-4 sm:mr-2" />
-                            <span className="hidden sm:inline">Add User</span>
-                        </Button>
-                    </div>
-                </div>
-
-                {/* Search and Filters */}
-                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                    <CardHeader>
-                        <CardTitle className="text-lg text-maroon-800 dark:text-gray-200 flex items-center">
-                            <Search className="h-5 w-5 mr-2" />
-                            Search & Filter
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="flex flex-col gap-4">
-                            {/* Search and Sort Row */}
-                            <div className="flex flex-col sm:flex-row gap-4">
-                                <div className="flex-1 relative">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                                    <Input
-                                        placeholder="Search by name or email..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="pl-10 border-beige-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500"
-                                    />
-                                </div>
-                                <Select value={sortBy} onValueChange={setSortBy}>
-                                    <SelectTrigger className="w-[180px] border-beige-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600">
-                                        <ArrowUpDown className="h-4 w-4 mr-2" />
-                                        <SelectValue placeholder="Sort by..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="name_asc">Name A-Z</SelectItem>
-                                        <SelectItem value="name_desc">Name Z-A</SelectItem>
-                                        <SelectItem value="recent">Recently Added</SelectItem>
-                                        <SelectItem value="last_login">Last Login</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {/* Filter Row */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <select
-                                    value={roleFilter}
-                                    onChange={(e) => setRoleFilter(e.target.value)}
-                                    className="border border-beige-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
-                                >
-                                    <option value="all">All Roles</option>
-                                    <option value="super_admin">Super Admin</option>
-                                    <option value="admin">Admin</option>
-                                    <option value="alumni">Alumni</option>
-                                </select>
-
-                                <select
-                                    value={statusFilter}
-                                    onChange={(e) => setStatusFilter(e.target.value)}
-                                    className="border border-beige-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
-                                >
-                                    <option value="all">All Status</option>
-                                    <option value="active">Active</option>
-                                    <option value="inactive">Inactive</option>
-                                    <option value="pending">Pending</option>
-                                </select>
-                            </div>
-
-                            {/* Active Filters Display */}
-                            {(roleFilter !== 'all' || statusFilter !== 'all') && (
-                                <div className="flex flex-wrap gap-2">
-                                    {roleFilter !== 'all' && (
-                                        <Badge
-                                            variant="secondary"
-                                            className="bg-maroon-100 text-maroon-800 text-xs flex items-center gap-1"
-                                        >
-                                            Role: {roleFilter.replace('_', ' ')}
-                                            <button
-                                                onClick={() => setRoleFilter('all')}
-                                                className="ml-1 hover:text-maroon-900"
-                                            >
-                                                <X className="h-3 w-3" />
-                                            </button>
-                                        </Badge>
-                                    )}
-                                    {statusFilter !== 'all' && (
-                                        <Badge
-                                            variant="secondary"
-                                            className="bg-maroon-100 text-maroon-800 text-xs flex items-center gap-1"
-                                        >
-                                            Status: {statusFilter}
-                                            <button
-                                                onClick={() => setStatusFilter('all')}
-                                                className="ml-1 hover:text-maroon-900"
-                                            >
-                                                <X className="h-3 w-3" />
-                                            </button>
-                                        </Badge>
-                                    )}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
                                     <Button
-                                        variant="ghost"
+                                        variant="outline"
                                         size="sm"
-                                        onClick={() => {
-                                            setRoleFilter('all');
-                                            setStatusFilter('all');
-                                            setSearchTerm('');
-                                        }}
-                                        className="h-6 text-xs text-maroon-700 dark:text-maroon-300"
+                                        className="border-green-300 text-green-700 hover:bg-green-50"
                                     >
-                                        Clear All Filters
+                                        <Download className="h-4 w-4 sm:mr-2" />
+                                        <span className="hidden sm:inline">Export</span>
+                                        <ChevronDown className="h-4 w-4 sm:ml-2" />
                                     </Button>
-                                </div>
-                            )}
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleExport('csv')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as CSV
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExport('excel')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as Excel
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as PDF
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            <Button
+                                onClick={() => {
+                                    setAddFormData({ name: '', email: '', password: '', role: 'alumni', status: 'active' });
+                                    setShowAddUserDialog(true);
+                                }}
+                                className="bg-maroon-700 hover:bg-maroon-800 text-white"
+                                size="sm"
+                            >
+                                <Plus className="h-4 w-4 sm:mr-2" />
+                                <span className="hidden sm:inline">Add User</span>
+                            </Button>
                         </div>
-                    </CardContent>
-                </Card>
+                    </div>
+                </ScrollFadeIn>
 
-                {/* User Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <ScrollFadeIn delay={100}>
+                    {/* Search and Filters */}
                     <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Users</CardTitle>
-                            <Users className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                        <CardHeader>
+                            <CardTitle className="text-lg text-maroon-800 dark:text-gray-200 flex items-center">
+                                <Search className="h-5 w-5 mr-2" />
+                                Search & Filter
+                            </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">{total}</div>
-                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">All registered users</p>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Active Users</CardTitle>
-                            <UserCheck className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-green-600">
-                                {(Array.isArray(users) ? users : []).filter(u => u.status === 'active').length}
-                            </div>
-                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Currently active</p>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Admins</CardTitle>
-                            <Shield className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-blue-600">
-                                {(Array.isArray(users) ? users : []).filter(u => u.role === 'admin').length}
-                            </div>
-                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Admin users</p>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Alumni</CardTitle>
-                            <Users className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-green-600">
-                                {(Array.isArray(users) ? users : []).filter(u => u.role === 'alumni').length}
-                            </div>
-                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Alumni users</p>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Users Table */}
-                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                    <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Admin Users Directory</CardTitle>
-                        <CardDescription className="text-maroon-600 dark:text-gray-400">
-                            Showing {users.length} of {total} admin users
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        {/* Mobile Card View */}
-                        <div className="md:hidden divide-y divide-beige-200 dark:divide-gray-700">
-                            {users.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-12 text-gray-500 dark:text-gray-400">
-                                    <Users className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
-                                    <p className="text-lg font-medium mb-1">No users found</p>
-                                    <p className="text-sm text-center px-4">
-                                        {searchTerm || roleFilter !== 'all' || statusFilter !== 'all'
-                                            ? 'Try adjusting your filters or search term'
-                                            : 'No users have been added yet'}
-                                    </p>
-                                </div>
-                            ) : (
-                                users.map((targetUser) => (
-                                    <div key={targetUser.id} className="p-4 space-y-3">
-                                        <div className="flex items-start justify-between">
-                                            <div className="space-y-1 min-w-0 flex-1">
-                                                <div className="font-medium text-maroon-800 dark:text-gray-200 truncate">
-                                                    {targetUser.profile?.first_name && targetUser.profile?.last_name
-                                                        ? `${targetUser.profile.first_name} ${targetUser.profile.last_name}`
-                                                        : targetUser.name
-                                                    }
-                                                </div>
-                                                <div className="text-xs text-gray-600 dark:text-gray-400 truncate">{targetUser.email}</div>
-                                            </div>
-                                            <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-                                                {getRoleBadge(targetUser.role)}
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-wrap items-center gap-2 text-sm">
-                                            {getStatusBadge(targetUser.status)}
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => handleStatusToggle(targetUser.id, targetUser.status)}
-                                                className="text-xs p-1 h-6"
-                                            >
-                                                {targetUser.status === 'active' ? (
-                                                    <UserX className="h-3 w-3 text-red-600" />
-                                                ) : (
-                                                    <UserCheck className="h-3 w-3 text-green-600" />
-                                                )}
-                                            </Button>
-                                            {targetUser.email_verified_at ? (
-                                                <span className="text-green-600 text-xs">✓ Verified</span>
-                                            ) : (
-                                                <span className="text-red-600 text-xs">✗ Unverified</span>
-                                            )}
-                                        </div>
-                                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                                            {targetUser.last_login_at ? `Last login: ${formatDate(targetUser.last_login_at)}` : 'Never logged in'}
-                                            <span className="mx-1">·</span>
-                                            Joined: {formatDate(targetUser.created_at)}
-                                        </div>
-                                        <div className="flex flex-wrap gap-1 pt-1 border-t border-beige-100 dark:border-gray-700">
-                                            <Button variant="ghost" size="sm" className="h-7 text-xs text-maroon-700 dark:text-gray-300" title="View" onClick={() => { setSelectedUser(targetUser); setShowViewDialog(true); }}>
-                                                <Eye className="h-3.5 w-3.5 mr-1" /> View
-                                            </Button>
-                                            <Button variant="ghost" size="sm" className="h-7 text-xs text-blue-700" title="Edit" onClick={() => handleEditUser(targetUser)}>
-                                                <Edit className="h-3.5 w-3.5 mr-1" /> Edit
-                                            </Button>
-                                            {user.role === 'super_admin' && (
-                                                <Button variant="ghost" size="sm" className="h-7 text-xs text-purple-700" title="Change Role" onClick={() => openRoleChangeDialog(targetUser)}>
-                                                    <Crown className="h-3.5 w-3.5 mr-1" /> Role
-                                                </Button>
-                                            )}
-                                            <Button variant="ghost" size="sm" className="h-7 text-xs text-red-700" title="Delete" onClick={() => { setSelectedUser(targetUser); setShowDeleteDialog(true); }}>
-                                                <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
-                                            </Button>
-                                        </div>
+                            <div className="flex flex-col gap-4">
+                                {/* Search and Sort Row */}
+                                <div className="flex flex-col sm:flex-row gap-4">
+                                    <div className="flex-1 relative">
+                                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                                        <Input
+                                            placeholder="Search by name or email..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            className="pl-10 border-beige-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500"
+                                        />
                                     </div>
-                                )))}
-                        </div>
+                                    <Select value={sortBy} onValueChange={setSortBy}>
+                                        <SelectTrigger className="w-[180px] border-beige-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600">
+                                            <ArrowUpDown className="h-4 w-4 mr-2" />
+                                            <SelectValue placeholder="Sort by..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="name_asc">Name A-Z</SelectItem>
+                                            <SelectItem value="name_desc">Name Z-A</SelectItem>
+                                            <SelectItem value="recent">Recently Added</SelectItem>
+                                            <SelectItem value="last_login">Last Login</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
 
-                        {/* Desktop Table View */}
-                        <div className="hidden md:block overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow className="bg-beige-50 dark:bg-gray-800/50">
-                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">User Details</TableHead>
-                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Role</TableHead>
-                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Status</TableHead>
-                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Verification</TableHead>
-                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Last Activity</TableHead>
-                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {users.length === 0 ? (
-                                        <TableRow>
-                                            <TableCell colSpan={6} className="h-32 text-center">
-                                                <div className="flex flex-col items-center justify-center py-8 text-gray-500 dark:text-gray-400">
-                                                    <Users className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
-                                                    <p className="text-lg font-medium mb-1">No users found</p>
-                                                    <p className="text-sm">
-                                                        {searchTerm || roleFilter !== 'all' || statusFilter !== 'all'
-                                                            ? 'Try adjusting your filters or search term'
-                                                            : 'No users have been added yet'}
-                                                    </p>
+                                {/* Filter Row */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <select
+                                        value={roleFilter}
+                                        onChange={(e) => setRoleFilter(e.target.value)}
+                                        className="border border-beige-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
+                                    >
+                                        <option value="all">All Roles</option>
+                                        <option value="super_admin">Super Admin</option>
+                                        <option value="admin">Admin</option>
+                                        <option value="alumni">Alumni</option>
+                                    </select>
+
+                                    <select
+                                        value={statusFilter}
+                                        onChange={(e) => setStatusFilter(e.target.value)}
+                                        className="border border-beige-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 rounded-md px-3 py-2 text-sm focus:border-maroon-500 focus:ring-maroon-500"
+                                    >
+                                        <option value="all">All Status</option>
+                                        <option value="active">Active</option>
+                                        <option value="inactive">Inactive</option>
+                                        <option value="pending">Pending</option>
+                                    </select>
+                                </div>
+
+                                {/* Active Filters Display */}
+                                {(roleFilter !== 'all' || statusFilter !== 'all') && (
+                                    <div className="flex flex-wrap gap-2">
+                                        {roleFilter !== 'all' && (
+                                            <Badge
+                                                variant="secondary"
+                                                className="bg-maroon-100 text-maroon-800 text-xs flex items-center gap-1"
+                                            >
+                                                Role: {roleFilter.replace('_', ' ')}
+                                                <button
+                                                    onClick={() => setRoleFilter('all')}
+                                                    className="ml-1 hover:text-maroon-900"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </Badge>
+                                        )}
+                                        {statusFilter !== 'all' && (
+                                            <Badge
+                                                variant="secondary"
+                                                className="bg-maroon-100 text-maroon-800 text-xs flex items-center gap-1"
+                                            >
+                                                Status: {statusFilter}
+                                                <button
+                                                    onClick={() => setStatusFilter('all')}
+                                                    className="ml-1 hover:text-maroon-900"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </Badge>
+                                        )}
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => {
+                                                setRoleFilter('all');
+                                                setStatusFilter('all');
+                                                setSearchTerm('');
+                                            }}
+                                            className="h-6 text-xs text-maroon-700 dark:text-maroon-300"
+                                        >
+                                            Clear All Filters
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </ScrollFadeIn>
+
+                <ScrollFadeIn delay={100}>
+                    {/* User Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Users</CardTitle>
+                                <Users className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">{total}</div>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">All registered users</p>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Active Users</CardTitle>
+                                <UserCheck className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold text-green-600">
+                                    {(Array.isArray(users) ? users : []).filter(u => u.status === 'active').length}
+                                </div>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Currently active</p>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Admins</CardTitle>
+                                <Shield className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold text-blue-600">
+                                    {(Array.isArray(users) ? users : []).filter(u => u.role === 'admin').length}
+                                </div>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Admin users</p>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Alumni</CardTitle>
+                                <Users className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold text-green-600">
+                                    {(Array.isArray(users) ? users : []).filter(u => u.role === 'alumni').length}
+                                </div>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Alumni users</p>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </ScrollFadeIn>
+
+                <ScrollFadeIn delay={100}>
+                    {/* Users Table */}
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                        <CardHeader>
+                            <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Admin Users Directory</CardTitle>
+                            <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                Showing {users.length} of {total} admin users
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            {/* Mobile Card View */}
+                            <div className="md:hidden divide-y divide-beige-200 dark:divide-gray-700">
+                                {users.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-12 text-gray-500 dark:text-gray-400">
+                                        <Users className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
+                                        <p className="text-lg font-medium mb-1">No users found</p>
+                                        <p className="text-sm text-center px-4">
+                                            {searchTerm || roleFilter !== 'all' || statusFilter !== 'all'
+                                                ? 'Try adjusting your filters or search term'
+                                                : 'No users have been added yet'}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    users.map((targetUser) => (
+                                        <div key={targetUser.id} className="p-4 space-y-3">
+                                            <div className="flex items-start justify-between">
+                                                <div className="space-y-1 min-w-0 flex-1">
+                                                    <div className="font-medium text-maroon-800 dark:text-gray-200 truncate">
+                                                        {targetUser.profile?.first_name && targetUser.profile?.last_name
+                                                            ? `${targetUser.profile.first_name} ${targetUser.profile.last_name}`
+                                                            : targetUser.name
+                                                        }
+                                                    </div>
+                                                    <div className="text-xs text-gray-600 dark:text-gray-400 truncate">{targetUser.email}</div>
                                                 </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    ) : (
-                                        users.map((targetUser) => (
-                                            <TableRow key={targetUser.id} className="hover:bg-beige-50 dark:hover:bg-gray-800">
-                                                <TableCell>
-                                                    <div className="space-y-1">
-                                                        <div className="font-medium text-maroon-800 dark:text-gray-200">
-                                                            {targetUser.profile?.first_name && targetUser.profile?.last_name
-                                                                ? `${targetUser.profile.first_name} ${targetUser.profile.last_name}`
-                                                                : targetUser.name
-                                                            }
-                                                        </div>
-                                                        <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
-                                                            <Mail className="h-3 w-3 mr-1 text-gray-400" />
-                                                            {targetUser.email}
-                                                        </div>
-                                                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                            ID: {targetUser.id}
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
+                                                <div className="flex items-center gap-1 flex-shrink-0 ml-2">
                                                     {getRoleBadge(targetUser.role)}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="space-y-1">
-                                                        {getStatusBadge(targetUser.status)}
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => handleStatusToggle(targetUser.id, targetUser.status)}
-                                                            className="text-xs p-1 h-6"
-                                                        >
-                                                            {targetUser.status === 'active' ? (
-                                                                <UserX className="h-3 w-3 text-red-600" />
-                                                            ) : (
-                                                                <UserCheck className="h-3 w-3 text-green-600" />
-                                                            )}
-                                                        </Button>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2 text-sm">
+                                                {getStatusBadge(targetUser.status)}
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleStatusToggle(targetUser.id, targetUser.status)}
+                                                    className="text-xs p-1 h-6"
+                                                >
+                                                    {targetUser.status === 'active' ? (
+                                                        <UserX className="h-3 w-3 text-red-600" />
+                                                    ) : (
+                                                        <UserCheck className="h-3 w-3 text-green-600" />
+                                                    )}
+                                                </Button>
+                                                {targetUser.email_verified_at ? (
+                                                    <span className="text-green-600 text-xs">✓ Verified</span>
+                                                ) : (
+                                                    <span className="text-red-600 text-xs">✗ Unverified</span>
+                                                )}
+                                            </div>
+                                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                                                {targetUser.last_login_at ? `Last login: ${formatDate(targetUser.last_login_at)}` : 'Never logged in'}
+                                                <span className="mx-1">·</span>
+                                                Joined: {formatDate(targetUser.created_at)}
+                                            </div>
+                                            <div className="flex flex-wrap gap-1 pt-1 border-t border-beige-100 dark:border-gray-700">
+                                                <Button variant="ghost" size="sm" className="h-7 text-xs text-maroon-700 dark:text-gray-300" title="View" onClick={() => { setSelectedUser(targetUser); setShowViewDialog(true); }}>
+                                                    <Eye className="h-3.5 w-3.5 mr-1" /> View
+                                                </Button>
+                                                <Button variant="ghost" size="sm" className="h-7 text-xs text-blue-700" title="Edit" onClick={() => handleEditUser(targetUser)}>
+                                                    <Edit className="h-3.5 w-3.5 mr-1" /> Edit
+                                                </Button>
+                                                {user.role === 'super_admin' && (
+                                                    <Button variant="ghost" size="sm" className="h-7 text-xs text-purple-700" title="Change Role" onClick={() => openRoleChangeDialog(targetUser)}>
+                                                        <Crown className="h-3.5 w-3.5 mr-1" /> Role
+                                                    </Button>
+                                                )}
+                                                <Button variant="ghost" size="sm" className="h-7 text-xs text-red-700" title="Delete" onClick={() => { setSelectedUser(targetUser); setShowDeleteDialog(true); }}>
+                                                    <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )))}
+                            </div>
+
+                            {/* Desktop Table View */}
+                            <div className="hidden md:block overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-beige-50 dark:bg-gray-800/50">
+                                            <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">User Details</TableHead>
+                                            <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Role</TableHead>
+                                            <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Status</TableHead>
+                                            <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Verification</TableHead>
+                                            <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Last Activity</TableHead>
+                                            <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {users.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={6} className="h-32 text-center">
+                                                    <div className="flex flex-col items-center justify-center py-8 text-gray-500 dark:text-gray-400">
+                                                        <Users className="h-12 w-12 mb-3 text-gray-300 dark:text-gray-600" />
+                                                        <p className="text-lg font-medium mb-1">No users found</p>
+                                                        <p className="text-sm">
+                                                            {searchTerm || roleFilter !== 'all' || statusFilter !== 'all'
+                                                                ? 'Try adjusting your filters or search term'
+                                                                : 'No users have been added yet'}
+                                                        </p>
                                                     </div>
                                                 </TableCell>
-                                                <TableCell>
-                                                    <div className="text-center">
-                                                        {targetUser.email_verified_at ? (
-                                                            <div className="text-green-600 text-sm">
-                                                                ✓ Verified
+                                            </TableRow>
+                                        ) : (
+                                            users.map((targetUser) => (
+                                                <TableRow key={targetUser.id} className="hover:bg-beige-50 dark:hover:bg-gray-800">
+                                                    <TableCell>
+                                                        <div className="space-y-1">
+                                                            <div className="font-medium text-maroon-800 dark:text-gray-200">
+                                                                {targetUser.profile?.first_name && targetUser.profile?.last_name
+                                                                    ? `${targetUser.profile.first_name} ${targetUser.profile.last_name}`
+                                                                    : targetUser.name
+                                                                }
                                                             </div>
-                                                        ) : (
-                                                            <div className="text-red-600 text-sm">
-                                                                ✗ Unverified
+                                                            <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+                                                                <Mail className="h-3 w-3 mr-1 text-gray-400" />
+                                                                {targetUser.email}
                                                             </div>
-                                                        )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="space-y-1">
-                                                        {targetUser.last_login_at ? (
-                                                            <div className="text-sm">
-                                                                {formatDate(targetUser.last_login_at)}
+                                                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                                                                ID: {targetUser.id}
                                                             </div>
-                                                        ) : (
-                                                            <div className="text-sm text-gray-500 dark:text-gray-400">
-                                                                Never logged in
-                                                            </div>
-                                                        )}
-                                                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                            Joined: {formatDate(targetUser.created_at)}
                                                         </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="flex flex-wrap gap-1">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="text-maroon-700 dark:text-gray-300 hover:text-maroon-800 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
-                                                            title="View Details"
-                                                            onClick={() => {
-                                                                setSelectedUser(targetUser);
-                                                                setShowViewDialog(true);
-                                                            }}
-                                                        >
-                                                            <Eye className="h-4 w-4" />
-                                                        </Button>
-                                                        {user.role === 'super_admin' && (
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {getRoleBadge(targetUser.role)}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="space-y-1">
+                                                            {getStatusBadge(targetUser.status)}
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => handleStatusToggle(targetUser.id, targetUser.status)}
+                                                                className="text-xs p-1 h-6"
+                                                            >
+                                                                {targetUser.status === 'active' ? (
+                                                                    <UserX className="h-3 w-3 text-red-600" />
+                                                                ) : (
+                                                                    <UserCheck className="h-3 w-3 text-green-600" />
+                                                                )}
+                                                            </Button>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="text-center">
+                                                            {targetUser.email_verified_at ? (
+                                                                <div className="text-green-600 text-sm">
+                                                                    ✓ Verified
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-red-600 text-sm">
+                                                                    ✗ Unverified
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="space-y-1">
+                                                            {targetUser.last_login_at ? (
+                                                                <div className="text-sm">
+                                                                    {formatDate(targetUser.last_login_at)}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-sm text-gray-500 dark:text-gray-400">
+                                                                    Never logged in
+                                                                </div>
+                                                            )}
+                                                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                                                                Joined: {formatDate(targetUser.created_at)}
+                                                            </div>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex flex-wrap gap-1">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="text-maroon-700 dark:text-gray-300 hover:text-maroon-800 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
+                                                                title="View Details"
+                                                                onClick={() => {
+                                                                    setSelectedUser(targetUser);
+                                                                    setShowViewDialog(true);
+                                                                }}
+                                                            >
+                                                                <Eye className="h-4 w-4" />
+                                                            </Button>
+                                                            {user.role === 'super_admin' && (
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="text-purple-700 hover:text-purple-800 hover:bg-purple-50"
+                                                                    title="Change Role (Super Admin Only)"
+                                                                    onClick={() => openRoleChangeDialog(targetUser)}
+                                                                >
+                                                                    <Crown className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+                                                                title="Edit User"
+                                                                onClick={() => handleEditUser(targetUser)}
+                                                            >
+                                                                <Edit className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="text-orange-700 hover:text-orange-800 hover:bg-orange-50"
+                                                                title="Send Reset Email"
+                                                                onClick={() => {
+                                                                    setSelectedUser(targetUser);
+                                                                    setShowResetPasswordDialog(true);
+                                                                }}
+                                                            >
+                                                                <Mail className="h-4 w-4" />
+                                                            </Button>
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
                                                                 className="text-purple-700 hover:text-purple-800 hover:bg-purple-50"
-                                                                title="Change Role (Super Admin Only)"
-                                                                onClick={() => openRoleChangeDialog(targetUser)}
+                                                                title="Set Password Manually"
+                                                                onClick={() => {
+                                                                    setSelectedUser(targetUser);
+                                                                    setManualPassword({ password: '', password_confirmation: '' });
+                                                                    setShowSetPasswordDialog(true);
+                                                                }}
                                                             >
-                                                                <Crown className="h-4 w-4" />
+                                                                <Key className="h-4 w-4" />
                                                             </Button>
-                                                        )}
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="text-blue-700 hover:text-blue-800 hover:bg-blue-50"
-                                                            title="Edit User"
-                                                            onClick={() => handleEditUser(targetUser)}
-                                                        >
-                                                            <Edit className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="text-orange-700 hover:text-orange-800 hover:bg-orange-50"
-                                                            title="Send Reset Email"
-                                                            onClick={() => {
-                                                                setSelectedUser(targetUser);
-                                                                setShowResetPasswordDialog(true);
-                                                            }}
-                                                        >
-                                                            <Mail className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="text-purple-700 hover:text-purple-800 hover:bg-purple-50"
-                                                            title="Set Password Manually"
-                                                            onClick={() => {
-                                                                setSelectedUser(targetUser);
-                                                                setManualPassword({ password: '', password_confirmation: '' });
-                                                                setShowSetPasswordDialog(true);
-                                                            }}
-                                                        >
-                                                            <Key className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            className="text-red-700 hover:text-red-800 hover:bg-red-50"
-                                                            title="Delete User"
-                                                            onClick={() => {
-                                                                setSelectedUser(targetUser);
-                                                                setShowDeleteDialog(true);
-                                                            }}
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        )))}
-                                </TableBody>
-                            </Table>
-                        </div>
-
-                        {/* Pagination */}
-                        {totalPages > 1 && (
-                            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 sm:px-6 py-4 border-t border-beige-200 dark:border-gray-700">
-                                <div className="text-sm text-gray-700 dark:text-gray-300">
-                                    Showing page {currentPage} of {totalPages}
-                                </div>
-                                <div className="space-x-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                                        disabled={currentPage === 1}
-                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
-                                    >
-                                        Previous
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                                        disabled={currentPage === totalPages}
-                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
-                                    >
-                                        Next
-                                    </Button>
-                                </div>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="text-red-700 hover:text-red-800 hover:bg-red-50"
+                                                                title="Delete User"
+                                                                onClick={() => {
+                                                                    setSelectedUser(targetUser);
+                                                                    setShowDeleteDialog(true);
+                                                                }}
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            )))}
+                                    </TableBody>
+                                </Table>
                             </div>
-                        )}
-                    </CardContent>
-                </Card>
+
+                            {/* Pagination */}
+                            {totalPages > 1 && (
+                                <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 sm:px-6 py-4 border-t border-beige-200 dark:border-gray-700">
+                                    <div className="text-sm text-gray-700 dark:text-gray-300">
+                                        Showing page {currentPage} of {totalPages}
+                                    </div>
+                                    <div className="space-x-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                                            disabled={currentPage === 1}
+                                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
+                                        >
+                                            Previous
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                                            disabled={currentPage === totalPages}
+                                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
+                                        >
+                                            Next
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </ScrollFadeIn>
 
                 {/* View User Dialog */}
                 <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
@@ -1898,6 +1880,8 @@ export default function UserManagement({ user }: Props) {
                     </DialogContent>
                 </Dialog>
             </div>
+
+            <ExportProgressDialog {...exportState} onCancel={cancelExport} />
         </AdminBaseLayout >
     );
 }

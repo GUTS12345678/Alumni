@@ -22,20 +22,21 @@ Route::prefix('v1')->group(function () {
     Route::prefix('public')->group(function () {
         Route::get('/announcements', [PublicLandingController::class, 'getAnnouncements']);
         Route::get('/jobs', [PublicLandingController::class, 'getJobs']);
+        Route::get('/more-content', [PublicLandingController::class, 'getContentByTypes']);
         Route::get('/stats', [PublicLandingController::class, 'getStats']);
         Route::get('/content', [PublicLandingController::class, 'getContent']);
         Route::post('/search-alumni', [PublicLandingController::class, 'searchAlumni']);
         Route::get('/appearance', [\App\Http\Controllers\Api\V1\Admin\AppearanceController::class, 'index']);
     });
 
-    // Authentication routes
-    Route::post('/register', [AuthController::class, 'register']);
-    Route::post('/login', [AuthController::class, 'login']);
+    // Authentication routes (rate limited)
+    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:5,1');
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
 
-    // Email OTP verification routes
-    Route::post('/otp/send', [EmailOtpController::class, 'sendOtp']);
-    Route::post('/otp/verify', [EmailOtpController::class, 'verifyOtp']);
-    Route::post('/otp/resend', [EmailOtpController::class, 'resendOtp']);
+    // Email OTP verification routes (rate limited)
+    Route::post('/otp/send', [EmailOtpController::class, 'sendOtp'])->middleware('throttle:5,1');
+    Route::post('/otp/verify', [EmailOtpController::class, 'verifyOtp'])->middleware('throttle:10,1');
+    Route::post('/otp/resend', [EmailOtpController::class, 'resendOtp'])->middleware('throttle:3,1');
     Route::post('/otp/check', [EmailOtpController::class, 'checkVerification']);
 
     // Public survey routes (accessible via invitation token)
@@ -328,7 +329,11 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     Route::post('/alumni/import/preview', [\App\Http\Controllers\Api\AlumniImportController::class, 'preview']);
     Route::post('/alumni/import', [\App\Http\Controllers\Api\AlumniImportController::class, 'import']);
     Route::get('/alumni/import/template', [\App\Http\Controllers\Api\AlumniImportController::class, 'downloadTemplate']);
+    Route::get('/alumni/import/template-new', [\App\Http\Controllers\Api\AlumniImportController::class, 'downloadTemplateNew']);
     Route::delete('/alumni/bulk-delete', [AdminController::class, 'bulkDeleteAlumni']);
+    Route::delete('/alumni/clear-all', [AdminController::class, 'clearAllAlumni']);
+    Route::get('/alumni/archived-count', [AdminController::class, 'getArchivedCount']);
+    Route::delete('/alumni/clear-archive', [AdminController::class, 'clearArchive']);
     Route::get('/alumni/{id}', [AdminController::class, 'getAlumniProfile']);
     Route::put('/alumni/{id}', [AdminController::class, 'updateAlumni']);
     Route::delete('/alumni/{id}', [AdminController::class, 'deleteAlumni']);
@@ -386,8 +391,9 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     Route::get('/activity-logs', [AdminController::class, 'getActivityLogs']);
     Route::get('/activity-logs/export', [AdminController::class, 'exportActivityLogs']);
 
-    // System Metrics
+    // System Metrics & Benchmark
     Route::get('/system-metrics', [\App\Http\Controllers\Admin\SystemMetricsController::class, 'getMetrics']);
+    Route::post('/system-metrics/benchmark', [\App\Http\Controllers\Admin\SystemMetricsController::class, 'runBenchmark']);
 
     // User Management
     Route::get('/users', [AdminController::class, 'getUsers']);
@@ -469,6 +475,7 @@ Route::prefix('v1/admin')->middleware(['auth:sanctum', 'admin'])->group(function
     Route::delete('/archive/{type}/{id}', [\App\Http\Controllers\Api\V1\Admin\ArchiveController::class, 'forceDelete']);
     Route::post('/archive/bulk-restore', [\App\Http\Controllers\Api\V1\Admin\ArchiveController::class, 'bulkRestore']);
     Route::post('/archive/bulk-delete', [\App\Http\Controllers\Api\V1\Admin\ArchiveController::class, 'bulkForceDelete']);
+    Route::delete('/archive/clear-all', [\App\Http\Controllers\Api\V1\Admin\ArchiveController::class, 'clearAll']);
 });
 
 // NOTE: Super Admin department/course routes moved to routes/web.php for proper CSRF protection

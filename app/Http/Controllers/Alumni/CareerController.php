@@ -79,7 +79,11 @@ class CareerController extends Controller
 
         $career = CareerHistory::create([
             'user_id' => $user->id,
-            ...$request->all()
+            ...$request->only([
+                'job_title', 'company_name', 'company_location', 'employment_type',
+                'job_description', 'start_date', 'end_date', 'is_current',
+                'industry', 'skills_used', 'achievements', 'salary', 'salary_currency',
+            ]),
         ]);
 
         // Create initial version snapshot
@@ -151,7 +155,11 @@ class CareerController extends Controller
             );
         }
 
-        $career->update($request->all());
+        $career->update($request->only([
+            'job_title', 'company_name', 'company_location', 'employment_type',
+            'job_description', 'start_date', 'end_date', 'is_current',
+            'industry', 'skills_used', 'achievements', 'salary', 'salary_currency',
+        ]));
 
         ActivityLog::logActivity(
             $user->id,

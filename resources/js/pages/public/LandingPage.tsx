@@ -8,19 +8,12 @@ import {
     Globe,
     ArrowRight,
     ArrowUp,
-    ArrowDown,
     CheckCircle,
-    Star,
-    MessageCircle,
-    BarChart3,
-    Award,
     Search,
     MapPin,
     Calendar,
     Clock,
     Building2,
-    Mail,
-    IdCard,
     Megaphone,
     ChevronRight,
     ChevronLeft,
@@ -30,11 +23,20 @@ import {
     LogIn,
     UserPlus,
     BookOpen,
-    Layers
+    Layers,
+    Newspaper,
+    PartyPopper,
+    PenTool,
+    FolderOpen,
+    BarChart3,
+    Star,
+    Zap,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import AppearanceToggleDropdown from '@/components/appearance-dropdown';
 import { PageCarousel, ContentPage } from '@/components/ui/page-carousel';
+
+// ─── Interfaces ──────────────────────────────────────────────────────────────
 
 interface LandingPageProps {
     stats?: {
@@ -82,6 +84,7 @@ interface Job {
     application_deadline: string | null;
     published_at: string;
     external_url?: string | null;
+    description?: string;
 }
 
 interface SearchResult {
@@ -97,1741 +100,1167 @@ interface SearchResult {
     } | null;
 }
 
+interface ContentItem {
+    id: number;
+    title: string;
+    slug: string;
+    content_type: string;
+    content_type_label: string;
+    excerpt: string;
+    full_content: string;
+    pages?: ContentPage[] | null;
+    use_pages?: boolean;
+    featured_image: string | null;
+    gallery_images?: string[] | null;
+    is_featured: boolean;
+    location: string | null;
+    event_date: string | null;
+    external_url: string | null;
+    published_at: string;
+    created_at: string;
+}
+
+// ─── Content type config ─────────────────────────────────────────────────────
+const contentTypeConfig: Record<string, { icon: React.ElementType; color: string; bg: string; badge: string }> = {
+    event: { icon: PartyPopper, color: 'text-violet-600', bg: 'bg-violet-50 dark:bg-violet-900/20', badge: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300' },
+    news: { icon: Newspaper, color: 'text-sky-600', bg: 'bg-sky-50 dark:bg-sky-900/20', badge: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300' },
+    blog: { icon: PenTool, color: 'text-teal-600', bg: 'bg-teal-50 dark:bg-teal-900/20', badge: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300' },
+    scholarship: { icon: GraduationCap, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-900/20', badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' },
+    resource: { icon: FolderOpen, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/20', badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' },
+};
+
+// ─── Animated counter ────────────────────────────────────────────────────────
+function Counter({ value, suffix = '' }: { value: number; suffix?: string }) {
+    const [display, setDisplay] = useState(0);
+    const started = useRef(false);
+    useEffect(() => {
+        if (started.current || value === 0) return;
+        started.current = true;
+        const steps = 50;
+        const duration = 1800;
+        let step = 0;
+        const timer = setInterval(() => {
+            step++;
+            const pct = 1 - Math.pow(1 - step / steps, 3);
+            setDisplay(Math.floor(value * pct));
+            if (step >= steps) { clearInterval(timer); setDisplay(value); }
+        }, duration / steps);
+        return () => clearInterval(timer);
+    }, [value]);
+    return <>{display.toLocaleString()}{suffix}</>;
+}
+
+// ─── Generic carousel with ARIA + keyboard support ──────────────────────────
+function Carousel<T extends { id: number }>({
+    items,
+    renderCard,
+    onSelect,
+    label = 'Content',
+}: {
+    items: T[];
+    renderCard: (item: T, index: number) => React.ReactNode;
+    onSelect: (item: T, index: number) => void;
+    label?: string;
+}) {
+    const [idx, setIdx] = useState(0);
+    const visible = 3;
+    const max = Math.max(0, items.length - visible);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    const prev = useCallback(() => setIdx(i => Math.max(0, i - 1)), []);
+    const next = useCallback(() => setIdx(i => Math.min(max, i + 1)), [max]);
+
+    // Keyboard navigation
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
+        };
+        el.addEventListener('keydown', onKey);
+        return () => el.removeEventListener('keydown', onKey);
+    }, [prev, next]);
+
+    return (
+        <div
+            ref={containerRef}
+            className="relative"
+            role="region"
+            aria-roledescription="carousel"
+            aria-label={`${label} carousel`}
+            tabIndex={0}
+        >
+            {idx > 0 && (
+                <button
+                    onClick={prev}
+                    aria-label="Previous slide"
+                    className="hidden md:flex absolute -left-5 top-1/2 -translate-y-1/2 z-10 w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full items-center justify-center shadow-md hover:shadow-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all focus-visible:ring-2 focus-visible:ring-maroon-500 focus-visible:ring-offset-2"
+                >
+                    <ChevronLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                </button>
+            )}
+            {idx < max && (
+                <button
+                    onClick={next}
+                    aria-label="Next slide"
+                    className="hidden md:flex absolute -right-5 top-1/2 -translate-y-1/2 z-10 w-10 h-10 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full items-center justify-center shadow-md hover:shadow-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all focus-visible:ring-2 focus-visible:ring-maroon-500 focus-visible:ring-offset-2"
+                >
+                    <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                </button>
+            )}
+            <div className="overflow-x-auto md:overflow-hidden -mx-2 px-2 scrollbar-hide" aria-live="polite">
+                <div
+                    className="flex gap-5 transition-transform duration-500 ease-out pb-2 md:pb-0"
+                    style={{ transform: `translateX(-${idx * (100 / visible + 1.5)}%)` }}
+                >
+                    {items.map((item, i) => (
+                        <div
+                            key={item.id}
+                            role="group"
+                            aria-roledescription="slide"
+                            aria-label={`Slide ${i + 1} of ${items.length}`}
+                            onClick={() => onSelect(item, i)}
+                            className="flex-shrink-0 w-[85vw] sm:w-[65vw] md:w-[calc(33.333%-13px)] cursor-pointer"
+                        >
+                            {renderCard(item, i)}
+                        </div>
+                    ))}
+                </div>
+            </div>
+            {items.length > visible && (
+                <div className="flex justify-center gap-1.5 mt-6" role="tablist" aria-label={`${label} slides`}>
+                    {Array.from({ length: max + 1 }).map((_, i) => (
+                        <button
+                            key={i}
+                            role="tab"
+                            aria-selected={i === idx}
+                            aria-label={`Go to slide group ${i + 1}`}
+                            onClick={() => setIdx(i)}
+                            className={`h-1.5 rounded-full transition-all duration-300 ${i === idx ? 'w-7 bg-maroon-600 dark:bg-maroon-400' : 'w-1.5 bg-gray-300 dark:bg-gray-600 hover:bg-gray-400'}`}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Modal with body scroll lock + ARIA ──────────────────────────────────────
+function Modal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+    useEffect(() => {
+        document.body.style.overflow = 'hidden';
+        const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', esc);
+        return () => {
+            document.body.style.overflow = '';
+            document.removeEventListener('keydown', esc);
+        };
+    }, [onClose]);
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={onClose}
+            role="dialog"
+            aria-modal="true"
+        >
+            <div
+                onClick={e => e.stopPropagation()}
+                className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden"
+            >
+                {children}
+            </div>
+        </div>
+    );
+}
+
+// ─── Section header ──────────────────────────────────────────────────────────
+function SectionHeader({ badge, badgeIcon: Icon, title, highlight, sub }: {
+    badge: string; badgeIcon: React.ElementType; title: string; highlight: string; sub: string;
+}) {
+    return (
+        <div className="text-center mb-12">
+            <span className="inline-flex items-center gap-1.5 bg-maroon-50 dark:bg-maroon-900/30 border border-maroon-200 dark:border-maroon-700 text-maroon-700 dark:text-maroon-300 text-xs font-semibold px-3 py-1.5 rounded-full mb-5">
+                <Icon className="w-3.5 h-3.5" /> {badge}
+            </span>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-50 mb-3 tracking-tight">
+                {title}{' '}
+                <span className="text-maroon-600 dark:text-maroon-400">{highlight}</span>
+            </h2>
+            <p className="text-gray-500 dark:text-gray-400 max-w-xl mx-auto text-sm md:text-base leading-relaxed">{sub}</p>
+        </div>
+    );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ─── Main Component ──────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
 export default function LandingPage({ stats: initialStats }: LandingPageProps) {
     const [scrollY, setScrollY] = useState(0);
-    const [isVisible, setIsVisible] = useState(false);
-    const [appearanceSettings, setAppearanceSettings] = useState<{
-        logoLight: string | null;
-        logoDark: string | null;
-        heroBackground: string | null;
-    }>({ logoLight: null, logoDark: null, heroBackground: null });
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [activeSection, setActiveSection] = useState('');
+    const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
-    // Animation states for scroll-triggered sections
-    const [visibleSections, setVisibleSections] = useState<Set<string>>(new Set());
-    const [animatedStats, setAnimatedStats] = useState(initialStats ? {
-        totalAlumni: initialStats.totalAlumni || 0,
-        employmentRate: initialStats.employmentRate || 0,
-        activeJobs: initialStats.activeJobs || 0,
-        surveysCompleted: initialStats.surveysCompleted || 0,
-        batchYears: initialStats.batchYears || 0,
-        departments: initialStats.departments || 0,
-        courses: initialStats.courses || 0,
-        industries: initialStats.industries || 0
-    } : {
-        totalAlumni: 0,
-        employmentRate: 0,
-        activeJobs: 0,
-        surveysCompleted: 0,
-        batchYears: 0,
-        departments: 0,
-        courses: 0,
-        industries: 0
-    });
-    const [statsAnimated, setStatsAnimated] = useState(!!initialStats?.totalAlumni);
-
-    // Stats state
-    const [stats, setStats] = useState(initialStats || {
-        totalAlumni: 0,
-        employmentRate: 0,
-        activeJobs: 0,
-        surveysCompleted: 0,
-        batchYears: 0,
-        departments: 0,
-        courses: 0,
-        industries: 0
-    });
-
-    // Announcements state
+    // Data states
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-    const [loadingAnnouncements, setLoadingAnnouncements] = useState(true);
-    const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
-    const [currentAnnouncementIndex, setCurrentAnnouncementIndex] = useState<number>(0);
-    const [announcementScrollIndex, setAnnouncementScrollIndex] = useState(0);
-
-    // Jobs state
     const [jobs, setJobs] = useState<Job[]>([]);
-    const [loadingJobs, setLoadingJobs] = useState(true);
-    const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-    const [currentJobIndex, setCurrentJobIndex] = useState<number>(0);
-    const [jobScrollIndex, setJobScrollIndex] = useState(0);
+    const [moreContent, setMoreContent] = useState<ContentItem[]>([]);
+    const [stats, setStats] = useState(initialStats ?? { totalAlumni: 0, employmentRate: 0, activeJobs: 0, surveysCompleted: 0, batchYears: 0, departments: 0, courses: 0, industries: 0 });
+    const [loadingA, setLoadingA] = useState(true);
+    const [loadingJ, setLoadingJ] = useState(true);
+    const [loadingM, setLoadingM] = useState(true);
+    const [statsVisible, setStatsVisible] = useState(false);
 
-    // Alumni search state
+    // Modal states
+    const [selAnnouncement, setSelAnnouncement] = useState<Announcement | null>(null);
+    const [selAnnouncementIdx, setSelAnnouncementIdx] = useState(0);
+    const [selJob, setSelJob] = useState<Job | null>(null);
+    const [selJobIdx, setSelJobIdx] = useState(0);
+    const [selContent, setSelContent] = useState<ContentItem | null>(null);
+    const [selContentIdx, setSelContentIdx] = useState(0);
+
+    // More content tab
+    const [contentTab, setContentTab] = useState('all');
+
+    // Alumni search
     const [searchQuery, setSearchQuery] = useState('');
     const [searchType, setSearchType] = useState<'email' | 'student_id'>('student_id');
     const [searching, setSearching] = useState(false);
     const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
     const [searchError, setSearchError] = useState('');
 
-    // Mobile menu state
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-    // Active section tracking for navigation
-    const [activeSection, setActiveSection] = useState('');
-
+    // ── Scroll tracking (body is the scroll container when html has overflow:hidden)
     useEffect(() => {
-        const handleScroll = () => {
-            // Check if scrolling is happening on document element or window
-            const scrollPos = document.documentElement.scrollTop || document.body.scrollTop || window.scrollY;
-            setScrollY(scrollPos);
-        };
-
-        // Listen to scroll on both window and document
-        window.addEventListener('scroll', handleScroll, { passive: true });
-        document.addEventListener('scroll', handleScroll, { passive: true });
-        setIsVisible(true);
-
+        const getScrollY = () =>
+            document.body.scrollTop || document.documentElement.scrollTop || window.scrollY;
+        const onScroll = () => setScrollY(getScrollY());
+        document.body.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('scroll', onScroll, { passive: true });
         return () => {
-            window.removeEventListener('scroll', handleScroll);
-            document.removeEventListener('scroll', handleScroll);
+            document.body.removeEventListener('scroll', onScroll);
+            window.removeEventListener('scroll', onScroll);
         };
     }, []);
 
-    // Add public-page class to html for proper scrolling
+    // ── Public page class
     useEffect(() => {
         document.documentElement.classList.add('public-page');
-        return () => {
-            document.documentElement.classList.remove('public-page');
-        };
+        return () => document.documentElement.classList.remove('public-page');
     }, []);
 
-    // Intersection Observer for scroll-triggered animations
+    // ── Active section observer — matches new section order
     useEffect(() => {
-        const observerOptions = {
-            root: null,
-            rootMargin: '0px',
-            threshold: 0.1
-        };
-
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach((entry) => {
-                if (entry.isIntersecting) {
-                    setVisibleSections((prev) => new Set([...prev, entry.target.id]));
-                }
-            });
-        }, observerOptions);
-
-        // Observe all sections
-        const sections = document.querySelectorAll('[data-animate]');
-        sections.forEach((section) => observer.observe(section));
-
-        return () => observer.disconnect();
+        const obs = new IntersectionObserver(
+            entries => entries.forEach(e => { if (e.isIntersecting && e.target.id) setActiveSection(e.target.id); }),
+            { rootMargin: '-20% 0px -78% 0px', threshold: 0 }
+        );
+        document.querySelectorAll('#search,#features,#announcements,#jobs,#more').forEach(el => obs.observe(el));
+        return () => obs.disconnect();
     }, []);
 
-    // Track active section for navigation highlighting
+    // ── Stats section observer
     useEffect(() => {
-        const observerOptions = {
-            root: null,
-            rootMargin: '-20% 0px -80% 0px',
-            threshold: 0
-        };
-
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach((entry) => {
-                if (entry.isIntersecting && entry.target.id) {
-                    setActiveSection(entry.target.id);
-                }
-            });
-        }, observerOptions);
-
-        // Observe navigation target sections
-        const sections = document.querySelectorAll('#announcements, #jobs, #search, #features');
-        sections.forEach((section) => observer.observe(section));
-
-        return () => observer.disconnect();
+        const el = document.getElementById('stats-section');
+        if (!el) return;
+        const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setStatsVisible(true); }, { threshold: 0.2 });
+        obs.observe(el);
+        return () => obs.disconnect();
     }, []);
 
-    // Smooth scroll handler
-    const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
+    // ── Data fetching
+    useEffect(() => {
+        const headers = { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+        fetch('/api/v1/public/appearance', { headers }).then(r => r.json()).then(d => {
+            if (d.success && d.data) setLogoUrl(d.data.logo_light_path || d.data.logo_dark_path || null);
+        }).catch(() => { });
+        fetch('/api/v1/public/announcements?limit=9', { headers }).then(r => r.json()).then(d => { if (d.success) setAnnouncements(d.data); }).catch(() => { }).finally(() => setLoadingA(false));
+        fetch('/api/v1/public/jobs?limit=9', { headers }).then(r => r.json()).then(d => { if (d.success) setJobs(d.data); }).catch(() => { }).finally(() => setLoadingJ(false));
+        fetch('/api/v1/public/more-content?limit=12', { headers }).then(r => r.json()).then(d => { if (d.success) setMoreContent(d.data); }).catch(() => { }).finally(() => setLoadingM(false));
+        fetch('/api/v1/public/stats', { headers }).then(r => r.json()).then(d => { if (d.success) setStats(d.data); }).catch(() => { });
+    }, []);
+
+    // ── Filtered content
+    const filteredContent = contentTab === 'all' ? moreContent : moreContent.filter(i => i.content_type === contentTab);
+    const availableTabs = [
+        { key: 'all', label: 'All', icon: Layers },
+        { key: 'event', label: 'Events', icon: PartyPopper },
+        { key: 'news', label: 'News', icon: Newspaper },
+        { key: 'blog', label: 'Blogs', icon: PenTool },
+        { key: 'scholarship', label: 'Scholarships', icon: GraduationCap },
+        { key: 'resource', label: 'Resources', icon: FolderOpen },
+    ].filter(t => t.key === 'all' || moreContent.some(i => i.content_type === t.key));
+
+    // ── Smooth scroll nav
+    const navTo = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
         e.preventDefault();
-        const target = document.querySelector(targetId);
-        if (target) {
-            // Use scrollIntoView for more reliable scrolling
-            target.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start'
-            });
-
-            // Adjust for fixed navbar after scroll
-            setTimeout(() => {
-                const navHeight = 80;
-                const scrollContainer = document.documentElement.scrollTop > 0 ? document.documentElement : document.body;
-                scrollContainer.scrollTop -= navHeight;
-            }, 100);
-
-            // Add a subtle flash animation to the target section
-            target.classList.add('section-flash');
-            setTimeout(() => {
-                target.classList.remove('section-flash');
-            }, 1000);
-        }
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setMenuOpen(false);
     };
 
-    // Scroll to top
-    const scrollToTop = () => {
-        document.documentElement.scrollTo({ top: 0, behavior: 'smooth' });
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-
-    // Scroll to bottom
-    const scrollToBottom = () => {
-        const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
-        document.documentElement.scrollTo({ top: scrollHeight, behavior: 'smooth' });
-        window.scrollTo({ top: scrollHeight, behavior: 'smooth' });
-    };
-
-    // Animate stats counter when visible
-    useEffect(() => {
-        if (!statsAnimated && stats.totalAlumni > 0) {
-            // If hero-stats is visible, animate with counter effect
-            if (visibleSections.has('hero-stats')) {
-                setStatsAnimated(true);
-                const duration = 2000;
-                const steps = 60;
-                const interval = duration / steps;
-
-                let currentStep = 0;
-                const timer = setInterval(() => {
-                    currentStep++;
-                    const progress = currentStep / steps;
-                    const easeOut = 1 - Math.pow(1 - progress, 3);
-
-                    setAnimatedStats({
-                        totalAlumni: Math.floor(stats.totalAlumni * easeOut),
-                        employmentRate: Math.floor(stats.employmentRate * easeOut),
-                        activeJobs: Math.floor(stats.activeJobs * easeOut),
-                        surveysCompleted: Math.floor(stats.surveysCompleted * easeOut),
-                        batchYears: Math.floor((stats.batchYears || 0) * easeOut),
-                        departments: Math.floor((stats.departments || 0) * easeOut),
-                        courses: Math.floor((stats.courses || 0) * easeOut),
-                        industries: Math.floor((stats.industries || 0) * easeOut)
-                    });
-
-                    if (currentStep >= steps) {
-                        clearInterval(timer);
-                        setAnimatedStats(stats);
-                    }
-                }, interval);
-
-                return () => clearInterval(timer);
-            }
-        }
-    }, [visibleSections, stats, statsAnimated]);
-
-    // Fallback: if stats loaded but animation never triggered after 3s, show values directly
-    useEffect(() => {
-        if (stats.totalAlumni > 0 && !statsAnimated) {
-            const fallback = setTimeout(() => {
-                if (!statsAnimated) {
-                    setAnimatedStats(stats);
-                    setStatsAnimated(true);
-                }
-            }, 3000);
-            return () => clearTimeout(fallback);
-        }
-    }, [stats, statsAnimated]);
-
-    // Fetch appearance settings
-    useEffect(() => {
-        const fetchAppearanceSettings = async () => {
-            try {
-                const response = await fetch('/api/v1/public/appearance', {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success && data.data) {
-                        setAppearanceSettings({
-                            logoLight: data.data.logo_light_path,
-                            logoDark: data.data.logo_dark_path,
-                            heroBackground: data.data.background_image_path || data.data.hero_background_path || null,
-                        });
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to fetch appearance settings:', error);
-            }
-        };
-
-        fetchAppearanceSettings();
-    }, []);
-
-    // Fetch public announcements
-    useEffect(() => {
-        const fetchAnnouncements = async () => {
-            try {
-                const response = await fetch('/api/v1/public/announcements?limit=6', {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success) {
-                        setAnnouncements(data.data);
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to fetch announcements:', error);
-            } finally {
-                setLoadingAnnouncements(false);
-            }
-        };
-
-        fetchAnnouncements();
-    }, []);
-
-    // Fetch public jobs
-    useEffect(() => {
-        const fetchJobs = async () => {
-            try {
-                const response = await fetch('/api/v1/public/jobs?limit=6', {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success) {
-                        setJobs(data.data);
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to fetch jobs:', error);
-            } finally {
-                setLoadingJobs(false);
-            }
-        };
-
-        fetchJobs();
-    }, []);
-
-    // Fetch stats
-    useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                const response = await fetch('/api/v1/public/stats', {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success) {
-                        setStats(data.data);
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to fetch stats:', error);
-            }
-        };
-
-        fetchStats();
-    }, []);
-
-    // Search alumni
+    // ── Alumni search handler
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        if (!searchQuery.trim()) {
-            setSearchError('Please enter a search term');
-            return;
-        }
-
-        setSearching(true);
-        setSearchResult(null);
-        setSearchError('');
-
+        if (!searchQuery.trim()) { setSearchError('Please enter a search term'); return; }
+        setSearching(true); setSearchResult(null); setSearchError('');
         try {
-            const response = await fetch('/api/v1/public/search-alumni', {
+            const r = await fetch('/api/v1/public/search-alumni', {
                 method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                body: JSON.stringify({
-                    search: searchQuery.trim(),
-                    search_type: searchType,
-                }),
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: JSON.stringify({ search: searchQuery.trim(), search_type: searchType }),
             });
-
-            const data = await response.json();
-
-            if (data.success) {
-                setSearchResult(data);
-            } else {
-                setSearchError(data.message || 'Search failed');
-            }
-        } catch (error) {
-            console.error('Search error:', error);
-            setSearchError('An error occurred while searching. Please try again.');
-        } finally {
-            setSearching(false);
-        }
+            const d = await r.json();
+            if (d.success) setSearchResult(d);
+            else setSearchError(d.message || 'Search failed');
+        } catch { setSearchError('An error occurred. Please try again.'); }
+        finally { setSearching(false); }
     };
+
+    // ── Priority badge colour
+    const priorityColor = (p: string) =>
+        p === 'urgent' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : p === 'high' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-maroon-100 text-maroon-700 dark:bg-maroon-900/30 dark:text-maroon-400';
+
+    // ── Nav links — ordered to match conversion flow
+    const navLinks = [
+        { id: 'search', label: 'Find Record' },
+        { id: 'features', label: 'Features' },
+        { id: 'announcements', label: 'News' },
+        { id: 'jobs', label: 'Jobs' },
+        { id: 'more', label: 'Explore' },
+    ];
+
+    const statItems = [
+        { label: 'Alumni Tracked', value: stats.totalAlumni, suffix: '+', icon: Users },
+        { label: 'Employment Rate', value: stats.employmentRate, suffix: '%', icon: TrendingUp },
+        { label: 'Departments', value: stats.departments, suffix: '', icon: BookOpen },
+        { label: 'Industries', value: stats.industries, suffix: '+', icon: Globe },
+    ];
 
     const features = [
-        {
-            icon: Users,
-            title: "Alumni Network",
-            description: "Connect with thousands of graduates worldwide and build meaningful professional relationships.",
-            color: "from-maroon-500 to-maroon-600"
-        },
-        {
-            icon: Briefcase,
-            title: "Career Opportunities",
-            description: "Access exclusive job postings and career development resources tailored for alumni.",
-            color: "from-maroon-600 to-maroon-700"
-        },
-        {
-            icon: TrendingUp,
-            title: "Track Progress",
-            description: "Monitor your career journey and celebrate milestones with your alma mater community.",
-            color: "from-maroon-500 to-beige-600"
-        },
-        {
-            icon: BarChart3,
-            title: "Analytics & Insights",
-            description: "Gain valuable insights into employment trends and career trajectories of fellow alumni.",
-            color: "from-maroon-600 to-maroon-800"
-        },
-        {
-            icon: MessageCircle,
-            title: "Mentorship Programs",
-            description: "Connect with experienced mentors or become one to guide the next generation.",
-            color: "from-maroon-500 to-maroon-700"
-        },
-        {
-            icon: Award,
-            title: "Recognition & Events",
-            description: "Participate in exclusive alumni events and receive recognition for your achievements.",
-            color: "from-maroon-700 to-maroon-800"
-        }
+        { icon: Search, title: 'Instant Record Lookup', desc: 'Check if your alumni record exists in seconds. Search by student ID or email and get started immediately.' },
+        { icon: Briefcase, title: 'Exclusive Job Board', desc: 'Access career opportunities posted specifically for alumni from partner companies and employers.' },
+        { icon: Megaphone, title: 'University Announcements', desc: 'Never miss important updates, events, or deadlines from your university — delivered directly to you.' },
+        { icon: BarChart3, title: 'Career Analytics', desc: 'See employment trends, salary insights, and career paths of fellow alumni to guide your next move.' },
+        { icon: Shield, title: 'Verified & Secure', desc: 'Your personal data is protected with enterprise-grade security. Only verified alumni gain access.' },
+        { icon: Globe, title: 'Global Alumni Network', desc: 'Connect with graduates worldwide. Discover alumni in your industry, city, or field of interest.' },
     ];
 
-    const benefits = [
-        "Real-time job matching based on your profile",
-        "Secure and verified alumni directory",
-        "Advanced career analytics dashboard",
-        "Mobile-friendly responsive design",
-        "Regular employment surveys and feedback",
-        "Direct communication with institution"
-    ];
-
-    const getPriorityColor = (priority: string) => {
-        switch (priority) {
-            case 'urgent':
-                return 'bg-red-100 text-red-800 border-red-200';
-            case 'high':
-                return 'bg-orange-100 text-orange-800 border-orange-200';
-            default:
-                return 'bg-maroon-100 text-maroon-800 border-maroon-200';
-        }
-    };
+    // ══════════════════════════════════════════════════════════════════════════
+    // ─── RENDER ──────────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 text-maroon-900 dark:text-gray-100 overflow-x-hidden">
-            {/* Animated Background */}
-            <div className="fixed inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-0 -left-4 w-72 h-72 bg-maroon-200 dark:bg-maroon-900/30 rounded-full mix-blend-multiply dark:mix-blend-normal filter blur-xl opacity-20 animate-blob"></div>
-                <div className="absolute top-0 -right-4 w-72 h-72 bg-beige-200 dark:bg-gray-700/30 rounded-full mix-blend-multiply dark:mix-blend-normal filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
-                <div className="absolute -bottom-8 left-20 w-72 h-72 bg-maroon-300 dark:bg-maroon-900/30 rounded-full mix-blend-multiply dark:mix-blend-normal filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
-            </div>
+        <div className="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100">
 
-            {/* Navigation */}
-            <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${scrollY > 50 ? 'bg-white/95 dark:bg-gray-900/95 backdrop-blur-lg shadow-lg border-b border-maroon-100 dark:border-gray-700' : 'bg-white/90 dark:bg-gray-900/90 backdrop-blur-md'}`}>
-                <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-                    <div className="flex items-center justify-between h-14 sm:h-16 md:h-18">
-                        {/* Logo */}
-                        <Link href="/" className="flex items-center space-x-2 flex-shrink-0">
-                            {appearanceSettings.logoLight || appearanceSettings.logoDark ? (
-                                <img
-                                    src={`/api/v1/assets/${appearanceSettings.logoLight || appearanceSettings.logoDark}`}
-                                    alt="Alumni Tracer Logo"
-                                    className="w-8 h-8 sm:w-10 sm:h-10 object-contain rounded-lg"
-                                />
-                            ) : (
-                                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-maroon-600 to-maroon-700 rounded-lg flex items-center justify-center shadow-md">
-                                    <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                                </div>
-                            )}
-                            <div className="hidden xs:block">
-                                <h1 className="text-base sm:text-lg md:text-xl font-bold text-maroon-900 dark:text-gray-100 leading-tight">
-                                    Alumni Tracer
-                                </h1>
-                                <p className="text-[10px] sm:text-xs text-maroon-600 dark:text-gray-400 leading-tight hidden sm:block">Stay Connected, Track Your Career</p>
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* ── 1. NAVBAR ─────────────────────────────────────────── */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <header
+                className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${scrollY > 40 ? 'bg-white/95 dark:bg-gray-950/95 backdrop-blur-md shadow-sm border-b border-gray-100 dark:border-gray-800' : 'bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm'}`}
+                role="banner"
+            >
+                <nav className="max-w-6xl mx-auto px-4 sm:px-6 flex items-center justify-between h-14 md:h-16" aria-label="Main navigation">
+                    {/* Logo */}
+                    <Link href="/" className="flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-500 rounded-lg">
+                        {logoUrl ? (
+                            <img src={`/api/v1/assets/${logoUrl}`} alt="Alumni Tracer Logo" className="h-8 w-auto object-contain" />
+                        ) : (
+                            <div className="w-8 h-8 rounded-lg bg-maroon-600 flex items-center justify-center">
+                                <GraduationCap className="w-5 h-5 text-white" />
                             </div>
+                        )}
+                        <span className="font-bold text-base text-gray-900 dark:text-gray-100 hidden sm:block">Alumni Tracer</span>
+                    </Link>
+
+                    {/* Desktop nav links */}
+                    <div className="hidden md:flex items-center gap-1">
+                        {navLinks.map(l => (
+                            <a
+                                key={l.id}
+                                href={`#${l.id}`}
+                                onClick={e => navTo(e, l.id)}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-500 ${activeSection === l.id ? 'bg-maroon-50 dark:bg-maroon-900/30 text-maroon-700 dark:text-maroon-300' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                            >
+                                {l.label}
+                            </a>
+                        ))}
+                    </div>
+
+                    {/* Desktop actions */}
+                    <div className="hidden md:flex items-center gap-2">
+                        <AppearanceToggleDropdown />
+                        <Link href="/login" className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-500">
+                            <LogIn className="w-4 h-4" /> Sign In
                         </Link>
-
-                        {/* Desktop Navigation - Hidden on mobile/tablet */}
-                        <div className="hidden lg:flex items-center space-x-1 xl:space-x-2">
-                            {[
-                                { id: 'announcements', label: 'Announcements' },
-                                { id: 'jobs', label: 'Jobs' },
-                                { id: 'search', label: 'Find Me' },
-                                { id: 'features', label: 'Features' }
-                            ].map((item) => (
-                                <a
-                                    key={item.id}
-                                    href={`#${item.id}`}
-                                    onClick={(e) => handleNavClick(e, `#${item.id}`)}
-                                    className={`relative px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${activeSection === item.id
-                                        ? 'text-maroon-900 dark:text-white bg-maroon-50 dark:bg-gray-700'
-                                        : 'text-maroon-600 dark:text-gray-300 hover:text-maroon-900 dark:hover:text-white hover:bg-maroon-50/50 dark:hover:bg-gray-700/50'
-                                        }`}
-                                >
-                                    {item.label}
-                                    {activeSection === item.id && (
-                                        <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-maroon-600 dark:bg-maroon-400 rounded-full" />
-                                    )}
-                                </a>
-                            ))}
-                        </div>
-
-                        {/* Desktop Auth Buttons - Hidden on mobile/tablet */}
-                        <div className="hidden lg:flex items-center space-x-2 xl:space-x-3">
-                            <AppearanceToggleDropdown />
-                            <Link
-                                href="/login"
-                                className="flex items-center space-x-1.5 px-4 py-2 text-sm font-medium text-maroon-700 dark:text-gray-300 hover:text-maroon-900 dark:hover:text-white hover:bg-maroon-50 dark:hover:bg-gray-700 rounded-lg transition-all"
-                            >
-                                <LogIn className="w-4 h-4" />
-                                <span>Sign In</span>
-                            </Link>
-                            <Link
-                                href="/survey/register"
-                                className="flex items-center space-x-1.5 px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-maroon-600 to-maroon-700 hover:from-maroon-700 hover:to-maroon-800 rounded-lg shadow-md hover:shadow-lg transition-all transform hover:scale-[1.02]"
-                            >
-                                <UserPlus className="w-4 h-4" />
-                                <span>Get Started</span>
-                            </Link>
-                        </div>
-
-                        {/* Mobile/Tablet Controls */}
-                        <div className="flex lg:hidden items-center space-x-1 sm:space-x-2">
-                            <AppearanceToggleDropdown />
-                            {/* Quick action buttons for small screens */}
-                            <Link
-                                href="/login"
-                                className="p-2 text-maroon-600 dark:text-gray-300 hover:text-maroon-900 dark:hover:text-white hover:bg-maroon-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                                title="Sign In"
-                            >
-                                <LogIn className="w-5 h-5" />
-                            </Link>
-                            <Link
-                                href="/survey/register"
-                                className="hidden sm:flex items-center space-x-1 px-3 py-1.5 text-xs sm:text-sm font-semibold text-white bg-gradient-to-r from-maroon-600 to-maroon-700 rounded-lg shadow-sm"
-                            >
-                                <span>Register</span>
-                            </Link>
-                            <button
-                                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                                className="p-2 rounded-lg text-maroon-600 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-gray-700 transition-colors"
-                                aria-label="Toggle menu"
-                            >
-                                {mobileMenuOpen ? <X className="w-5 h-5 sm:w-6 sm:h-6" /> : <Menu className="w-5 h-5 sm:w-6 sm:h-6" />}
-                            </button>
-                        </div>
+                        <Link href="/survey/register" className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-maroon-600 hover:bg-maroon-700 rounded-lg transition-colors shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-500 focus-visible:ring-offset-2">
+                            <UserPlus className="w-4 h-4" /> Register
+                        </Link>
                     </div>
 
-                    {/* Mobile/Tablet Menu */}
-                    <div className={`lg:hidden overflow-hidden transition-all duration-300 ease-in-out ${mobileMenuOpen ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-                        <div className="py-3 border-t border-maroon-100 dark:border-gray-700">
-                            <div className="grid grid-cols-2 gap-2 mb-3">
-                                {[
-                                    { id: 'announcements', label: 'Announcements', icon: Megaphone },
-                                    { id: 'jobs', label: 'Jobs', icon: Briefcase },
-                                    { id: 'search', label: 'Find Me', icon: Search },
-                                    { id: 'features', label: 'Features', icon: Star }
-                                ].map((item) => (
-                                    <a
-                                        key={item.id}
-                                        href={`#${item.id}`}
-                                        onClick={(e) => { handleNavClick(e, `#${item.id}`); setMobileMenuOpen(false); }}
-                                        className={`flex items-center space-x-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${activeSection === item.id
-                                            ? 'bg-maroon-100 dark:bg-gray-700 text-maroon-900 dark:text-white'
-                                            : 'text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-gray-700'
-                                            }`}
-                                    >
-                                        <item.icon className="w-4 h-4" />
-                                        <span>{item.label}</span>
-                                    </a>
-                                ))}
-                            </div>
-                            {/* Mobile auth buttons - only show full register on very small screens */}
-                            <div className="sm:hidden pt-2 border-t border-maroon-100 dark:border-gray-700">
-                                <Link
-                                    href="/survey/register"
-                                    className="flex items-center justify-center space-x-2 w-full px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-maroon-600 to-maroon-700 dark:from-maroon-700 dark:to-maroon-800 rounded-lg"
-                                    onClick={() => setMobileMenuOpen(false)}
-                                >
-                                    <UserPlus className="w-4 h-4" />
-                                    <span>Get Started</span>
-                                </Link>
-                            </div>
-                        </div>
+                    {/* Mobile actions */}
+                    <div className="flex md:hidden items-center gap-1">
+                        <AppearanceToggleDropdown />
+                        <Link href="/login" className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg" aria-label="Sign in"><LogIn className="w-5 h-5" /></Link>
+                        <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg" aria-label={menuOpen ? 'Close menu' : 'Open menu'} aria-expanded={menuOpen}>
+                            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                        </button>
+                    </div>
+                </nav>
+
+                {/* Mobile menu */}
+                <div className={`md:hidden overflow-hidden transition-all duration-300 ease-in-out ${menuOpen ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0'}`}>
+                    <div className="px-4 py-3 space-y-1 bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-800">
+                        {navLinks.map(l => (
+                            <a key={l.id} href={`#${l.id}`} onClick={e => navTo(e, l.id)}
+                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                                {l.label}
+                            </a>
+                        ))}
+                        <Link href="/survey/register" onClick={() => setMenuOpen(false)} className="flex items-center justify-center gap-2 px-4 py-2.5 mt-2 text-sm font-semibold text-white bg-maroon-600 rounded-lg">
+                            <UserPlus className="w-4 h-4" /> Get Started
+                        </Link>
                     </div>
                 </div>
-            </nav>
+            </header>
 
-            {/* Scroll to Top/Bottom Buttons */}
-            <div className={`fixed right-4 sm:right-6 bottom-4 sm:bottom-6 z-40 flex flex-col space-y-2 transition-all duration-300 ${scrollY > 300 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-                <button
-                    onClick={scrollToTop}
-                    className="p-2.5 sm:p-3 bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 text-maroon-600 dark:text-gray-300 hover:text-maroon-800 dark:hover:text-white rounded-full shadow-lg hover:shadow-xl border border-maroon-100 dark:border-gray-600 transition-all transform hover:scale-110"
-                    title="Scroll to top"
-                >
-                    <ArrowUp className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-                <button
-                    onClick={scrollToBottom}
-                    className="p-2.5 sm:p-3 bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 text-maroon-600 dark:text-gray-300 hover:text-maroon-800 dark:hover:text-white rounded-full shadow-lg hover:shadow-xl border border-maroon-100 dark:border-gray-600 transition-all transform hover:scale-110"
-                    title="Scroll to bottom"
-                >
-                    <ArrowDown className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-            </div>
-
-            {/* Hero Section */}
-            <section className="relative pt-24 md:pt-32 pb-12 md:pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
-                {/* Hero Background Image - Low contrast alumni-related image */}
-                <div className="absolute inset-0 z-0">
-                    {appearanceSettings.heroBackground ? (
-                        <img
-                            src={`/api/v1/assets/${appearanceSettings.heroBackground}`}
-                            alt=""
-                            className="w-full h-full object-cover opacity-15"
-                        />
-                    ) : (
-                        <img
-                            src="https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=1920&q=80"
-                            alt=""
-                            className="w-full h-full object-cover opacity-10"
-                        />
-                    )}
-                    {/* Light overlay to maintain readability with original colors */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-maroon-50/95 via-beige-50/90 to-maroon-100/95 dark:from-gray-900/95 dark:via-gray-800/90 dark:to-gray-900/95"></div>
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* ── 2. HERO — Redesigned for conversion ───────────────── */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <section className="relative pt-28 md:pt-36 pb-20 md:pb-28 px-4 overflow-hidden bg-gradient-to-b from-maroon-950 via-maroon-900 to-maroon-800" role="banner">
+                {/* Subtle dot pattern */}
+                <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '24px 24px' }} aria-hidden="true" />
+                {/* Gradient orbs */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+                    <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-maroon-500/20 rounded-full blur-[120px]" />
+                    <div className="absolute top-1/2 -left-40 w-[400px] h-[400px] bg-maroon-600/15 rounded-full blur-[100px]" />
+                    <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-white/[0.03] rounded-full blur-[80px]" />
                 </div>
 
-                <div className={`relative z-10 max-w-7xl mx-auto transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-                    <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
-                        <div className="space-y-6 md:space-y-8 text-center lg:text-left">
-                            <div className={`inline-flex items-center space-x-2 bg-maroon-100 dark:bg-gray-700 border border-maroon-200 dark:border-gray-600 rounded-full px-4 py-2 ${isVisible ? 'animate-pop-out' : 'opacity-0'}`}>
-                                <Globe className="w-4 h-4 text-maroon-600 dark:text-maroon-400" />
-                                <span className="text-sm text-maroon-700 dark:text-gray-300">Connecting Alumni Worldwide</span>
-                            </div>
-                            <h1 className={`text-3xl sm:text-4xl md:text-5xl lg:text-7xl font-bold leading-tight text-maroon-900 dark:text-gray-100 ${isVisible ? 'animate-slide-up animation-delay-100' : 'opacity-0'}`}>
-                                Your Career Journey
-                                <span className="block bg-gradient-to-r from-maroon-600 to-maroon-800 bg-clip-text text-transparent">
-                                    Starts Here
-                                </span>
-                            </h1>
-                            <p className={`text-base md:text-xl text-maroon-600 dark:text-gray-400 leading-relaxed ${isVisible ? 'animate-slide-up animation-delay-200' : 'opacity-0'}`}>
-                                Join {stats.totalAlumni > 0 ? stats.totalAlumni.toLocaleString() + '+' : 'thousands of'} successful alumni in our vibrant community. Track your career progress,
-                                discover opportunities, and stay connected with your alma mater.
-                            </p>
-                            <div className={`flex flex-col sm:flex-row gap-4 justify-center lg:justify-start ${isVisible ? 'animate-slide-up animation-delay-300' : 'opacity-0'}`}>
-                                <Link
-                                    href="/survey/register"
-                                    className="group px-6 md:px-8 py-3 md:py-4 bg-gradient-to-r from-maroon-600 to-maroon-700 hover:from-maroon-700 hover:to-maroon-800 rounded-xl font-semibold text-white transition-all transform hover:scale-105 shadow-2xl flex items-center justify-center space-x-2"
-                                >
-                                    <span>Join Now</span>
-                                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                                </Link>
-                                <a
-                                    href="#search"
-                                    className="px-6 md:px-8 py-3 md:py-4 bg-white/60 dark:bg-gray-800/60 hover:bg-white/80 dark:hover:bg-gray-800/80 backdrop-blur-sm border border-maroon-200 dark:border-gray-600 rounded-xl font-semibold text-maroon-900 dark:text-gray-100 transition-all flex items-center justify-center space-x-2"
-                                >
-                                    <Search className="w-5 h-5" />
-                                    <span>Find My Record</span>
-                                </a>
-                            </div>
+                <div className="relative max-w-4xl mx-auto text-center">
+                    {/* Live trust badge */}
+                    <div className="inline-flex items-center gap-2.5 bg-white/[0.08] backdrop-blur-sm border border-white/[0.12] rounded-full px-4 py-2 text-sm text-maroon-100 mb-8">
+                        <span className="relative flex h-2 w-2" aria-hidden="true">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+                        </span>
+                        Trusted by {stats.totalAlumni > 0 ? stats.totalAlumni.toLocaleString() + '+' : ''} alumni across {stats.departments > 0 ? stats.departments : 'multiple'} departments
+                    </div>
 
-                            {/* Stats */}
-                            <div id="hero-stats" data-animate className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 pt-6 md:pt-8">
-                                {[
-                                    { label: 'Registered Alumni', value: animatedStats.totalAlumni.toLocaleString(), icon: Users, suffix: '+' },
-                                    { label: 'Employment Rate', value: `${animatedStats.employmentRate}`, icon: TrendingUp, suffix: '%' },
-                                    { label: 'Active Jobs', value: animatedStats.activeJobs.toLocaleString(), icon: Briefcase, suffix: '' },
-                                    { label: 'Batch Years', value: animatedStats.batchYears.toLocaleString(), icon: GraduationCap, suffix: '' },
-                                    { label: 'Departments', value: animatedStats.departments.toLocaleString(), icon: Building2, suffix: '' },
-                                    { label: 'Programs', value: animatedStats.courses.toLocaleString(), icon: BookOpen, suffix: '' },
-                                    { label: 'Industries', value: animatedStats.industries.toLocaleString(), icon: Layers, suffix: '+' },
-                                    { label: 'Surveys Done', value: animatedStats.surveysCompleted.toLocaleString(), icon: BarChart3, suffix: '' }
-                                ].map((stat, index) => (
-                                    <div
-                                        key={index}
-                                        className={`text-center p-3 md:p-4 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-xl border border-maroon-100 dark:border-gray-700 transform transition-all duration-500 hover:scale-105 hover:shadow-lg hover:bg-white/80 dark:hover:bg-gray-800/80 ${visibleSections.has('hero-stats')
-                                            ? 'animate-pop-out'
-                                            : 'opacity-0'
-                                            }`}
-                                        style={{ animationDelay: `${index * 80}ms` }}
-                                    >
-                                        <stat.icon className="w-5 h-5 mx-auto mb-1 text-maroon-500 dark:text-maroon-400" />
-                                        <div className="text-lg md:text-2xl font-bold text-maroon-900 dark:text-gray-100 tabular-nums">
-                                            {stat.value}{stat.suffix && <span className="text-maroon-500 dark:text-maroon-400">{stat.suffix}</span>}
-                                        </div>
-                                        <div className="text-[10px] md:text-xs text-maroon-600 dark:text-gray-400 font-medium">{stat.label}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
+                    <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-[4.25rem] font-extrabold text-white leading-[1.1] tracking-tight mb-6">
+                        Your Alumni Network,{' '}
+                        <span className="bg-gradient-to-r from-maroon-200 via-white to-maroon-200 bg-clip-text text-transparent">
+                            Rebuilt for the Future
+                        </span>
+                    </h1>
 
-                        {/* 3D Illustration - Hidden on mobile */}
-                        <div className={`hidden lg:flex relative lg:h-[600px] items-center justify-center ${isVisible ? 'animate-slide-right animation-delay-400' : 'opacity-0'}`}>
-                            <div className="absolute inset-0 bg-gradient-to-r from-maroon-200/20 to-beige-200/20 dark:from-gray-700/20 dark:to-gray-600/20 rounded-3xl blur-3xl"></div>
-                            <div className="relative w-full h-full flex items-center justify-center">
-                                <div className="w-64 lg:w-80 h-64 lg:h-80 bg-gradient-to-br from-maroon-100/40 to-beige-100/40 dark:from-gray-700/40 dark:to-gray-600/40 rounded-full flex items-center justify-center backdrop-blur-sm border border-maroon-200 dark:border-gray-600 animate-pulse-slow">
-                                    <GraduationCap className="w-32 lg:w-40 h-32 lg:h-40 text-maroon-600 dark:text-maroon-400" />
-                                </div>
-                                {/* Floating Icons */}
-                                <div className="absolute top-10 left-10 p-3 lg:p-4 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-maroon-100 dark:border-gray-700 animate-float">
-                                    <Users className="w-6 lg:w-8 h-6 lg:h-8 text-maroon-600 dark:text-maroon-400" />
-                                </div>
-                                <div className="absolute top-20 right-10 p-3 lg:p-4 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-maroon-100 dark:border-gray-700 animate-float animation-delay-2000">
-                                    <Briefcase className="w-6 lg:w-8 h-6 lg:h-8 text-maroon-700 dark:text-maroon-400" />
-                                </div>
-                                <div className="absolute bottom-20 left-20 p-3 lg:p-4 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-maroon-100 dark:border-gray-700 animate-float animation-delay-4000">
-                                    <TrendingUp className="w-6 lg:w-8 h-6 lg:h-8 text-maroon-600 dark:text-maroon-400" />
-                                </div>
-                            </div>
-                        </div>
+                    <p className="text-maroon-200/90 text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed font-light">
+                        Discover job opportunities, receive university announcements, access scholarships, and reconnect with your community — all on one platform.
+                    </p>
+
+                    {/* CTAs */}
+                    <div className="flex flex-col sm:flex-row justify-center gap-3 mb-12">
+                        <Link
+                            href="/survey/register"
+                            className="group inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-white text-maroon-800 font-semibold rounded-xl hover:bg-maroon-50 transition-all shadow-lg shadow-black/20 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-maroon-900"
+                        >
+                            Join the Network <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                        </Link>
+                        <a
+                            href="#search"
+                            onClick={e => navTo(e, 'search')}
+                            className="inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-white/[0.08] backdrop-blur-sm text-white font-semibold rounded-xl border border-white/[0.15] hover:bg-white/[0.14] transition-all text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                        >
+                            <Search className="w-4 h-4" /> Find Your Record
+                        </a>
+                    </div>
+
+                    {/* Trust indicators */}
+                    <div className="flex flex-wrap justify-center gap-x-8 gap-y-3 text-maroon-300/80 text-sm">
+                        <span className="flex items-center gap-2"><Shield className="w-4 h-4" /> Verified & Secure</span>
+                        <span className="flex items-center gap-2"><Zap className="w-4 h-4" /> Free to Join</span>
+                        <span className="flex items-center gap-2"><Clock className="w-4 h-4" /> Takes 2 Minutes</span>
                     </div>
                 </div>
             </section>
 
-            {/* Alumni Search Section */}
-            <section id="search" data-animate className="py-12 md:py-20 px-4 sm:px-6 lg:px-8 bg-white/40 dark:bg-gray-800/40">
-                <div className={`max-w-4xl mx-auto transition-all duration-700 ${visibleSections.has('search') ? 'animate-slide-up' : 'opacity-0 translate-y-10'}`}>
-                    <div className="text-center mb-8 md:mb-12">
-                        <div className="inline-flex items-center space-x-2 bg-maroon-100 dark:bg-gray-700 border border-maroon-200 dark:border-gray-600 rounded-full px-4 py-2 mb-4 md:mb-6 animate-bounce-subtle">
-                            <Search className="w-4 h-4 text-maroon-600 dark:text-maroon-400" />
-                            <span className="text-sm text-maroon-700 dark:text-gray-300">Alumni Database Search</span>
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* ── 3. STATS BAR — Social proof strip ─────────────────── */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <section id="stats-section" className="bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-800" aria-label="Platform statistics">
+                <div className="max-w-6xl mx-auto px-4 py-10 grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-0 md:divide-x divide-gray-200 dark:divide-gray-700">
+                    {statItems.map(({ label, value, suffix, icon: Icon }) => (
+                        <div key={label} className="flex flex-col items-center text-center px-4">
+                            <div className="w-11 h-11 mb-3 rounded-xl bg-maroon-50 dark:bg-maroon-900/30 flex items-center justify-center">
+                                <Icon className="w-5 h-5 text-maroon-600 dark:text-maroon-400" />
+                            </div>
+                            <div className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-50 tabular-nums tracking-tight">
+                                {statsVisible ? <Counter value={value} suffix={suffix} /> : `0${suffix}`}
+                            </div>
+                            <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{label}</div>
                         </div>
-                        <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 text-maroon-900 dark:text-gray-100">
-                            Find Your
-                            <span className="block bg-gradient-to-r from-maroon-600 to-maroon-800 bg-clip-text text-transparent">
-                                Alumni Record
+                    ))}
+                </div>
+            </section>
+
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* ── 4. ALUMNI SEARCH — Moved up for immediate utility ── */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <section id="search" className="py-20 md:py-24 px-4" aria-label="Alumni record search">
+                <div className="max-w-5xl mx-auto">
+                    <div className="grid md:grid-cols-2 gap-10 md:gap-16 items-center">
+                        {/* Left — pitch */}
+                        <div>
+                            <span className="inline-flex items-center gap-1.5 bg-maroon-50 dark:bg-maroon-900/30 border border-maroon-200 dark:border-maroon-700 text-maroon-700 dark:text-maroon-300 text-xs font-semibold px-3 py-1.5 rounded-full mb-5">
+                                <Search className="w-3.5 h-3.5" /> Quick Lookup
                             </span>
-                        </h2>
-                        <p className="text-base md:text-xl text-maroon-600 dark:text-gray-400 max-w-2xl mx-auto">
-                            Check if you're already in our alumni database by searching with your email or student ID
-                        </p>
-                    </div>
+                            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-gray-50 mb-4 tracking-tight">
+                                Already in{' '}<span className="text-maroon-600 dark:text-maroon-400">Our Records?</span>
+                            </h2>
+                            <p className="text-gray-500 dark:text-gray-400 mb-6 leading-relaxed">
+                                Before registering, check if your record already exists in our alumni database. Search by student ID or email — it takes just 5 seconds.
+                            </p>
+                            <div className="flex flex-wrap items-center gap-4 text-sm text-gray-400 dark:text-gray-500">
+                                <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-emerald-500" /> Instant results</span>
+                                <span className="flex items-center gap-1.5"><Shield className="w-4 h-4 text-emerald-500" /> Private & secure</span>
+                            </div>
+                        </div>
 
-                    <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-maroon-200 dark:border-gray-700 p-4 md:p-8 shadow-xl">
-                        <form onSubmit={handleSearch} className="space-y-4 md:space-y-6">
-                            {/* Search Type Toggle */}
-                            <div className="flex justify-center space-x-2 md:space-x-4">
-                                <button
-                                    type="button"
-                                    onClick={() => { setSearchType('student_id'); setSearchResult(null); setSearchError(''); }}
-                                    className={`flex items-center space-x-2 px-4 md:px-6 py-2 md:py-3 rounded-xl font-medium transition-all text-sm md:text-base ${searchType === 'student_id'
-                                        ? 'bg-maroon-600 text-white shadow-lg'
-                                        : 'bg-white/60 dark:bg-gray-700/60 text-maroon-600 dark:text-gray-300 border border-maroon-200 dark:border-gray-600 hover:bg-maroon-50 dark:hover:bg-gray-700'
-                                        }`}
-                                >
-                                    <IdCard className="w-5 h-5" />
-                                    <span>Student ID</span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => { setSearchType('email'); setSearchResult(null); setSearchError(''); }}
-                                    className={`flex items-center space-x-2 px-6 py-3 rounded-xl font-medium transition-all ${searchType === 'email'
-                                        ? 'bg-maroon-600 text-white shadow-lg'
-                                        : 'bg-white/60 dark:bg-gray-700/60 text-maroon-600 dark:text-gray-300 border border-maroon-200 dark:border-gray-600 hover:bg-maroon-50 dark:hover:bg-gray-700'
-                                        }`}
-                                >
-                                    <Mail className="w-5 h-5" />
-                                    <span>Email</span>
-                                </button>
+                        {/* Right — search form */}
+                        <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
+                            {/* Type toggle */}
+                            <div className="flex rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden mb-5" role="tablist" aria-label="Search type">
+                                {(['student_id', 'email'] as const).map(t => (
+                                    <button
+                                        key={t}
+                                        role="tab"
+                                        aria-selected={searchType === t}
+                                        onClick={() => { setSearchType(t); setSearchQuery(''); setSearchResult(null); setSearchError(''); }}
+                                        className={`flex-1 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-500 focus-visible:ring-inset ${searchType === t ? 'bg-maroon-600 text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}
+                                    >
+                                        {t === 'student_id' ? 'Student ID' : 'Email Address'}
+                                    </button>
+                                ))}
                             </div>
 
-                            {/* Search Input */}
-                            <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                    {searchType === 'email' ? (
-                                        <Mail className="w-5 h-5 text-maroon-400" />
-                                    ) : (
-                                        <IdCard className="w-5 h-5 text-maroon-400" />
-                                    )}
-                                </div>
+                            <form onSubmit={handleSearch} className="flex gap-2">
+                                <label htmlFor="alumni-search-input" className="sr-only">
+                                    {searchType === 'student_id' ? 'Enter your student ID' : 'Enter your email address'}
+                                </label>
                                 <input
-                                    type={searchType === 'email' ? 'email' : 'text'}
+                                    id="alumni-search-input"
                                     value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    placeholder={searchType === 'email' ? 'Enter your email address' : 'Enter your student ID (e.g., 2020-00001)'}
-                                    className="w-full pl-12 pr-4 py-4 bg-white dark:bg-gray-700 border border-maroon-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-maroon-500 focus:border-transparent text-lg text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400"
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    placeholder={searchType === 'student_id' ? 'e.g. 2019-00123' : 'your@email.com'}
+                                    type={searchType === 'email' ? 'email' : 'text'}
+                                    autoComplete={searchType === 'email' ? 'email' : 'off'}
+                                    className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-maroon-500 dark:focus:ring-maroon-400 transition-shadow"
                                 />
-                            </div>
+                                <button
+                                    type="submit"
+                                    disabled={searching}
+                                    className="px-5 py-2.5 bg-maroon-600 hover:bg-maroon-700 disabled:opacity-60 text-white font-semibold rounded-xl text-sm transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-500 focus-visible:ring-offset-2"
+                                >
+                                    {searching ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Search className="w-4 h-4" />}
+                                    {searching ? 'Searching…' : 'Search'}
+                                </button>
+                            </form>
 
-                            {/* Search Button */}
-                            <button
-                                type="submit"
-                                disabled={searching}
-                                className="w-full py-4 bg-gradient-to-r from-maroon-600 to-maroon-700 hover:from-maroon-700 hover:to-maroon-800 text-white font-semibold rounded-xl transition-all transform hover:scale-[1.02] shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-                            >
-                                {searching ? (
-                                    <>
-                                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                        <span>Searching...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Search className="w-5 h-5" />
-                                        <span>Search Database</span>
-                                    </>
-                                )}
-                            </button>
-                        </form>
+                            {/* Error state */}
+                            {searchError && (
+                                <div className="mt-4 flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-sm text-red-700 dark:text-red-400" role="alert">
+                                    <X className="w-4 h-4 flex-shrink-0" /> {searchError}
+                                </div>
+                            )}
 
-                        {/* Search Error */}
-                        {searchError && (
-                            <div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl text-red-700 dark:text-red-400 flex items-center space-x-2">
-                                <X className="w-5 h-5" />
-                                <span>{searchError}</span>
-                            </div>
-                        )}
-
-                        {/* Search Result */}
-                        {searchResult && (
-                            <div className={`mt-6 p-6 rounded-xl border ${searchResult.found
-                                ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                                : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
-                                }`}>
-                                {searchResult.found && searchResult.data ? (
-                                    <div className="space-y-4">
-                                        <div className="flex items-center space-x-3">
-                                            <div className="w-12 h-12 bg-green-100 dark:bg-green-800/40 rounded-full flex items-center justify-center">
-                                                <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
-                                            </div>
-                                            <div>
-                                                <h3 className="font-semibold text-green-800 dark:text-green-300">Record Found!</h3>
-                                                <p className="text-green-600 dark:text-green-400 text-sm">{searchResult.message}</p>
-                                            </div>
-                                        </div>
-                                        <div className="bg-white/60 dark:bg-gray-700/60 rounded-lg p-4 space-y-2">
-                                            <p className="text-gray-700 dark:text-gray-300">
-                                                <span className="font-medium">Name:</span> {searchResult.data.name}
-                                            </p>
-                                            <p className="text-gray-700 dark:text-gray-300">
-                                                <span className="font-medium">Course:</span> {searchResult.data.course || 'Not specified'}
-                                            </p>
-                                            <p className="text-gray-700 dark:text-gray-300">
-                                                <span className="font-medium">Graduation Year:</span> {searchResult.data.graduation_year || 'Not specified'}
-                                            </p>
-                                            {searchResult.data.registered ? (
-                                                <div className="flex items-center space-x-2 text-green-600 mt-3">
-                                                    <CheckCircle className="w-4 h-4" />
-                                                    <span className="text-sm">Account registered - You can sign in!</span>
+                            {/* Result state */}
+                            {searchResult && (
+                                <div className={`mt-4 p-4 rounded-xl border ${searchResult.found ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'}`} role="status">
+                                    {searchResult.found && searchResult.data ? (
+                                        <div className="space-y-3">
+                                            <div className="flex items-center gap-3">
+                                                <CheckCircle className="w-6 h-6 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                                                <div>
+                                                    <p className="font-semibold text-emerald-800 dark:text-emerald-300 text-sm">Record Found!</p>
+                                                    <p className="text-xs text-emerald-600 dark:text-emerald-400">{searchResult.message}</p>
                                                 </div>
+                                            </div>
+                                            <div className="bg-white/60 dark:bg-gray-800/60 rounded-lg p-3 text-sm space-y-1.5">
+                                                <p className="text-gray-700 dark:text-gray-300"><span className="font-medium">Name:</span> {searchResult.data.name}</p>
+                                                <p className="text-gray-700 dark:text-gray-300"><span className="font-medium">Course:</span> {searchResult.data.course || '—'}</p>
+                                                <p className="text-gray-700 dark:text-gray-300"><span className="font-medium">Graduation Year:</span> {searchResult.data.graduation_year || '—'}</p>
+                                            </div>
+                                            {!searchResult.data.registered ? (
+                                                <Link href="/survey/register" className="group inline-flex items-center gap-2 px-5 py-2.5 bg-maroon-600 hover:bg-maroon-700 text-white font-semibold rounded-xl text-sm transition-colors w-full justify-center">
+                                                    Complete Your Registration <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                                                </Link>
                                             ) : (
-                                                <div className="mt-4">
-                                                    <Link
-                                                        href="/survey/register"
-                                                        className="inline-flex items-center space-x-2 px-6 py-3 bg-maroon-600 hover:bg-maroon-700 text-white rounded-lg transition-colors"
-                                                    >
-                                                        <span>Complete Registration</span>
-                                                        <ArrowRight className="w-4 h-4" />
-                                                    </Link>
-                                                </div>
+                                                <Link href="/login" className="group inline-flex items-center gap-2 px-5 py-2.5 bg-maroon-600 hover:bg-maroon-700 text-white font-semibold rounded-xl text-sm transition-colors w-full justify-center">
+                                                    Sign In to Your Account <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                                                </Link>
                                             )}
                                         </div>
-                                    </div>
-                                ) : (
-                                    <div className="flex items-center space-x-3">
-                                        <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center">
-                                            <Search className="w-6 h-6 text-amber-600" />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-semibold text-amber-800">No Record Found</h3>
-                                            <p className="text-amber-600 text-sm">{searchResult.message}</p>
-                                            <Link
-                                                href="/survey/register"
-                                                className="inline-flex items-center space-x-1 text-maroon-600 hover:text-maroon-800 text-sm mt-2"
-                                            >
-                                                <span>Register as a new alumni</span>
-                                                <ArrowRight className="w-4 h-4" />
+                                    ) : (
+                                        <div className="space-y-3">
+                                            <div className="flex items-start gap-3">
+                                                <Search className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                                                <div>
+                                                    <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm">No Record Found</p>
+                                                    <p className="text-xs text-amber-600 dark:text-amber-400">{searchResult.message}</p>
+                                                </div>
+                                            </div>
+                                            <Link href="/survey/register" className="group inline-flex items-center gap-2 px-5 py-2.5 bg-maroon-600 hover:bg-maroon-700 text-white font-semibold rounded-xl text-sm transition-colors w-full justify-center">
+                                                Register as New Alumni <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                                             </Link>
                                         </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </section>
 
-            {/* Announcements Section */}
-            <section id="announcements" data-animate className="py-20 px-4 sm:px-6 lg:px-8">
-                <div className="max-w-7xl mx-auto">
-                    <div className={`text-center mb-12 transition-all duration-700 ${visibleSections.has('announcements') ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-                        <div className="inline-flex items-center space-x-2 bg-maroon-100 dark:bg-gray-700 border border-maroon-200 dark:border-gray-600 rounded-full px-4 py-2 mb-4 md:mb-6 animate-wiggle">
-                            <Megaphone className="w-4 h-4 text-maroon-600 dark:text-maroon-400" />
-                            <span className="text-sm text-maroon-700 dark:text-gray-300">Latest Updates</span>
-                        </div>
-                        <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 text-maroon-900 dark:text-gray-100">
-                            Announcements &
-                            <span className="block bg-gradient-to-r from-maroon-600 to-maroon-800 bg-clip-text text-transparent">
-                                News
-                            </span>
-                        </h2>
-                        <p className="text-base md:text-xl text-maroon-600 dark:text-gray-400 max-w-2xl mx-auto">
-                            Stay updated with the latest news and announcements from your alma mater
-                        </p>
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* ── 5. FEATURES — Moved up (value props before content) ─ */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <section id="features" className="py-20 md:py-24 px-4 bg-gray-50 dark:bg-gray-900/50" aria-label="Platform features">
+                <div className="max-w-6xl mx-auto">
+                    <SectionHeader
+                        badge="Platform Benefits"
+                        badgeIcon={Zap}
+                        title="Everything You Need,"
+                        highlight="In One Place"
+                        sub="A modern platform built to keep you informed, connected, and ahead in your career."
+                    />
+
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {features.map(({ icon: Icon, title, desc }, i) => (
+                            <div key={i} className="group p-6 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl hover:border-maroon-200 dark:hover:border-maroon-700 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
+                                <div className="w-11 h-11 rounded-xl bg-maroon-50 dark:bg-maroon-900/30 flex items-center justify-center mb-4 group-hover:bg-maroon-100 dark:group-hover:bg-maroon-900/50 transition-colors">
+                                    <Icon className="w-5 h-5 text-maroon-600 dark:text-maroon-400" />
+                                </div>
+                                <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">{title}</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{desc}</p>
+                            </div>
+                        ))}
                     </div>
 
-                    {loadingAnnouncements ? (
-                        <div className="flex justify-center items-center py-12">
-                            <div className="w-8 h-8 border-4 border-maroon-600 border-t-transparent rounded-full animate-spin"></div>
-                        </div>
-                    ) : announcements.length > 0 ? (
-                        <div className="relative px-2 md:px-0">
-                            {/* Left Arrow - Hidden on mobile */}
-                            {announcementScrollIndex > 0 && (
-                                <button
-                                    onClick={() => setAnnouncementScrollIndex(prev => Math.max(0, prev - 1))}
-                                    className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-10 w-12 h-12 bg-white dark:bg-gray-800 shadow-lg rounded-full items-center justify-center hover:bg-maroon-50 dark:hover:bg-gray-700 transition-colors border border-maroon-200 dark:border-gray-600"
-                                >
-                                    <ChevronLeft className="w-6 h-6 text-maroon-600 dark:text-gray-300" />
-                                </button>
-                            )}
+                    {/* Inline CTA */}
+                    <div className="text-center mt-12">
+                        <Link
+                            href="/survey/register"
+                            className="group inline-flex items-center gap-2 px-6 py-3 bg-maroon-600 hover:bg-maroon-700 text-white font-semibold rounded-xl transition-colors text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-500 focus-visible:ring-offset-2"
+                        >
+                            Create Your Free Account <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                        </Link>
+                    </div>
+                </div>
+            </section>
 
-                            {/* Right Arrow - Hidden on mobile */}
-                            {announcementScrollIndex < announcements.length - 3 && (
-                                <button
-                                    onClick={() => setAnnouncementScrollIndex(prev => Math.min(announcements.length - 3, prev + 1))}
-                                    className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-10 w-12 h-12 bg-white dark:bg-gray-800 shadow-lg rounded-full items-center justify-center hover:bg-maroon-50 dark:hover:bg-gray-700 transition-colors border border-maroon-200 dark:border-gray-600"
-                                >
-                                    <ChevronRight className="w-6 h-6 text-maroon-600 dark:text-gray-300" />
-                                </button>
-                            )}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* ── 6. ANNOUNCEMENTS ──────────────────────────────────── */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <section id="announcements" className="py-20 md:py-24 px-4" aria-label="Announcements">
+                <div className="max-w-6xl mx-auto">
+                    <SectionHeader
+                        badge="Latest Updates"
+                        badgeIcon={Megaphone}
+                        title="Announcements &"
+                        highlight="News"
+                        sub="Don't miss important updates, events, and deadlines from your alma mater."
+                    />
 
-                            {/* Mobile: Scrollable horizontal, Desktop: Transform-based carousel */}
-                            <div className="overflow-x-auto md:overflow-hidden scrollbar-hide">
-                                <div
-                                    className="flex gap-4 md:gap-6 transition-transform duration-500 ease-in-out pb-4 md:pb-0"
-                                    style={{ transform: `translateX(-${announcementScrollIndex * (100 / 3 + 2)}%)` }}
-                                >
-                                    {announcements.map((announcement, index) => (
-                                        <div
-                                            key={announcement.id}
-                                            onClick={() => {
-                                                setSelectedAnnouncement(announcement);
-                                                setCurrentAnnouncementIndex(index);
-                                            }}
-                                            className={`flex-shrink-0 w-[85vw] sm:w-[70vw] md:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)] group bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-maroon-100 dark:border-gray-700 overflow-hidden hover:shadow-xl transition-all duration-500 cursor-pointer hover:scale-[1.02] hover:-translate-y-2 ${visibleSections.has('announcements')
-                                                ? 'animate-pop-out'
-                                                : 'opacity-0 scale-85 translate-y-8'
-                                                }`}
-                                            style={{ animationDelay: `${index * 150}ms` }}
-                                        >
-                                            {announcement.featured_image ? (
-                                                <div className="h-40 md:h-48 overflow-hidden">
-                                                    <img
-                                                        src={announcement.featured_image}
-                                                        alt={announcement.title}
-                                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                                    />
-                                                </div>
-                                            ) : (
-                                                <div className="h-40 md:h-48 bg-gradient-to-br from-maroon-100 to-maroon-200 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center">
-                                                    <Megaphone className="w-12 md:w-16 h-12 md:h-16 text-maroon-400 dark:text-maroon-500" />
-                                                </div>
-                                            )}
-                                            <div className="p-4 md:p-6">
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <span className={`text-xs px-2 py-1 rounded-full border ${getPriorityColor(announcement.priority)}`}>
-                                                        {announcement.priority.charAt(0).toUpperCase() + announcement.priority.slice(1)}
-                                                    </span>
-                                                    <span className="text-xs text-maroon-500 dark:text-maroon-400 flex items-center">
-                                                        <Calendar className="w-3 h-3 mr-1" />
-                                                        {announcement.published_at || announcement.created_at}
-                                                    </span>
-                                                </div>
-                                                <h3 className="text-xl font-bold text-maroon-900 dark:text-gray-100 mb-2 group-hover:text-maroon-700 dark:group-hover:text-maroon-400 transition-colors line-clamp-2">
-                                                    {announcement.title}
-                                                </h3>
-                                                <p className="text-maroon-600 dark:text-gray-400 text-sm line-clamp-3">
-                                                    {announcement.content}
-                                                </p>
-                                                <div className="mt-4 flex items-center text-maroon-600 text-sm font-medium group-hover:text-maroon-800">
-                                                    <span>Read more</span>
-                                                    <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                                                </div>
+                    {loadingA ? <LoadingCards /> : announcements.length > 0 ? (
+                        <>
+                            <Carousel
+                                items={announcements}
+                                label="Announcements"
+                                onSelect={(item, i) => { setSelAnnouncement(item); setSelAnnouncementIdx(i); }}
+                                renderCard={(a) => (
+                                    <article className="group h-full flex flex-col bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden hover:border-maroon-200 dark:hover:border-maroon-700 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
+                                        {a.featured_image ? (
+                                            <div className="h-44 overflow-hidden">
+                                                <img src={a.featured_image} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                             </div>
+                                        ) : (
+                                            <div className="h-44 bg-gradient-to-br from-maroon-50 to-maroon-100 dark:from-maroon-900/20 dark:to-maroon-800/20 flex items-center justify-center">
+                                                <Megaphone className="w-12 h-12 text-maroon-300 dark:text-maroon-600" />
+                                            </div>
+                                        )}
+                                        <div className="flex-1 p-5 flex flex-col">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${priorityColor(a.priority)}`}>
+                                                    {a.priority.charAt(0).toUpperCase() + a.priority.slice(1)}
+                                                </span>
+                                                <time className="text-[11px] text-gray-400 flex items-center gap-1">
+                                                    <Calendar className="w-3 h-3" />{a.published_at || a.created_at}
+                                                </time>
+                                            </div>
+                                            <h3 className="font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 mb-2 group-hover:text-maroon-600 dark:group-hover:text-maroon-400 transition-colors">{a.title}</h3>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-3 flex-1">{a.content}</p>
+                                            <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-maroon-600 dark:text-maroon-400 group-hover:gap-2 transition-all">
+                                                Read more <ChevronRight className="w-3.5 h-3.5" />
+                                            </span>
                                         </div>
-                                    ))}
-                                </div>
+                                    </article>
+                                )}
+                            />
+                            {/* Inline conversion nudge */}
+                            <div className="mt-8 text-center">
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Get notified about new announcements</p>
+                                <Link href="/survey/register" className="group inline-flex items-center gap-1.5 text-sm font-semibold text-maroon-600 dark:text-maroon-400 hover:text-maroon-700 dark:hover:text-maroon-300 transition-colors">
+                                    Register for updates <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                                </Link>
                             </div>
-
-                            {/* Pagination dots */}
-                            {announcements.length > 3 && (
-                                <div className="flex justify-center gap-2 mt-6">
-                                    {Array.from({ length: Math.ceil(announcements.length - 2) }).map((_, idx) => (
-                                        <button
-                                            key={idx}
-                                            onClick={() => setAnnouncementScrollIndex(idx)}
-                                            className={`w-2 h-2 rounded-full transition-all ${idx === announcementScrollIndex
-                                                ? 'bg-maroon-600 dark:bg-maroon-400 w-6'
-                                                : 'bg-maroon-200 dark:bg-gray-600 hover:bg-maroon-300 dark:hover:bg-gray-500'
-                                                }`}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                        </>
                     ) : (
-                        <div className="text-center py-12 bg-white/40 dark:bg-gray-800/40 rounded-2xl border border-maroon-100 dark:border-gray-700">
-                            <Megaphone className="w-16 h-16 text-maroon-300 dark:text-maroon-400 mx-auto mb-4" />
-                            <h3 className="text-xl font-semibold text-maroon-700 dark:text-gray-300">No Announcements Yet</h3>
-                            <p className="text-maroon-500 dark:text-gray-400">Check back later for updates and news</p>
-                        </div>
+                        <EmptyState icon={Megaphone} message="No announcements yet. Check back later for the latest updates." />
                     )}
                 </div>
             </section>
 
-            {/* Job Postings Section */}
-            <section id="jobs" data-animate className="py-20 px-4 sm:px-6 lg:px-8 bg-white/40 dark:bg-gray-800/40">
-                <div className="max-w-7xl mx-auto">
-                    <div className={`text-center mb-12 transition-all duration-700 ${visibleSections.has('jobs') ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-                        <div className="inline-flex items-center space-x-2 bg-maroon-100 dark:bg-gray-700 border border-maroon-200 dark:border-gray-600 rounded-full px-4 py-2 mb-6 animate-pulse-badge">
-                            <Briefcase className="w-4 h-4 text-maroon-600 dark:text-maroon-400" />
-                            <span className="text-sm text-maroon-700 dark:text-gray-300">Career Opportunities</span>
-                        </div>
-                        <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 text-maroon-900 dark:text-gray-100">
-                            Featured
-                            <span className="block bg-gradient-to-r from-maroon-600 to-maroon-800 bg-clip-text text-transparent">
-                                Job Postings
-                            </span>
-                        </h2>
-                        <p className="text-base md:text-xl text-maroon-600 dark:text-gray-400 max-w-2xl mx-auto">
-                            Explore career opportunities from our partner companies and employers
-                        </p>
-                    </div>
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* ── 7. JOBS ──────────────────────────────────────────── */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <section id="jobs" className="py-20 md:py-24 px-4 bg-gray-50 dark:bg-gray-900/50" aria-label="Job postings">
+                <div className="max-w-6xl mx-auto">
+                    <SectionHeader
+                        badge="Career Opportunities"
+                        badgeIcon={Briefcase}
+                        title="Latest"
+                        highlight="Job Postings"
+                        sub="Exclusive career opportunities curated for alumni from partner companies and employers."
+                    />
 
-                    {loadingJobs ? (
-                        <div className="flex justify-center items-center py-12">
-                            <div className="w-8 h-8 border-4 border-maroon-600 border-t-transparent rounded-full animate-spin"></div>
-                        </div>
-                    ) : jobs.length > 0 ? (
-                        <div className="relative px-2 md:px-0">
-                            {/* Left Arrow - Hidden on mobile */}
-                            {jobScrollIndex > 0 && (
-                                <button
-                                    onClick={() => setJobScrollIndex(prev => Math.max(0, prev - 1))}
-                                    className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-10 w-12 h-12 bg-white dark:bg-gray-800 shadow-lg rounded-full items-center justify-center hover:bg-maroon-50 dark:hover:bg-gray-700 transition-colors border border-maroon-200 dark:border-gray-600"
-                                >
-                                    <ChevronLeft className="w-6 h-6 text-maroon-600 dark:text-gray-300" />
-                                </button>
-                            )}
-
-                            {/* Right Arrow - Hidden on mobile */}
-                            {jobScrollIndex < jobs.length - 3 && (
-                                <button
-                                    onClick={() => setJobScrollIndex(prev => Math.min(jobs.length - 3, prev + 1))}
-                                    className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-10 w-12 h-12 bg-white dark:bg-gray-800 shadow-lg rounded-full items-center justify-center hover:bg-maroon-50 dark:hover:bg-gray-700 transition-colors border border-maroon-200 dark:border-gray-600"
-                                >
-                                    <ChevronRight className="w-6 h-6 text-maroon-600 dark:text-gray-300" />
-                                </button>
-                            )}
-
-                            {/* Mobile: Scrollable horizontal, Desktop: Transform-based carousel */}
-                            <div className="overflow-x-auto md:overflow-hidden scrollbar-hide">
-                                <div
-                                    className="flex gap-4 md:gap-6 transition-transform duration-500 ease-in-out pb-4 md:pb-0"
-                                    style={{ transform: `translateX(-${jobScrollIndex * (100 / 3 + 2)}%)` }}
-                                >
-                                    {jobs.map((job, index) => (
-                                        <div
-                                            key={job.id}
-                                            onClick={() => {
-                                                setSelectedJob(job);
-                                                setCurrentJobIndex(index);
-                                            }}
-                                            className={`flex-shrink-0 w-[85vw] sm:w-[70vw] md:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)] group bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-maroon-100 dark:border-gray-700 overflow-hidden hover:shadow-xl transition-all duration-500 cursor-pointer hover:scale-[1.02] hover:-translate-y-2 hover:border-maroon-300 dark:hover:border-maroon-600 ${visibleSections.has('jobs')
-                                                ? 'animate-pop-out'
-                                                : 'opacity-0 scale-85 translate-y-8'
-                                                }`}
-                                            style={{ animationDelay: `${index * 150}ms` }}
-                                        >
-                                            {job.poster_image ? (
-                                                <div className="h-40 md:h-48 overflow-hidden relative">
-                                                    <img
-                                                        src={job.poster_image}
-                                                        alt={job.title}
-                                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                                    />
-                                                    {job.is_featured && (
-                                                        <div className="absolute top-3 right-3 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full flex items-center">
-                                                            <Star className="w-3 h-3 mr-1 fill-current" />
-                                                            Featured
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <div className="h-40 md:h-48 bg-gradient-to-br from-maroon-100 to-maroon-200 dark:from-gray-700 dark:to-gray-600 flex items-center justify-center relative">
-                                                    {job.company_logo ? (
-                                                        <img
-                                                            src={job.company_logo}
-                                                            alt={job.company_name}
-                                                            className="max-w-[100px] md:max-w-[120px] max-h-[60px] md:max-h-[80px] object-contain"
-                                                        />
-                                                    ) : (
-                                                        <Building2 className="w-16 h-16 text-maroon-400" />
-                                                    )}
-                                                    {job.is_featured && (
-                                                        <div className="absolute top-3 right-3 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full flex items-center">
-                                                            <Star className="w-3 h-3 mr-1 fill-current" />
-                                                            Featured
-                                                        </div>
-                                                    )}
+                    {loadingJ ? <LoadingCards /> : jobs.length > 0 ? (
+                        <>
+                            <Carousel
+                                items={jobs}
+                                label="Jobs"
+                                onSelect={(item, i) => { setSelJob(item); setSelJobIdx(i); }}
+                                renderCard={(j) => (
+                                    <article className="group h-full flex flex-col bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden hover:border-maroon-200 dark:hover:border-maroon-700 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300">
+                                        {j.poster_image ? (
+                                            <div className="h-44 overflow-hidden relative">
+                                                <img src={j.poster_image} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                                {j.is_featured && <span className="absolute top-2.5 right-2.5 bg-amber-400 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"><Star className="w-2.5 h-2.5 fill-current" /> Featured</span>}
+                                            </div>
+                                        ) : (
+                                            <div className="h-44 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-700 flex items-center justify-center relative">
+                                                {j.company_logo
+                                                    ? <img src={j.company_logo} alt={j.company_name} loading="lazy" className="max-h-16 object-contain" />
+                                                    : <Building2 className="w-10 h-10 text-gray-300 dark:text-gray-600" />}
+                                                {j.is_featured && <span className="absolute top-2.5 right-2.5 bg-amber-400 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"><Star className="w-2.5 h-2.5 fill-current" /> Featured</span>}
+                                            </div>
+                                        )}
+                                        <div className="flex-1 p-5 flex flex-col">
+                                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                                <span className="text-[11px] bg-maroon-50 dark:bg-maroon-900/30 text-maroon-700 dark:text-maroon-300 px-2 py-0.5 rounded-full font-semibold">{j.job_type_label}</span>
+                                                {j.is_remote && <span className="text-[11px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-semibold">Remote</span>}
+                                            </div>
+                                            <h3 className="font-semibold text-gray-900 dark:text-gray-100 line-clamp-1 group-hover:text-maroon-600 dark:group-hover:text-maroon-400 transition-colors">{j.title}</h3>
+                                            <p className="text-sm text-maroon-600 dark:text-maroon-400 font-medium mt-0.5">{j.company_name}</p>
+                                            <div className="flex items-center gap-1 text-xs text-gray-400 mt-1.5">
+                                                <MapPin className="w-3 h-3 flex-shrink-0" /><span className="line-clamp-1">{j.location}</span>
+                                            </div>
+                                            {j.salary_range && <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mt-1.5">{j.salary_range}</p>}
+                                            {j.application_deadline && (
+                                                <div className="flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 mt-2">
+                                                    <Clock className="w-3 h-3" /> Deadline: {j.application_deadline}
                                                 </div>
                                             )}
-                                            <div className="p-6">
+                                            <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-maroon-600 dark:text-maroon-400 group-hover:gap-2 transition-all">
+                                                View details <ChevronRight className="w-3.5 h-3.5" />
+                                            </span>
+                                        </div>
+                                    </article>
+                                )}
+                            />
+                            {/* Inline conversion nudge */}
+                            <div className="mt-8 text-center">
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Want access to all job listings?</p>
+                                <Link href="/survey/register" className="group inline-flex items-center gap-1.5 text-sm font-semibold text-maroon-600 dark:text-maroon-400 hover:text-maroon-700 dark:hover:text-maroon-300 transition-colors">
+                                    Sign up for free access <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                                </Link>
+                            </div>
+                        </>
+                    ) : (
+                        <EmptyState icon={Briefcase} message="No job postings yet. Check back later for career opportunities." />
+                    )}
+                </div>
+            </section>
+
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* ── 8. MORE CONTENT ───────────────────────────────────── */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {(!loadingM && moreContent.length > 0) && (
+                <section id="more" className="py-20 md:py-24 px-4" aria-label="More content">
+                    <div className="max-w-6xl mx-auto">
+                        <SectionHeader
+                            badge="Explore More"
+                            badgeIcon={Layers}
+                            title="Events, Blogs &"
+                            highlight="Resources"
+                            sub="Discover upcoming events, read insightful stories, explore scholarships and helpful resources."
+                        />
+
+                        {/* Tabs */}
+                        <div className="flex flex-wrap justify-center gap-2 mb-10" role="tablist" aria-label="Content type filter">
+                            {availableTabs.map(t => {
+                                const Icon = t.icon;
+                                return (
+                                    <button
+                                        key={t.key}
+                                        role="tab"
+                                        aria-selected={contentTab === t.key}
+                                        onClick={() => setContentTab(t.key)}
+                                        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-500 ${contentTab === t.key ? 'bg-maroon-600 text-white border-maroon-600 shadow-sm' : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-maroon-300 dark:hover:border-maroon-600'}`}
+                                    >
+                                        <Icon className="w-3.5 h-3.5" />{t.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {filteredContent.length > 0 ? (
+                            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5" role="tabpanel">
+                                {filteredContent.map((item, i) => {
+                                    const cfg = contentTypeConfig[item.content_type] ?? contentTypeConfig.resource;
+                                    const TypeIcon = cfg.icon;
+                                    return (
+                                        <article
+                                            key={item.id}
+                                            onClick={() => { setSelContent(item); setSelContentIdx(i); }}
+                                            className="group flex flex-col bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden hover:border-maroon-200 dark:hover:border-maroon-700 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 cursor-pointer"
+                                        >
+                                            {item.featured_image ? (
+                                                <div className="h-44 overflow-hidden">
+                                                    <img src={item.featured_image} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                                </div>
+                                            ) : (
+                                                <div className={`h-44 ${cfg.bg} flex items-center justify-center`}>
+                                                    <TypeIcon className={`w-12 h-12 ${cfg.color} opacity-40`} />
+                                                </div>
+                                            )}
+                                            <div className="flex-1 p-5 flex flex-col">
                                                 <div className="flex items-center justify-between mb-3">
-                                                    <span className="text-xs bg-maroon-100 dark:bg-gray-700 text-maroon-700 dark:text-maroon-400 px-2 py-1 rounded-full">
-                                                        {job.job_type_label}
+                                                    <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${cfg.badge}`}>
+                                                        <TypeIcon className="w-3 h-3" />{item.content_type_label}
                                                     </span>
-                                                    {job.is_remote && (
-                                                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full flex items-center">
-                                                            <Globe className="w-3 h-3 mr-1" />
-                                                            Remote
-                                                        </span>
+                                                    {item.event_date ? (
+                                                        <time className="text-[11px] text-purple-600 dark:text-purple-400 flex items-center gap-1"><Calendar className="w-3 h-3" />{item.event_date}</time>
+                                                    ) : (
+                                                        <time className="text-[11px] text-gray-400 flex items-center gap-1"><Calendar className="w-3 h-3" />{item.published_at || item.created_at}</time>
                                                     )}
                                                 </div>
-                                                <h3 className="text-xl font-bold text-maroon-900 dark:text-gray-100 mb-1 group-hover:text-maroon-700 dark:group-hover:text-maroon-400 transition-colors line-clamp-1">
-                                                    {job.title}
-                                                </h3>
-                                                <p className="text-maroon-600 dark:text-gray-400 font-medium mb-2">
-                                                    {job.company_name}
-                                                </p>
-                                                <div className="flex items-center text-maroon-500 dark:text-maroon-400 text-sm mb-3">
-                                                    <MapPin className="w-4 h-4 mr-1" />
-                                                    <span className="line-clamp-1">{job.location}</span>
-                                                </div>
-                                                {job.salary_range && (
-                                                    <p className="text-maroon-700 dark:text-gray-300 font-semibold text-sm mb-3">
-                                                        {job.salary_range}
-                                                    </p>
-                                                )}
-                                                <div
-                                                    className="text-maroon-600 dark:text-gray-400 text-sm line-clamp-2 mb-4 prose prose-sm max-w-none"
-                                                    dangerouslySetInnerHTML={{ __html: job.content }}
-                                                />
-                                                {job.application_deadline && (
-                                                    <div className="flex items-center text-amber-600 text-xs">
-                                                        <Clock className="w-3 h-3 mr-1" />
-                                                        <span>Deadline: {job.application_deadline}</span>
+                                                <h3 className="font-semibold text-gray-900 dark:text-gray-100 line-clamp-2 mb-2 group-hover:text-maroon-600 dark:group-hover:text-maroon-400 transition-colors">{item.title}</h3>
+                                                <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-3 flex-1">{item.excerpt}</p>
+                                                {item.location && (
+                                                    <div className="mt-2 flex items-center gap-1 text-[11px] text-gray-400">
+                                                        <MapPin className="w-3 h-3 flex-shrink-0" />{item.location}
                                                     </div>
                                                 )}
-                                                <div className="mt-4 flex items-center text-maroon-600 text-sm font-medium group-hover:text-maroon-800">
-                                                    <span>View Details</span>
-                                                    <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                                                </div>
+                                                <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-maroon-600 dark:text-maroon-400 group-hover:gap-2 transition-all">
+                                                    Read more <ChevronRight className="w-3.5 h-3.5" />
+                                                </span>
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                        </article>
+                                    );
+                                })}
                             </div>
-
-                            {/* Pagination dots */}
-                            {jobs.length > 3 && (
-                                <div className="flex justify-center gap-2 mt-6">
-                                    {Array.from({ length: Math.ceil(jobs.length - 2) }).map((_, idx) => (
-                                        <button
-                                            key={idx}
-                                            onClick={() => setJobScrollIndex(idx)}
-                                            className={`w-2 h-2 rounded-full transition-all ${idx === jobScrollIndex
-                                                ? 'bg-maroon-600 dark:bg-maroon-400 w-6'
-                                                : 'bg-maroon-200 dark:bg-gray-600 hover:bg-maroon-300 dark:hover:bg-gray-500'
-                                                }`}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="text-center py-12 bg-white/40 dark:bg-gray-800/40 rounded-2xl border border-maroon-100 dark:border-gray-700">
-                            <Briefcase className="w-16 h-16 text-maroon-300 dark:text-maroon-400 mx-auto mb-4" />
-                            <h3 className="text-xl font-semibold text-maroon-700 dark:text-gray-300">No Job Postings Yet</h3>
-                            <p className="text-maroon-500 dark:text-gray-400">Check back later for career opportunities</p>
-                        </div>
-                    )}
-
-                    {jobs.length > 0 && (
-                        <div className="text-center mt-10">
-                            <Link
-                                href="/login"
-                                className="inline-flex items-center space-x-2 px-8 py-4 bg-white/60 dark:bg-gray-800/60 hover:bg-white dark:hover:bg-gray-800 backdrop-blur-sm border border-maroon-200 dark:border-gray-600 rounded-xl font-semibold text-maroon-900 dark:text-gray-100 transition-all"
-                            >
-                                <span>View All Jobs</span>
-                                <ExternalLink className="w-5 h-5" />
-                            </Link>
-                        </div>
-                    )}
-                </div>
-            </section>
-
-            {/* Community Impact Section */}
-            <section id="impact" data-animate className="py-12 md:py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-maroon-800 via-maroon-900 to-maroon-950 relative overflow-hidden">
-                {/* Decorative elements */}
-                <div className="absolute inset-0 opacity-10">
-                    <div className="absolute top-10 left-10 w-64 h-64 bg-white rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-10 right-10 w-96 h-96 bg-maroon-400 rounded-full blur-3xl"></div>
-                </div>
-
-                <div className="relative z-10 max-w-7xl mx-auto">
-                    <div className={`text-center mb-10 md:mb-14 transition-all duration-700 ${visibleSections.has('impact') ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-                        <span className="inline-flex items-center space-x-2 bg-white/10 border border-white/20 rounded-full px-4 py-1.5 mb-4">
-                            <BarChart3 className="w-4 h-4 text-maroon-300" />
-                            <span className="text-sm text-maroon-200 font-medium">Community Impact</span>
-                        </span>
-                        <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-3 text-white">
-                            Our Growing
-                            <span className="block bg-gradient-to-r from-maroon-300 to-beige-300 bg-clip-text text-transparent">
-                                Alumni Network
-                            </span>
-                        </h2>
-                        <p className="text-base md:text-lg text-maroon-200 max-w-2xl mx-auto">
-                            Real numbers reflecting the strength of our alumni community
-                        </p>
+                        ) : (
+                            <EmptyState icon={Layers} message="No content in this category yet." />
+                        )}
                     </div>
+                </section>
+            )}
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-                        {[
-                            { label: 'Registered Alumni', value: animatedStats.totalAlumni, icon: Users, suffix: '+', description: 'Active in our network' },
-                            { label: 'Employment Rate', value: animatedStats.employmentRate, icon: TrendingUp, suffix: '%', description: 'Gainfully employed' },
-                            { label: 'Batch Years', value: animatedStats.batchYears, icon: GraduationCap, suffix: '', description: 'Generations of graduates' },
-                            { label: 'Departments', value: animatedStats.departments, icon: Building2, suffix: '', description: 'Academic departments' },
-                            { label: 'Programs Offered', value: animatedStats.courses, icon: BookOpen, suffix: '+', description: 'Degree programs' },
-                            { label: 'Industries', value: animatedStats.industries, icon: Layers, suffix: '+', description: 'Sectors represented' },
-                            { label: 'Active Job Posts', value: animatedStats.activeJobs, icon: Briefcase, suffix: '', description: 'Career opportunities' },
-                            { label: 'Survey Responses', value: animatedStats.surveysCompleted, icon: BarChart3, suffix: '', description: 'Alumni feedback collected' },
-                        ].map((stat, index) => (
-                            <div
-                                key={index}
-                                className={`group relative text-center p-5 md:p-6 bg-white/5 backdrop-blur-sm rounded-2xl border border-white/10 hover:border-white/25 hover:bg-white/10 transition-all duration-500 hover:scale-105 ${visibleSections.has('impact')
-                                    ? 'animate-pop-out'
-                                    : 'opacity-0'
-                                    }`}
-                                style={{ animationDelay: `${index * 80}ms` }}
-                            >
-                                <div className="w-10 h-10 bg-gradient-to-br from-maroon-400/30 to-maroon-600/30 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                                    <stat.icon className="w-5 h-5 text-maroon-300" />
-                                </div>
-                                <div className="text-2xl md:text-3xl lg:text-4xl font-bold text-white tabular-nums mb-1">
-                                    {stat.value.toLocaleString()}{stat.suffix && <span className="text-maroon-300 text-lg md:text-xl">{stat.suffix}</span>}
-                                </div>
-                                <div className="text-sm font-semibold text-maroon-200 mb-0.5">{stat.label}</div>
-                                <div className="text-xs text-maroon-400 hidden md:block">{stat.description}</div>
-                            </div>
-                        ))}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* ── 9. CTA — Redesigned with social proof ─────────────── */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <section className="relative py-20 md:py-24 px-4 overflow-hidden bg-gradient-to-b from-maroon-950 via-maroon-900 to-maroon-800" aria-label="Call to action">
+                <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '24px 24px' }} aria-hidden="true" />
+                <div className="relative max-w-2xl mx-auto text-center">
+                    {/* Social proof counter */}
+                    <div className="inline-flex items-center gap-2 bg-white/[0.08] border border-white/[0.12] rounded-full px-4 py-1.5 text-sm text-maroon-200 mb-6">
+                        <Users className="w-3.5 h-3.5" /> {stats.totalAlumni > 0 ? `${stats.totalAlumni.toLocaleString()}+ alumni have joined` : 'Alumni are joining every day'}
                     </div>
-                </div>
-            </section>
-
-            {/* Features Section */}
-            <section id="features" data-animate className="py-12 md:py-20 px-4 sm:px-6 lg:px-8 relative">
-                <div className="max-w-7xl mx-auto">
-                    <div className={`text-center mb-8 md:mb-16 transition-all duration-700 ${visibleSections.has('features') ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
-                        <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 text-maroon-900 dark:text-gray-100">
-                            Powerful Features for
-                            <span className="block bg-gradient-to-r from-maroon-600 to-maroon-800 bg-clip-text text-transparent">
-                                Alumni Success
-                            </span>
-                        </h2>
-                        <p className="text-base md:text-xl text-maroon-600 dark:text-gray-400 max-w-2xl mx-auto">
-                            Everything you need to build and maintain a thriving professional network
-                        </p>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-8">
-                        {features.map((feature, index) => (
-                            <div
-                                key={index}
-                                className={`group p-5 md:p-8 bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-maroon-100 dark:border-gray-700 hover:border-maroon-300 dark:hover:border-maroon-600 hover:bg-white/80 dark:hover:bg-gray-800/80 transition-all duration-500 hover:scale-105 hover:-translate-y-2 shadow-lg hover:shadow-2xl ${visibleSections.has('features')
-                                    ? 'animate-pop-out'
-                                    : 'opacity-0 scale-85 translate-y-12'
-                                    }`}
-                                style={{ animationDelay: `${index * 100}ms` }}
-                            >
-                                <div className={`w-12 h-12 md:w-14 md:h-14 bg-gradient-to-br ${feature.color} rounded-xl flex items-center justify-center mb-4 md:mb-6 group-hover:rotate-12 group-hover:scale-110 transition-all duration-300 shadow-lg`}>
-                                    <feature.icon className="w-6 h-6 md:w-7 md:h-7 text-white" />
-                                </div>
-                                <h3 className="text-xl md:text-2xl font-bold mb-2 md:mb-3 text-maroon-900 dark:text-gray-100 group-hover:text-maroon-700 dark:group-hover:text-maroon-400 transition-colors">{feature.title}</h3>
-                                <p className="text-sm md:text-base text-maroon-600 dark:text-gray-400 leading-relaxed">{feature.description}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </section>
-
-            {/* Benefits Section */}
-            <section id="benefits" data-animate className="py-12 md:py-20 px-4 sm:px-6 lg:px-8 bg-white/40 dark:bg-gray-800/40">
-                <div className="max-w-7xl mx-auto">
-                    <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
-                        <div className={`transition-all duration-700 ${visibleSections.has('benefits') ? 'animate-slide-left' : 'opacity-0 -translate-x-10'}`}>
-                            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 md:mb-6 text-maroon-900 dark:text-gray-100">
-                                Why Choose
-                                <span className="block bg-gradient-to-r from-maroon-600 to-maroon-800 bg-clip-text text-transparent">
-                                    Alumni Tracer?
-                                </span>
-                            </h2>
-                            <p className="text-base md:text-xl text-maroon-600 dark:text-gray-400 mb-6 md:mb-8">
-                                Our platform is designed with cutting-edge technology to provide the best experience for alumni and institutions.
-                            </p>
-                            <div className="space-y-3 md:space-y-4">
-                                {benefits.map((benefit, index) => (
-                                    <div
-                                        key={index}
-                                        className={`flex items-start space-x-3 group transition-all duration-500 ${visibleSections.has('benefits')
-                                            ? 'animate-slide-up'
-                                            : 'opacity-0 translate-y-4'
-                                            }`}
-                                        style={{ animationDelay: `${index * 100 + 200}ms` }}
-                                    >
-                                        <div className="w-6 h-6 bg-gradient-to-br from-maroon-500 to-maroon-600 rounded-full flex items-center justify-center flex-shrink-0 group-hover:scale-125 group-hover:rotate-12 transition-all duration-300 shadow-md">
-                                            <CheckCircle className="w-4 h-4 text-white" />
-                                        </div>
-                                        <span className="text-maroon-700 dark:text-gray-300 group-hover:text-maroon-900 dark:group-hover:text-gray-100 transition-colors font-medium">{benefit}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className={`relative transition-all duration-700 delay-300 ${visibleSections.has('benefits') ? 'animate-slide-right' : 'opacity-0 translate-x-10'}`}>
-                            <div className="bg-gradient-to-br from-maroon-100/40 to-beige-100/40 dark:from-gray-800/40 dark:to-gray-700/40 rounded-3xl p-8 backdrop-blur-sm border border-maroon-200 dark:border-gray-600 hover:shadow-2xl transition-shadow duration-500">
-                                <div className="space-y-6">
-                                    <div className="flex items-center space-x-4 p-4 bg-white/60 dark:bg-gray-800/60 rounded-xl border border-maroon-100 dark:border-gray-700">
-                                        <Shield className="w-10 h-10 text-maroon-600 dark:text-maroon-400" />
-                                        <div>
-                                            <div className="font-semibold text-maroon-900 dark:text-gray-100">Secure & Private</div>
-                                            <div className="text-sm text-maroon-600 dark:text-gray-400">Your data is protected with enterprise-grade security</div>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center space-x-4 p-4 bg-white/60 dark:bg-gray-800/60 rounded-xl border border-maroon-100 dark:border-gray-700">
-                                        <Star className="w-10 h-10 text-maroon-600 dark:text-maroon-400" />
-                                        <div>
-                                            <div className="font-semibold text-maroon-900 dark:text-gray-100">Trusted by Thousands</div>
-                                            <div className="text-sm text-maroon-600 dark:text-gray-400">Join a community of successful professionals</div>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center space-x-4 p-4 bg-white/60 dark:bg-gray-800/60 rounded-xl border border-maroon-100 dark:border-gray-700">
-                                        <Globe className="w-10 h-10 text-maroon-600 dark:text-maroon-400" />
-                                        <div>
-                                            <div className="font-semibold text-maroon-900 dark:text-gray-100">Global Reach</div>
-                                            <div className="text-sm text-maroon-600 dark:text-gray-400">Connect with alumni worldwide</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* CTA Section */}
-            <section id="cta" data-animate className="py-20 px-4 sm:px-6 lg:px-8">
-                <div className="max-w-4xl mx-auto text-center">
-                    <div className={`bg-gradient-to-br from-maroon-100/60 to-beige-100/60 dark:from-gray-800/60 dark:to-gray-700/60 rounded-3xl p-12 backdrop-blur-sm border border-maroon-200 dark:border-gray-600 transition-all duration-700 hover:shadow-2xl ${visibleSections.has('cta')
-                        ? 'opacity-100 scale-100'
-                        : 'opacity-0 scale-95'
-                        }`}>
-                        <h2 className="text-4xl lg:text-5xl font-bold mb-6 text-maroon-900 dark:text-gray-100">
-                            Ready to Join Our
-                            <span className="block bg-gradient-to-r from-maroon-600 to-maroon-800 bg-clip-text text-transparent">
-                                Alumni Community?
-                            </span>
-                        </h2>
-                        <p className="text-xl text-maroon-700 dark:text-gray-300 mb-8 max-w-2xl mx-auto">
-                            Start your journey today and unlock exclusive opportunities, connections, and resources.
-                        </p>
-                        <div className="flex flex-wrap justify-center gap-4">
-                            <Link
-                                href="/survey/register"
-                                className="group px-10 py-5 bg-gradient-to-r from-maroon-600 to-maroon-700 hover:from-maroon-700 hover:to-maroon-800 rounded-xl font-semibold text-lg text-white transition-all transform hover:scale-105 shadow-2xl hover:shadow-maroon-500/50 flex items-center space-x-2"
-                            >
-                                <span>Create Account</span>
-                                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                            </Link>
-                            <Link
-                                href="/login"
-                                className="px-10 py-5 bg-white/80 dark:bg-gray-800/80 hover:bg-white dark:hover:bg-gray-800 backdrop-blur-sm border border-maroon-200 dark:border-gray-600 rounded-xl font-semibold text-lg text-maroon-900 dark:text-gray-100 transition-all"
-                            >
-                                Sign In
-                            </Link>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* Footer */}
-            <footer className="py-12 px-4 sm:px-6 lg:px-8 border-t border-maroon-200 dark:border-gray-700">
-                <div className="max-w-7xl mx-auto text-center">
-                    <div className="flex items-center justify-center space-x-3 mb-4">
-                        <div className="w-10 h-10 bg-gradient-to-br from-maroon-600 to-maroon-700 rounded-lg flex items-center justify-center">
-                            <GraduationCap className="w-6 h-6 text-white" />
-                        </div>
-                        <span className="text-xl font-bold text-maroon-900 dark:text-gray-100">Alumni Tracer System</span>
-                    </div>
-                    <p className="text-maroon-600 dark:text-gray-400 mb-4">
-                        Stay connected, track your career journey, and contribute to the growth of our alumni community.
+                    <h2 className="text-3xl md:text-4xl font-bold text-white mb-4 tracking-tight">Your Network Is Waiting</h2>
+                    <p className="text-maroon-200/80 mb-10 text-lg leading-relaxed">
+                        Join thousands of alumni who are already discovering opportunities, staying informed, and building connections that matter.
                     </p>
-                    <p className="text-sm text-maroon-500 dark:text-gray-400">
-                        © {new Date().getFullYear()} Alumni Tracer System. All rights reserved.
-                    </p>
+                    <div className="flex flex-col sm:flex-row justify-center gap-3">
+                        <Link
+                            href="/survey/register"
+                            className="group inline-flex items-center justify-center gap-2 px-7 py-3.5 bg-white text-maroon-700 font-semibold rounded-xl hover:bg-maroon-50 transition-all shadow-lg shadow-black/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-maroon-900"
+                        >
+                            Create Free Account <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                        </Link>
+                        <Link
+                            href="/login"
+                            className="inline-flex items-center justify-center gap-2 px-7 py-3.5 border border-white/25 text-white font-semibold rounded-xl hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                        >
+                            <LogIn className="w-4 h-4" /> Sign In
+                        </Link>
+                    </div>
+                </div>
+            </section>
+
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* ── 10. FOOTER — Richer with navigation ───────────────── */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <footer className="py-10 px-4 border-t border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950" role="contentinfo">
+                <div className="max-w-6xl mx-auto">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-maroon-600 flex items-center justify-center">
+                                <GraduationCap className="w-5 h-5 text-white" />
+                            </div>
+                            <span className="font-bold text-sm text-gray-900 dark:text-gray-100">Alumni Tracer System</span>
+                        </div>
+                        <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-500 dark:text-gray-400" aria-label="Footer navigation">
+                            <a href="#search" onClick={e => navTo(e, 'search')} className="hover:text-gray-900 dark:hover:text-gray-200 transition-colors">Find Record</a>
+                            <a href="#features" onClick={e => navTo(e, 'features')} className="hover:text-gray-900 dark:hover:text-gray-200 transition-colors">Features</a>
+                            <a href="#jobs" onClick={e => navTo(e, 'jobs')} className="hover:text-gray-900 dark:hover:text-gray-200 transition-colors">Jobs</a>
+                            <Link href="/login" className="hover:text-gray-900 dark:hover:text-gray-200 transition-colors">Sign In</Link>
+                            <Link href="/survey/register" className="hover:text-gray-900 dark:hover:text-gray-200 transition-colors">Register</Link>
+                        </nav>
+                    </div>
+                    <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <p className="text-xs text-gray-400">© {new Date().getFullYear()} Alumni Tracer System. All rights reserved.</p>
+                    </div>
                 </div>
             </footer>
 
-            {/* Announcement Modal */}
-            {selectedAnnouncement && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedAnnouncement(null)}>
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] shadow-2xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                        {/* Header with close button */}
-                        <div className="flex-shrink-0 relative">
-                            {selectedAnnouncement.featured_image && (
-                                <div className="h-48 overflow-hidden">
-                                    <img
-                                        src={selectedAnnouncement.featured_image}
-                                        alt={selectedAnnouncement.title}
-                                        className="w-full h-full object-cover"
-                                    />
+            {/* ── Scroll to top ─────────────────────────────────────── */}
+            {scrollY > 400 && (
+                <button
+                    onClick={() => {
+                        document.body.scrollTo({ top: 0, behavior: 'smooth' });
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    aria-label="Scroll to top"
+                    className="fixed right-5 bottom-5 z-40 w-10 h-10 bg-maroon-600 hover:bg-maroon-700 text-white rounded-full flex items-center justify-center shadow-lg transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-500 focus-visible:ring-offset-2"
+                >
+                    <ArrowUp className="w-4 h-4" />
+                </button>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* ══════════════ MODALS ═════════════════════════════════════ */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+
+            {/* Announcement modal */}
+            {selAnnouncement && (
+                <Modal onClose={() => setSelAnnouncement(null)}>
+                    <ModalHeader image={selAnnouncement.featured_image} onClose={() => setSelAnnouncement(null)}>
+                        <div className="flex items-center justify-between mb-1">
+                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${priorityColor(selAnnouncement.priority)}`}>
+                                {selAnnouncement.priority.charAt(0).toUpperCase() + selAnnouncement.priority.slice(1)}
+                            </span>
+                            <time className="text-xs text-gray-400">{selAnnouncement.published_at || selAnnouncement.created_at}</time>
+                        </div>
+                        <h2 className="text-lg font-bold text-gray-900 dark:text-gray-50">{selAnnouncement.title}</h2>
+                    </ModalHeader>
+                    <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+                        {selAnnouncement.use_pages && selAnnouncement.pages?.length ? (
+                            <PageCarousel pages={selAnnouncement.pages} showArrows showIndicators />
+                        ) : (
+                            <div className="prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: selAnnouncement.full_content }} />
+                        )}
+                        {selAnnouncement.gallery_images?.length ? (
+                            <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
+                                <p className="text-sm font-semibold mb-3 text-gray-700 dark:text-gray-300">Gallery</p>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {selAnnouncement.gallery_images.map((src, i) => (
+                                        <div key={i} className="aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800"><img src={src} alt="" loading="lazy" className="w-full h-full object-cover" /></div>
+                                    ))}
                                 </div>
-                            )}
-                            <button
-                                onClick={() => setSelectedAnnouncement(null)}
-                                className="absolute top-3 right-3 p-1.5 bg-white/90 hover:bg-white text-gray-600 hover:text-gray-900 rounded-full shadow-md transition-colors z-10"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {/* Title bar */}
-                        <div className="flex-shrink-0 px-6 pt-5 pb-3 border-b border-gray-100 dark:border-gray-700">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className={`text-xs px-2.5 py-1 rounded-full border font-medium ${getPriorityColor(selectedAnnouncement.priority)}`}>
-                                    {selectedAnnouncement.priority.charAt(0).toUpperCase() + selectedAnnouncement.priority.slice(1)}
-                                </span>
-                                <span className="text-sm text-gray-500 dark:text-gray-400">
-                                    {selectedAnnouncement.published_at || selectedAnnouncement.created_at}
-                                </span>
                             </div>
-                            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight">{selectedAnnouncement.title}</h2>
+                        ) : null}
+                    </div>
+                    <ModalNav
+                        current={selAnnouncementIdx} total={announcements.length}
+                        onPrev={() => { const i = selAnnouncementIdx - 1; setSelAnnouncement(announcements[i]); setSelAnnouncementIdx(i); }}
+                        onNext={() => { const i = selAnnouncementIdx + 1; setSelAnnouncement(announcements[i]); setSelAnnouncementIdx(i); }}
+                    />
+                </Modal>
+            )}
+
+            {/* Job modal */}
+            {selJob && (
+                <Modal onClose={() => setSelJob(null)}>
+                    <ModalHeader image={selJob.poster_image} onClose={() => setSelJob(null)}>
+                        <div className="flex items-center justify-between mb-1">
+                            <span className="text-[11px] font-semibold bg-maroon-100 text-maroon-700 dark:bg-maroon-900/40 dark:text-maroon-300 px-2 py-0.5 rounded-full">{selJob.job_type_label}</span>
+                            {selJob.is_featured && <span className="text-[11px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded-full flex items-center gap-1"><Star className="w-2.5 h-2.5 fill-current" /> Featured</span>}
                         </div>
+                        <h2 className="text-lg font-bold text-gray-900 dark:text-gray-50">{selJob.title}</h2>
+                        <p className="text-sm text-maroon-600 dark:text-maroon-400 font-medium">{selJob.company_name}</p>
+                    </ModalHeader>
+                    <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+                        <div className="flex flex-wrap gap-3 mb-4 pb-4 border-b border-gray-100 dark:border-gray-800 text-sm text-gray-500 dark:text-gray-400">
+                            <span className="flex items-center gap-1"><MapPin className="w-4 h-4" />{selJob.location}{selJob.is_remote && ' · Remote'}</span>
+                            {selJob.salary_range && <span className="font-semibold text-gray-700 dark:text-gray-200">{selJob.salary_range}</span>}
+                            {selJob.application_deadline && <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400"><Clock className="w-4 h-4" /> Deadline: {selJob.application_deadline}</span>}
+                        </div>
+                        {selJob.use_pages && selJob.pages?.length ? (
+                            <PageCarousel pages={selJob.pages} showArrows showIndicators />
+                        ) : (
+                            <div className="prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: selJob.content }} />
+                        )}
+                        {selJob.external_url && (
+                            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                                <a href={selJob.external_url} target="_blank" rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-maroon-600 hover:bg-maroon-700 text-white font-semibold rounded-lg text-sm transition-colors">
+                                    <ExternalLink className="w-4 h-4" /> Visit Company Website
+                                </a>
+                            </div>
+                        )}
+                    </div>
+                    <ModalNav
+                        current={selJobIdx} total={jobs.length}
+                        onPrev={() => { const i = selJobIdx - 1; setSelJob(jobs[i]); setSelJobIdx(i); }}
+                        onNext={() => { const i = selJobIdx + 1; setSelJob(jobs[i]); setSelJobIdx(i); }}
+                    />
+                </Modal>
+            )}
 
-                        {/* Scrollable content area */}
-                        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4">
-                            {selectedAnnouncement.use_pages && selectedAnnouncement.pages && selectedAnnouncement.pages.length > 0 ? (
-                                <PageCarousel
-                                    pages={selectedAnnouncement.pages}
-                                    className="min-h-[200px]"
-                                    showArrows={true}
-                                    showIndicators={true}
-                                />
-                            ) : (
-                                <div
-                                    className="prose prose-sm prose-maroon max-w-none text-gray-700 dark:text-gray-300 [&>p]:mb-3 [&>ul]:mb-3 [&>ol]:mb-3"
-                                    dangerouslySetInnerHTML={{ __html: selectedAnnouncement.full_content }}
-                                />
-                            )}
-
-                            {/* Gallery images */}
-                            {selectedAnnouncement.gallery_images && selectedAnnouncement.gallery_images.length > 0 && (
-                                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Gallery</p>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                        {selectedAnnouncement.gallery_images.map((img, i) => (
-                                            <div key={i} className="aspect-video rounded-lg overflow-hidden bg-gray-100">
-                                                <img src={img} alt={`Gallery ${i + 1}`} className="w-full h-full object-cover" />
+            {/* Content modal */}
+            {selContent && (
+                <Modal onClose={() => setSelContent(null)}>
+                    {(() => {
+                        const cfg = contentTypeConfig[selContent.content_type] ?? contentTypeConfig.resource;
+                        const TypeIcon = cfg.icon;
+                        return (
+                            <>
+                                <ModalHeader image={selContent.featured_image} onClose={() => setSelContent(null)}>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${cfg.badge}`}>
+                                            <TypeIcon className="w-3 h-3" />{selContent.content_type_label}
+                                        </span>
+                                        <time className="text-xs text-gray-400">{selContent.published_at || selContent.created_at}</time>
+                                    </div>
+                                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-50">{selContent.title}</h2>
+                                    {(selContent.event_date || selContent.location) && (
+                                        <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                            {selContent.event_date && <span className="flex items-center gap-1 text-purple-600 dark:text-purple-400"><Calendar className="w-3.5 h-3.5" />{selContent.event_date}</span>}
+                                            {selContent.location && <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{selContent.location}</span>}
+                                        </div>
+                                    )}
+                                </ModalHeader>
+                                <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+                                    {selContent.use_pages && selContent.pages?.length ? (
+                                        <PageCarousel pages={selContent.pages} showArrows showIndicators />
+                                    ) : (
+                                        <div className="prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: selContent.full_content }} />
+                                    )}
+                                    {selContent.gallery_images?.length ? (
+                                        <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800">
+                                            <p className="text-sm font-semibold mb-3 text-gray-700 dark:text-gray-300">Gallery</p>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                {selContent.gallery_images.map((src, i) => (
+                                                    <div key={i} className="aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800"><img src={src} alt="" loading="lazy" className="w-full h-full object-cover" /></div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Footer with navigation */}
-                        <div className="flex-shrink-0 px-4 py-3 border-t bg-gray-50 dark:bg-gray-700 dark:border-gray-600 rounded-b-2xl">
-                            <div className="flex items-center justify-between gap-3">
-                                <button
-                                    onClick={() => {
-                                        if (currentAnnouncementIndex > 0) {
-                                            const prevIndex = currentAnnouncementIndex - 1;
-                                            setSelectedAnnouncement(announcements[prevIndex]);
-                                            setCurrentAnnouncementIndex(prevIndex);
-                                        }
-                                    }}
-                                    disabled={currentAnnouncementIndex <= 0}
-                                    className="flex items-center px-4 py-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor- not-allowed text-gray-800 dark:text-gray-100 font-semibold rounded-xl transition-colors text-sm"
-                                >
-                                    <ChevronLeft className="w-4 h-4 mr-1" />
-                                    Previous
-                                </button>
-                                <span className="text-sm text-gray-500 dark:text-gray-400">
-                                    {currentAnnouncementIndex + 1} of {announcements.length}
-                                </span>
-                                <button
-                                    onClick={() => {
-                                        if (currentAnnouncementIndex < announcements.length - 1) {
-                                            const nextIndex = currentAnnouncementIndex + 1;
-                                            setSelectedAnnouncement(announcements[nextIndex]);
-                                            setCurrentAnnouncementIndex(nextIndex);
-                                        }
-                                    }}
-                                    disabled={currentAnnouncementIndex >= announcements.length - 1}
-                                    className="flex items-center px-4 py-2 bg-maroon-600 hover:bg-maroon-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors text-sm"
-                                >
-                                    Next
-                                    <ChevronRight className="w-4 h-4 ml-1" />
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Job Modal */}
-            {selectedJob && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedJob(null)}>
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] shadow-2xl flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                        {/* Header with image */}
-                        <div className="flex-shrink-0 relative">
-                            {selectedJob.poster_image && (
-                                <div className="h-48 overflow-hidden">
-                                    <img
-                                        src={selectedJob.poster_image}
-                                        alt={selectedJob.title}
-                                        className="w-full h-full object-cover"
-                                    />
-                                </div>
-                            )}
-                            <button
-                                onClick={() => setSelectedJob(null)}
-                                className="absolute top-3 right-3 p-1.5 bg-white/90 hover:bg-white text-gray-600 hover:text-gray-900 rounded-full shadow-md transition-colors z-10"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        {/* Title bar */}
-                        <div className="flex-shrink-0 px-6 pt-5 pb-3 border-b border-gray-100 dark:border-gray-700">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs bg-maroon-100 dark:bg-gray-700 text-maroon-700 dark:text-maroon-400 px-2.5 py-1 rounded-full font-medium">
-                                    {selectedJob.job_type_label}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                    {selectedJob.is_featured && (
-                                        <span className="text-xs bg-yellow-100 text-yellow-700 px-2.5 py-1 rounded-full flex items-center font-medium">
-                                            <Star className="w-3 h-3 mr-1 fill-current" />
-                                            Featured
-                                        </span>
+                                        </div>
+                                    ) : null}
+                                    {selContent.external_url && (
+                                        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                                            <a href={selContent.external_url} target="_blank" rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-2 px-4 py-2 bg-maroon-600 hover:bg-maroon-700 text-white font-semibold rounded-lg text-sm transition-colors">
+                                                <ExternalLink className="w-4 h-4" /> Visit Link
+                                            </a>
+                                        </div>
                                     )}
                                 </div>
-                            </div>
-                            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight">{selectedJob.title}</h2>
-                            <p className="text-base text-maroon-600 dark:text-maroon-400 font-medium mt-1">{selectedJob.company_name}</p>
-                        </div>
-
-                        {/* Scrollable content area */}
-                        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-4">
-                            {/* Job meta info */}
-                            <div className="space-y-2 mb-4 pb-4 border-b border-gray-100 dark:border-gray-700">
-                                <div className="flex items-center text-gray-600 dark:text-gray-400 text-sm">
-                                    <MapPin className="w-4 h-4 mr-2 flex-shrink-0" />
-                                    <span>{selectedJob.location}</span>
-                                    {selectedJob.is_remote && (
-                                        <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-                                            Remote Available
-                                        </span>
-                                    )}
-                                </div>
-                                {selectedJob.salary_range && (
-                                    <div className="flex items-center text-gray-600 dark:text-gray-400 text-sm">
-                                        <Briefcase className="w-4 h-4 mr-2 flex-shrink-0" />
-                                        <span className="font-semibold">{selectedJob.salary_range}</span>
-                                    </div>
-                                )}
-                                {selectedJob.application_deadline && (
-                                    <div className="flex items-center text-amber-600 text-sm">
-                                        <Clock className="w-4 h-4 mr-2 flex-shrink-0" />
-                                        <span>Deadline: {selectedJob.application_deadline}</span>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Job content - pages or description */}
-                            {selectedJob.use_pages && selectedJob.pages && selectedJob.pages.length > 0 ? (
-                                <PageCarousel
-                                    pages={selectedJob.pages}
-                                    className="min-h-[200px]"
-                                    showArrows={true}
-                                    showIndicators={true}
+                                <ModalNav
+                                    current={selContentIdx} total={filteredContent.length}
+                                    onPrev={() => { const i = selContentIdx - 1; setSelContent(filteredContent[i]); setSelContentIdx(i); }}
+                                    onNext={() => { const i = selContentIdx + 1; setSelContent(filteredContent[i]); setSelContentIdx(i); }}
                                 />
-                            ) : (
-                                <div className="prose prose-sm prose-maroon max-w-none text-gray-700 dark:text-gray-300 [&>p]:mb-3 [&>ul]:mb-3 [&>ol]:mb-3">
-                                    <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-2">Job Description</h3>
-                                    <div dangerouslySetInnerHTML={{ __html: selectedJob.content }} />
-                                </div>
-                            )}
+                            </>
+                        );
+                    })()}
+                </Modal>
+            )}
+        </div>
+    );
+}
 
-                            {selectedJob.external_url && (
-                                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                                    <a
-                                        href={selectedJob.external_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-2 px-4 py-2 bg-maroon-600 hover:bg-maroon-700 text-white font-semibold rounded-lg transition-colors text-sm"
-                                    >
-                                        <ExternalLink className="w-4 h-4" />
-                                        Visit Company Website
-                                    </a>
-                                </div>
-                            )}
-                        </div>
+// ══════════════════════════════════════════════════════════════════════════════
+// ─── Shared Sub-Components ───────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
 
-                        {/* Footer with navigation */}
-                        <div className="flex-shrink-0 px-4 py-3 border-t bg-gray-50 dark:bg-gray-700 dark:border-gray-600 rounded-b-2xl">
-                            <div className="flex items-center justify-between gap-3">
-                                <button
-                                    onClick={() => {
-                                        if (currentJobIndex > 0) {
-                                            const prevIndex = currentJobIndex - 1;
-                                            setSelectedJob(jobs[prevIndex]);
-                                            setCurrentJobIndex(prevIndex);
-                                        }
-                                    }}
-                                    disabled={currentJobIndex <= 0}
-                                    className="flex items-center px-4 py-2 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-gray-800 dark:text-gray-100 font-semibold rounded-xl transition-colors text-sm"
-                                >
-                                    <ChevronLeft className="w-4 h-4 mr-1" />
-                                    Previous
-                                </button>
-                                <span className="text-sm text-gray-500 dark:text-gray-400">
-                                    {currentJobIndex + 1} of {jobs.length}
-                                </span>
-                                <button
-                                    onClick={() => {
-                                        if (currentJobIndex < jobs.length - 1) {
-                                            const nextIndex = currentJobIndex + 1;
-                                            setSelectedJob(jobs[nextIndex]);
-                                            setCurrentJobIndex(nextIndex);
-                                        }
-                                    }}
-                                    disabled={currentJobIndex >= jobs.length - 1}
-                                    className="flex items-center px-4 py-2 bg-maroon-600 hover:bg-maroon-700 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors text-sm"
-                                >
-                                    Next
-                                    <ChevronRight className="w-4 h-4 ml-1" />
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+function ModalHeader({ image, onClose, children }: { image: string | null | undefined; onClose: () => void; children: React.ReactNode }) {
+    return (
+        <div className="flex-shrink-0">
+            {image && (
+                <div className="h-48 overflow-hidden">
+                    <img src={image} alt="" loading="lazy" className="w-full h-full object-cover" />
                 </div>
             )}
+            <button
+                onClick={onClose}
+                aria-label="Close dialog"
+                className="absolute top-3 right-3 w-8 h-8 bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-full flex items-center justify-center shadow transition-colors z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-500"
+            >
+                <X className="w-4 h-4" />
+            </button>
+            <div className="px-6 pt-5 pb-4 border-b border-gray-100 dark:border-gray-800">{children}</div>
+        </div>
+    );
+}
 
-            <style>{`
-                @keyframes blob {
-                    0%, 100% { transform: translate(0, 0) scale(1); }
-                    33% { transform: translate(30px, -50px) scale(1.1); }
-                    66% { transform: translate(-20px, 20px) scale(0.9); }
-                }
-                @keyframes float {
-                    0%, 100% { transform: translateY(0); }
-                    50% { transform: translateY(-20px); }
-                }
-                @keyframes pulse-slow {
-                    0%, 100% { opacity: 0.3; }
-                    50% { opacity: 0.5; }
-                }
-                @keyframes bounce-subtle {
-                    0%, 100% { transform: translateY(0); }
-                    50% { transform: translateY(-5px); }
-                }
-                @keyframes wiggle {
-                    0%, 100% { transform: rotate(0deg); }
-                    25% { transform: rotate(-3deg); }
-                    75% { transform: rotate(3deg); }
-                }
-                @keyframes pulse-badge {
-                    0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(128, 0, 0, 0.4); }
-                    50% { transform: scale(1.02); box-shadow: 0 0 0 8px rgba(128, 0, 0, 0); }
-                }
-                @keyframes shimmer {
-                    0% { background-position: -200% 0; }
-                    100% { background-position: 200% 0; }
-                }
-                @keyframes gradient-shift {
-                    0%, 100% { background-position: 0% 50%; }
-                    50% { background-position: 100% 50%; }
-                }
-                @keyframes spin-slow {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(360deg); }
-                }
-                @keyframes scale-in {
-                    from { transform: scaleX(0); }
-                    to { transform: scaleX(1); }
-                }
-                @keyframes section-flash {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.95; box-shadow: 0 0 30px rgba(128, 0, 0, 0.1); }
-                }
-                .animate-blob { animation: blob 7s infinite; }
-                .animate-float { animation: float 3s ease-in-out infinite; }
-                .animate-pulse-slow { animation: pulse-slow 4s ease-in-out infinite; }
-                .animate-bounce-subtle { animation: bounce-subtle 2s ease-in-out infinite; }
-                .animate-wiggle { animation: wiggle 1s ease-in-out infinite; }
-                .animate-pulse-badge { animation: pulse-badge 2s ease-in-out infinite; }
-                .animate-shimmer {
-                    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-                    background-size: 200% 100%;
-                    animation: shimmer 2s infinite;
-                }
-                .animate-gradient {
-                    background-size: 200% 200%;
-                    animation: gradient-shift 3s ease infinite;
-                }
-                .animate-spin-slow { animation: spin-slow 8s linear infinite; }
-                .animate-scale-in { animation: scale-in 0.3s ease-out; }
-                .section-flash { animation: section-flash 1s ease-out; }
-                .animation-delay-2000 { animation-delay: 2s; }
-                .animation-delay-4000 { animation-delay: 4s; }
-                .tabular-nums { font-variant-numeric: tabular-nums; }
-                
-                /* Smooth scroll behavior */
-                html {
-                    scroll-behavior: smooth;
-                }
-                .line-clamp-1 {
-                    display: -webkit-box;
-                    -webkit-line-clamp: 1;
-                    -webkit-box-orient: vertical;
-                    overflow: hidden;
-                }
-                .line-clamp-2 {
-                    display: -webkit-box;
-                    -webkit-line-clamp: 2;
-                    -webkit-box-orient: vertical;
-                    overflow: hidden;
-                }
-                .line-clamp-3 {
-                    display: -webkit-box;
-                    -webkit-line-clamp: 3;
-                    -webkit-box-orient: vertical;
-                    overflow: hidden;
-                }
-            `}</style>
+function ModalNav({ current, total, onPrev, onNext }: { current: number; total: number; onPrev: () => void; onNext: () => void }) {
+    return (
+        <div className="flex-shrink-0 flex items-center justify-between gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-800 rounded-b-2xl">
+            <button
+                onClick={onPrev}
+                disabled={current <= 0}
+                aria-label="Previous item"
+                className="flex items-center gap-1 px-4 py-2 text-sm font-medium bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-500"
+            >
+                <ChevronLeft className="w-4 h-4" /> Prev
+            </button>
+            <span className="text-xs text-gray-400 tabular-nums">{current + 1} / {total}</span>
+            <button
+                onClick={onNext}
+                disabled={current >= total - 1}
+                aria-label="Next item"
+                className="flex items-center gap-1 px-4 py-2 text-sm font-medium bg-maroon-600 text-white rounded-xl disabled:opacity-40 hover:bg-maroon-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-500 focus-visible:ring-offset-2"
+            >
+                Next <ChevronRight className="w-4 h-4" />
+            </button>
+        </div>
+    );
+}
+
+function LoadingCards() {
+    return (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {[1, 2, 3].map(i => (
+                <div key={i} className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl overflow-hidden">
+                    <div className="h-44 bg-gradient-to-r from-gray-100 via-gray-50 to-gray-100 dark:from-gray-800 dark:via-gray-700 dark:to-gray-800 animate-pulse" />
+                    <div className="p-5 space-y-3">
+                        <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded-full w-1/3 animate-pulse" />
+                        <div className="h-4 bg-gray-100 dark:bg-gray-800 rounded-full w-3/4 animate-pulse" />
+                        <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded-full animate-pulse" />
+                        <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded-full w-4/5 animate-pulse" />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function EmptyState({ icon: Icon, message }: { icon: React.ElementType; message: string }) {
+    return (
+        <div className="text-center py-20 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                <Icon className="w-8 h-8 text-gray-300 dark:text-gray-600" />
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xs mx-auto">{message}</p>
         </div>
     );
 }

@@ -20,14 +20,14 @@ use Illuminate\Support\Str;
 class AuthController extends Controller
 {
     /**
-     * Register a new user (admin only can create other users)
+     * Register a new alumni user (public registration)
      */
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'email' => 'required|email|unique:users',
-            'password' => 'required|min:6|confirmed',
-            'role' => 'required|in:admin,alumni',
+            'password' => 'required|min:8|confirmed',
+            'role' => 'sometimes|in:alumni',
         ]);
 
         if ($validator->fails()) {
@@ -41,8 +41,8 @@ class AuthController extends Controller
         $user = User::create([
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => $request->role,
-            'status' => $request->role === 'admin' ? 'active' : 'pending',
+            'role' => 'alumni',
+            'status' => 'pending',
         ]);
 
         // Create alumni profile if user is alumni
@@ -183,8 +183,8 @@ class AuthController extends Controller
             ], 401);
         }
 
-        // Delete any existing tokens for this user to maintain single session
-        $user->tokens()->delete();
+        // Revoke only the current web-session token (not all devices)
+        $user->tokens()->where('name', 'web-session-token')->delete();
 
         // Create a new token with device info
         $newToken = $user->createToken('web-session-token');
@@ -270,10 +270,18 @@ class AuthController extends Controller
                 'first_name' => $profile->first_name,
                 'last_name' => $profile->last_name,
                 'middle_name' => $profile->middle_name,
+                'maiden_name' => $profile->maiden_name,
+                'suffix' => $profile->suffix,
                 'student_id' => $profile->student_id,
                 'birth_date' => $profile->birth_date,
+                'age' => $profile->age,
                 'gender' => $profile->gender,
+                'place_of_birth' => $profile->place_of_birth,
+                'civil_status' => $profile->civil_status,
+                'spouse_name' => $profile->spouse_name,
+                'number_of_children' => $profile->number_of_children,
                 'phone' => $profile->phone,
+                'mobile_no' => $profile->mobile_no,
                 'alternate_email' => $profile->alternate_email,
                 
                 // Address
@@ -292,18 +300,31 @@ class AuthController extends Controller
                 'gpa' => $profile->gpa,
                 'graduation_year' => $profile->graduation_year,
                 'graduation_date' => $profile->graduation_date,
+                'enrollment_year' => $profile->enrollment_year,
+                'honors_awards' => $profile->honors_awards,
                 
                 // Employment information
                 'employment_status' => $profile->employment_status,
+                'presently_employed' => $profile->presently_employed,
+                'employment_location_type' => $profile->employment_location_type,
                 'current_job_title' => $profile->current_job_title,
                 'current_employer' => $profile->current_employer,
+                'company_address' => $profile->company_address,
                 'company_industry' => $profile->company_industry,
                 'company_size' => $profile->company_size,
+                'major_line_of_business' => $profile->major_line_of_business,
                 'current_salary' => $profile->current_salary,
                 'salary_currency' => $profile->salary_currency,
+                'salary_range' => $profile->salary_range,
+                'average_monthly_income' => $profile->average_monthly_income,
+                'career_field' => $profile->career_field,
+                'job_level_position' => $profile->job_level_position,
                 'job_start_date' => $profile->job_start_date,
+                'date_hired' => $profile->date_hired,
+                'years_of_service' => $profile->years_of_service,
                 'job_description' => $profile->job_description,
                 'job_related_to_degree' => $profile->job_related_to_degree,
+                'job_aligned_to_course' => $profile->job_aligned_to_course,
                 'job_mismatch_reason' => $profile->job_mismatch_reason,
                 'job_satisfaction' => $profile->job_satisfaction,
                 'unemployment_reason' => $profile->unemployment_reason,
@@ -311,6 +332,8 @@ class AuthController extends Controller
                 // Skills and career
                 'skills' => $profile->skills,
                 'certifications' => $profile->certifications,
+                'achievements' => $profile->achievements,
+                'about_me' => $profile->about_me,
                 'career_goals' => $profile->career_goals,
                 'feedback_to_institution' => $profile->feedback_to_institution,
                 
@@ -369,18 +392,41 @@ class AuthController extends Controller
             'gpa' => 'sometimes|nullable|numeric|min:0|max:5',
             'graduation_year' => 'sometimes|nullable|integer|min:1900|max:2100',
             'graduation_date' => 'sometimes|nullable|date',
-            'employment_status' => 'sometimes|nullable|in:employed_full_time,employed_part_time,self_employed,unemployed_looking,unemployed_not_looking,further_education,other',
+            'maiden_name' => 'sometimes|nullable|string|max:255',
+            'suffix' => 'sometimes|nullable|string|max:10',
+            'age' => 'sometimes|nullable|integer|min:0|max:150',
+            'place_of_birth' => 'sometimes|nullable|string|max:255',
+            'civil_status' => 'sometimes|nullable|string|max:50',
+            'spouse_name' => 'sometimes|nullable|string|max:255',
+            'number_of_children' => 'sometimes|nullable|integer|min:0',
+            'mobile_no' => 'sometimes|nullable|string|max:20',
+            'enrollment_year' => 'sometimes|nullable|integer|min:1900|max:2100',
+            'honors_awards' => 'sometimes|nullable|string',
+            'employment_status' => 'sometimes|nullable|in:employed_full_time,employed_part_time,self_employed,unemployed_seeking,unemployed_not_seeking,continuing_education,military_service,other',
+            'presently_employed' => 'sometimes|nullable|string|max:10',
+            'employment_location_type' => 'sometimes|nullable|in:local,foreign,remote,not_applicable',
             'current_job_title' => 'sometimes|nullable|string|max:255',
             'current_employer' => 'sometimes|nullable|string|max:255',
+            'company_address' => 'sometimes|nullable|string|max:500',
             'company_industry' => 'sometimes|nullable|string|max:255',
             'company_size' => 'sometimes|nullable|string|max:50',
+            'major_line_of_business' => 'sometimes|nullable|string|max:255',
+            'average_monthly_income' => 'sometimes|nullable|string|max:255',
+            'salary_range' => 'sometimes|nullable|string|max:50',
+            'career_field' => 'sometimes|nullable|string|max:100',
+            'job_level_position' => 'sometimes|nullable|string|max:255',
             'job_start_date' => 'sometimes|nullable|date',
+            'date_hired' => 'sometimes|nullable|date',
+            'years_of_service' => 'sometimes|nullable|numeric|min:0',
             'job_description' => 'sometimes|nullable|string',
             'job_related_to_degree' => 'sometimes|nullable|boolean',
+            'job_aligned_to_course' => 'sometimes|nullable|string|max:10',
             'job_satisfaction' => 'sometimes|nullable|integer|min:1|max:5',
             'unemployment_reason' => 'sometimes|nullable|string',
             'skills' => 'sometimes|nullable|array',
             'certifications' => 'sometimes|nullable|array',
+            'achievements' => 'sometimes|nullable|string',
+            'about_me' => 'sometimes|nullable|string',
             'career_goals' => 'sometimes|nullable|string',
             'feedback_to_institution' => 'sometimes|nullable|string',
             'willing_to_mentor' => 'sometimes|nullable|boolean',

@@ -16,6 +16,7 @@ interface PageProps extends InertiaPageProps {
             profile_picture?: string;
         };
     };
+    [key: string]: unknown;
 }
 
 export default function Messages() {

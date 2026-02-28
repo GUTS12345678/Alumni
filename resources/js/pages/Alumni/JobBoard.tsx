@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Head } from '@inertiajs/react';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
+import { sanitizeHtml } from '@/lib/sanitize';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +52,7 @@ import {
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { JobPosting, JobCategory } from '@/types/jobs';
+import { ScrollFadeIn } from '@/components/scroll-animations';
 
 export default function JobBoard() {
     const [jobs, setJobs] = useState<JobPosting[]>([]);
@@ -237,328 +239,336 @@ export default function JobBoard() {
             <Head title="Job Board" />
 
             <div className="max-w-7xl mx-auto space-y-6">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <Briefcase className="h-8 w-8 text-maroon-600 dark:text-maroon-400" />
-                        <div>
-                            <h1 className="text-2xl font-bold text-maroon-800 dark:text-maroon-200">Job Board</h1>
-                            <p className="text-gray-600 dark:text-gray-400">
-                                Discover career opportunities from trusted employers
-                            </p>
+                <ScrollFadeIn>
+                    {/* Header */}
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <Briefcase className="h-8 w-8 text-maroon-600 dark:text-maroon-400" />
+                            <div>
+                                <h1 className="text-2xl font-bold text-maroon-800 dark:text-maroon-200">Job Board</h1>
+                                <p className="text-gray-600 dark:text-gray-400">
+                                    Discover career opportunities from trusted employers
+                                </p>
+                            </div>
                         </div>
                     </div>
-                </div>
+                </ScrollFadeIn>
 
-                {/* Search & Filters */}
-                <Card className="border-beige-200 dark:border-gray-700 dark:bg-gray-800">
-                    <CardContent className="pt-6">
-                        <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4">
-                            <div className="relative flex-1">
-                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                <Input
-                                    placeholder="Search job titles, companies, or keywords..."
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    className="pl-10 dark:bg-gray-700 dark:border-gray-600"
-                                />
-                            </div>
-                            <div className="flex gap-2">
-                                <Select value={categoryId || 'all'} onValueChange={(v) => setCategoryId(v === 'all' ? '' : v)}>
-                                    <SelectTrigger className="w-40 dark:bg-gray-700 dark:border-gray-600">
-                                        <SelectValue placeholder="Category" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Categories</SelectItem>
-                                        {categories.map((cat) => (
-                                            <SelectItem key={cat.id} value={cat.id.toString()}>
-                                                {cat.name} ({cat.job_postings_count || 0})
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <Sheet open={showFilters} onOpenChange={setShowFilters}>
-                                    <SheetTrigger asChild>
-                                        <Button variant="outline" className="relative dark:border-gray-600 dark:text-gray-300">
-                                            <Filter className="h-4 w-4 mr-2" />
-                                            Filters
-                                            {hasActiveFilters && (
-                                                <span className="absolute -top-1 -right-1 h-3 w-3 bg-maroon-600 rounded-full" />
-                                            )}
-                                        </Button>
-                                    </SheetTrigger>
-                                    <SheetContent className="dark:bg-gray-800 dark:border-gray-700">
-                                        <SheetHeader>
-                                            <SheetTitle className="dark:text-white">Filter Jobs</SheetTitle>
-                                            <SheetDescription className="dark:text-gray-400">
-                                                Refine your job search
-                                            </SheetDescription>
-                                        </SheetHeader>
-                                        <div className="space-y-6 mt-6">
-                                            <div className="space-y-2">
-                                                <label className="text-sm font-medium dark:text-gray-300">Employment Type</label>
-                                                <Select value={employmentType || 'all'} onValueChange={(v) => setEmploymentType(v === 'all' ? '' : v)}>
-                                                    <SelectTrigger className="dark:bg-gray-700 dark:border-gray-600">
-                                                        <SelectValue placeholder="Any type" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="all">Any type</SelectItem>
-                                                        <SelectItem value="full_time">Full Time</SelectItem>
-                                                        <SelectItem value="part_time">Part Time</SelectItem>
-                                                        <SelectItem value="contract">Contract</SelectItem>
-                                                        <SelectItem value="internship">Internship</SelectItem>
-                                                        <SelectItem value="freelance">Freelance</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-sm font-medium dark:text-gray-300">Work Arrangement</label>
-                                                <Select value={workArrangement || 'all'} onValueChange={(v) => setWorkArrangement(v === 'all' ? '' : v)}>
-                                                    <SelectTrigger className="dark:bg-gray-700 dark:border-gray-600">
-                                                        <SelectValue placeholder="Any arrangement" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="all">Any arrangement</SelectItem>
-                                                        <SelectItem value="onsite">On-site</SelectItem>
-                                                        <SelectItem value="remote">Remote</SelectItem>
-                                                        <SelectItem value="hybrid">Hybrid</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-sm font-medium dark:text-gray-300">Sort By</label>
-                                                <Select value={sortBy} onValueChange={setSortBy}>
-                                                    <SelectTrigger className="dark:bg-gray-700 dark:border-gray-600">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="created_at">Newest First</SelectItem>
-                                                        <SelectItem value="title">Title A-Z</SelectItem>
-                                                        <SelectItem value="company_name">Company A-Z</SelectItem>
-                                                        <SelectItem value="salary_min">Salary</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            {hasActiveFilters && (
-                                                <Button
-                                                    variant="outline"
-                                                    className="w-full dark:border-gray-600"
-                                                    onClick={clearFilters}
-                                                >
-                                                    <X className="h-4 w-4 mr-2" />
-                                                    Clear All Filters
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </SheetContent>
-                                </Sheet>
-                                <Button type="submit" className="bg-maroon-600 hover:bg-maroon-700 text-white">
-                                    <Search className="h-4 w-4 mr-2" />
-                                    Search
-                                </Button>
-                            </div>
-                        </form>
-                    </CardContent>
-                </Card>
-
-                {/* Featured Jobs */}
-                {featuredJobs.length > 0 && (
-                    <div className="space-y-4">
-                        <h2 className="text-lg font-semibold flex items-center gap-2 text-maroon-800 dark:text-maroon-200">
-                            <Star className="h-5 w-5 text-yellow-500" />
-                            Featured Opportunities
-                        </h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {featuredJobs.map((job) => (
-                                <div
-                                    key={job.id}
-                                    onClick={() => viewJob(job)}
-                                    className="group bg-white dark:bg-gray-800 rounded-2xl border border-yellow-200 dark:border-yellow-700/50 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1"
-                                >
-                                    {job.poster_image ? (
-                                        <div className="h-48 overflow-hidden relative">
-                                            <img
-                                                src={job.poster_image}
-                                                alt={job.title}
-                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                            />
-                                            <div className="absolute top-3 right-3 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full flex items-center">
-                                                <Star className="w-3 h-3 mr-1 fill-current" />
-                                                Featured
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="h-48 bg-gradient-to-br from-yellow-50 to-yellow-100 dark:from-yellow-900/30 dark:to-yellow-800/20 flex items-center justify-center relative">
-                                            {job.company_logo ? (
-                                                <img
-                                                    src={job.company_logo}
-                                                    alt={job.company_name}
-                                                    className="max-w-[120px] max-h-[80px] object-contain"
-                                                />
-                                            ) : (
-                                                <Building2 className="w-16 h-16 text-yellow-400 dark:text-yellow-500" />
-                                            )}
-                                            <div className="absolute top-3 right-3 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full flex items-center">
-                                                <Star className="w-3 h-3 mr-1 fill-current" />
-                                                Featured
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div className="p-6">
-                                        <div className="flex items-center justify-between mb-3">
-                                            {getEmploymentTypeBadge(job.employment_type)}
-                                            {job.work_arrangement === 'remote' && (
-                                                <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 px-2 py-1 rounded-full flex items-center">
-                                                    <Globe className="w-3 h-3 mr-1" />
-                                                    Remote
-                                                </span>
-                                            )}
-                                        </div>
-                                        <h3 className="text-xl font-bold text-maroon-900 dark:text-maroon-100 mb-1 group-hover:text-maroon-700 dark:group-hover:text-maroon-300 transition-colors line-clamp-1">
-                                            {job.title}
-                                        </h3>
-                                        <p className="text-maroon-600 dark:text-maroon-400 font-medium mb-2">
-                                            {job.company_name}
-                                        </p>
-                                        {job.location && (
-                                            <div className="flex items-center text-gray-500 dark:text-gray-400 text-sm mb-3">
-                                                <MapPin className="w-4 h-4 mr-1" />
-                                                <span className="line-clamp-1">{job.location}</span>
-                                            </div>
-                                        )}
-                                        {job.salary_range && (
-                                            <p className="text-maroon-700 dark:text-maroon-300 font-semibold text-sm mb-3">
-                                                {job.salary_range}
-                                            </p>
-                                        )}
-                                        <div className="mt-4 flex items-center text-maroon-600 dark:text-maroon-400 text-sm font-medium group-hover:text-maroon-800 dark:group-hover:text-maroon-300">
-                                            <span>View Details</span>
-                                            <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                                        </div>
-                                    </div>
+                <ScrollFadeIn delay={100}>
+                    {/* Search & Filters */}
+                    <Card className="border-beige-200 dark:border-gray-700 dark:bg-gray-800">
+                        <CardContent className="pt-6">
+                            <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                    <Input
+                                        placeholder="Search job titles, companies, or keywords..."
+                                        value={search}
+                                        onChange={(e) => setSearch(e.target.value)}
+                                        className="pl-10 dark:bg-gray-700 dark:border-gray-600"
+                                    />
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Job Listings */}
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-maroon-800 dark:text-maroon-200">
-                            {loading ? 'Loading jobs...' : `${jobs.length} Jobs Found`}
-                        </h2>
-                    </div>
-
-                    {loading ? (
-                        <div className="flex items-center justify-center h-64">
-                            <Loader2 className="h-8 w-8 animate-spin text-maroon-600 dark:text-maroon-400" />
-                        </div>
-                    ) : jobs.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700">
-                            <Briefcase className="h-16 w-16 mb-4 text-gray-300 dark:text-gray-600" />
-                            <h3 className="text-lg font-medium">No jobs found</h3>
-                            <p className="text-sm">Try adjusting your search or filters</p>
-                            {hasActiveFilters && (
-                                <Button variant="link" onClick={clearFilters} className="mt-2 text-maroon-600 dark:text-maroon-400">
-                                    Clear all filters
-                                </Button>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {jobs.map((job, index) => (
-                                <div
-                                    key={job.id}
-                                    onClick={() => viewJob(job, index)}
-                                    className="group bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1 hover:border-maroon-300 dark:hover:border-maroon-600"
-                                >
-                                    {job.poster_image ? (
-                                        <div className="h-48 overflow-hidden relative">
-                                            <img
-                                                src={job.poster_image}
-                                                alt={job.title}
-                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                            />
-                                            {job.is_featured && (
-                                                <div className="absolute top-3 right-3 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full flex items-center">
-                                                    <Star className="w-3 h-3 mr-1 fill-current" />
-                                                    Featured
+                                <div className="flex gap-2">
+                                    <Select value={categoryId || 'all'} onValueChange={(v) => setCategoryId(v === 'all' ? '' : v)}>
+                                        <SelectTrigger className="w-40 dark:bg-gray-700 dark:border-gray-600">
+                                            <SelectValue placeholder="Category" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Categories</SelectItem>
+                                            {categories.map((cat) => (
+                                                <SelectItem key={cat.id} value={cat.id.toString()}>
+                                                    {cat.name} ({cat.job_postings_count || 0})
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Sheet open={showFilters} onOpenChange={setShowFilters}>
+                                        <SheetTrigger asChild>
+                                            <Button variant="outline" className="relative dark:border-gray-600 dark:text-gray-300">
+                                                <Filter className="h-4 w-4 mr-2" />
+                                                Filters
+                                                {hasActiveFilters && (
+                                                    <span className="absolute -top-1 -right-1 h-3 w-3 bg-maroon-600 rounded-full" />
+                                                )}
+                                            </Button>
+                                        </SheetTrigger>
+                                        <SheetContent className="dark:bg-gray-800 dark:border-gray-700">
+                                            <SheetHeader>
+                                                <SheetTitle className="dark:text-white">Filter Jobs</SheetTitle>
+                                                <SheetDescription className="dark:text-gray-400">
+                                                    Refine your job search
+                                                </SheetDescription>
+                                            </SheetHeader>
+                                            <div className="space-y-6 mt-6">
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium dark:text-gray-300">Employment Type</label>
+                                                    <Select value={employmentType || 'all'} onValueChange={(v) => setEmploymentType(v === 'all' ? '' : v)}>
+                                                        <SelectTrigger className="dark:bg-gray-700 dark:border-gray-600">
+                                                            <SelectValue placeholder="Any type" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="all">Any type</SelectItem>
+                                                            <SelectItem value="full_time">Full Time</SelectItem>
+                                                            <SelectItem value="part_time">Part Time</SelectItem>
+                                                            <SelectItem value="contract">Contract</SelectItem>
+                                                            <SelectItem value="internship">Internship</SelectItem>
+                                                            <SelectItem value="freelance">Freelance</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
                                                 </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="h-48 bg-gradient-to-br from-maroon-50 to-maroon-100 dark:from-maroon-900/30 dark:to-maroon-800/20 flex items-center justify-center relative">
-                                            {job.company_logo ? (
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium dark:text-gray-300">Work Arrangement</label>
+                                                    <Select value={workArrangement || 'all'} onValueChange={(v) => setWorkArrangement(v === 'all' ? '' : v)}>
+                                                        <SelectTrigger className="dark:bg-gray-700 dark:border-gray-600">
+                                                            <SelectValue placeholder="Any arrangement" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="all">Any arrangement</SelectItem>
+                                                            <SelectItem value="onsite">On-site</SelectItem>
+                                                            <SelectItem value="remote">Remote</SelectItem>
+                                                            <SelectItem value="hybrid">Hybrid</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-medium dark:text-gray-300">Sort By</label>
+                                                    <Select value={sortBy} onValueChange={setSortBy}>
+                                                        <SelectTrigger className="dark:bg-gray-700 dark:border-gray-600">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="created_at">Newest First</SelectItem>
+                                                            <SelectItem value="title">Title A-Z</SelectItem>
+                                                            <SelectItem value="company_name">Company A-Z</SelectItem>
+                                                            <SelectItem value="salary_min">Salary</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                {hasActiveFilters && (
+                                                    <Button
+                                                        variant="outline"
+                                                        className="w-full dark:border-gray-600"
+                                                        onClick={clearFilters}
+                                                    >
+                                                        <X className="h-4 w-4 mr-2" />
+                                                        Clear All Filters
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </SheetContent>
+                                    </Sheet>
+                                    <Button type="submit" className="bg-maroon-600 hover:bg-maroon-700 text-white">
+                                        <Search className="h-4 w-4 mr-2" />
+                                        Search
+                                    </Button>
+                                </div>
+                            </form>
+                        </CardContent>
+                    </Card>
+                </ScrollFadeIn>
+
+                <ScrollFadeIn delay={100}>
+                    {/* Featured Jobs */}
+                    {featuredJobs.length > 0 && (
+                        <div className="space-y-4">
+                            <h2 className="text-lg font-semibold flex items-center gap-2 text-maroon-800 dark:text-maroon-200">
+                                <Star className="h-5 w-5 text-yellow-500" />
+                                Featured Opportunities
+                            </h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {featuredJobs.map((job) => (
+                                    <div
+                                        key={job.id}
+                                        onClick={() => viewJob(job)}
+                                        className="group bg-white dark:bg-gray-800 rounded-2xl border border-yellow-200 dark:border-yellow-700/50 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1"
+                                    >
+                                        {job.poster_image ? (
+                                            <div className="h-48 overflow-hidden relative">
                                                 <img
-                                                    src={job.company_logo}
-                                                    alt={job.company_name}
-                                                    className="max-w-[120px] max-h-[80px] object-contain"
+                                                    src={job.poster_image}
+                                                    alt={job.title}
+                                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                                                 />
-                                            ) : (
-                                                <Building2 className="w-16 h-16 text-maroon-400 dark:text-maroon-500" />
-                                            )}
-                                            {job.is_featured && (
                                                 <div className="absolute top-3 right-3 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full flex items-center">
                                                     <Star className="w-3 h-3 mr-1 fill-current" />
                                                     Featured
                                                 </div>
-                                            )}
-                                        </div>
-                                    )}
-                                    <div className="p-6">
-                                        <div className="flex items-center justify-between mb-3">
-                                            {getEmploymentTypeBadge(job.employment_type)}
-                                            {job.work_arrangement === 'remote' && (
-                                                <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 px-2 py-1 rounded-full flex items-center">
-                                                    <Globe className="w-3 h-3 mr-1" />
-                                                    Remote
-                                                </span>
-                                            )}
-                                        </div>
-                                        <h3 className="text-xl font-bold text-maroon-900 dark:text-maroon-100 mb-1 group-hover:text-maroon-700 dark:group-hover:text-maroon-300 transition-colors line-clamp-1">
-                                            {job.title}
-                                        </h3>
-                                        <p className="text-maroon-600 dark:text-maroon-400 font-medium mb-2">
-                                            {job.company_name}
-                                        </p>
-                                        {job.location && (
-                                            <div className="flex items-center text-gray-500 dark:text-gray-400 text-sm mb-3">
-                                                <MapPin className="w-4 h-4 mr-1" />
-                                                <span className="line-clamp-1">{job.location}</span>
+                                            </div>
+                                        ) : (
+                                            <div className="h-48 bg-gradient-to-br from-yellow-50 to-yellow-100 dark:from-yellow-900/30 dark:to-yellow-800/20 flex items-center justify-center relative">
+                                                {job.company_logo ? (
+                                                    <img
+                                                        src={job.company_logo}
+                                                        alt={job.company_name}
+                                                        className="max-w-[120px] max-h-[80px] object-contain"
+                                                    />
+                                                ) : (
+                                                    <Building2 className="w-16 h-16 text-yellow-400 dark:text-yellow-500" />
+                                                )}
+                                                <div className="absolute top-3 right-3 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full flex items-center">
+                                                    <Star className="w-3 h-3 mr-1 fill-current" />
+                                                    Featured
+                                                </div>
                                             </div>
                                         )}
-                                        {job.salary_range && (
-                                            <p className="text-maroon-700 dark:text-maroon-300 font-semibold text-sm mb-3">
-                                                {job.salary_range}
+                                        <div className="p-6">
+                                            <div className="flex items-center justify-between mb-3">
+                                                {getEmploymentTypeBadge(job.employment_type)}
+                                                {job.work_arrangement === 'remote' && (
+                                                    <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 px-2 py-1 rounded-full flex items-center">
+                                                        <Globe className="w-3 h-3 mr-1" />
+                                                        Remote
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <h3 className="text-xl font-bold text-maroon-900 dark:text-maroon-100 mb-1 group-hover:text-maroon-700 dark:group-hover:text-maroon-300 transition-colors line-clamp-1">
+                                                {job.title}
+                                            </h3>
+                                            <p className="text-maroon-600 dark:text-maroon-400 font-medium mb-2">
+                                                {job.company_name}
                                             </p>
-                                        )}
-                                        <div
-                                            className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2 mb-4 prose prose-sm max-w-none"
-                                            dangerouslySetInnerHTML={{ __html: job.content }}
-                                        />
-                                        {job.expires_at && (
-                                            <div className="flex items-center text-amber-600 dark:text-amber-400 text-xs mb-3">
-                                                <Clock className="w-3 h-3 mr-1" />
-                                                <span>Deadline: {formatDate(job.expires_at)}</span>
-                                            </div>
-                                        )}
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center">
-                                                <Calendar className="w-3 h-3 mr-1" />
-                                                {formatDate(job.created_at)}
-                                            </span>
-                                            <span className="flex items-center text-maroon-600 dark:text-maroon-400 text-sm font-medium group-hover:text-maroon-800 dark:group-hover:text-maroon-300">
-                                                View Details
+                                            {job.location && (
+                                                <div className="flex items-center text-gray-500 dark:text-gray-400 text-sm mb-3">
+                                                    <MapPin className="w-4 h-4 mr-1" />
+                                                    <span className="line-clamp-1">{job.location}</span>
+                                                </div>
+                                            )}
+                                            {job.salary_range && (
+                                                <p className="text-maroon-700 dark:text-maroon-300 font-semibold text-sm mb-3">
+                                                    {job.salary_range}
+                                                </p>
+                                            )}
+                                            <div className="mt-4 flex items-center text-maroon-600 dark:text-maroon-400 text-sm font-medium group-hover:text-maroon-800 dark:group-hover:text-maroon-300">
+                                                <span>View Details</span>
                                                 <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                                            </span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
                     )}
-                </div>
+                </ScrollFadeIn>
+
+                <ScrollFadeIn delay={100}>
+                    {/* Job Listings */}
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-maroon-800 dark:text-maroon-200">
+                                {loading ? 'Loading jobs...' : `${jobs.length} Jobs Found`}
+                            </h2>
+                        </div>
+
+                        {loading ? (
+                            <div className="flex items-center justify-center h-64">
+                                <Loader2 className="h-8 w-8 animate-spin text-maroon-600 dark:text-maroon-400" />
+                            </div>
+                        ) : jobs.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700">
+                                <Briefcase className="h-16 w-16 mb-4 text-gray-300 dark:text-gray-600" />
+                                <h3 className="text-lg font-medium">No jobs found</h3>
+                                <p className="text-sm">Try adjusting your search or filters</p>
+                                {hasActiveFilters && (
+                                    <Button variant="link" onClick={clearFilters} className="mt-2 text-maroon-600 dark:text-maroon-400">
+                                        Clear all filters
+                                    </Button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {jobs.map((job, index) => (
+                                    <div
+                                        key={job.id}
+                                        onClick={() => viewJob(job, index)}
+                                        className="group bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1 hover:border-maroon-300 dark:hover:border-maroon-600"
+                                    >
+                                        {job.poster_image ? (
+                                            <div className="h-48 overflow-hidden relative">
+                                                <img
+                                                    src={job.poster_image}
+                                                    alt={job.title}
+                                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                                />
+                                                {job.is_featured && (
+                                                    <div className="absolute top-3 right-3 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full flex items-center">
+                                                        <Star className="w-3 h-3 mr-1 fill-current" />
+                                                        Featured
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="h-48 bg-gradient-to-br from-maroon-50 to-maroon-100 dark:from-maroon-900/30 dark:to-maroon-800/20 flex items-center justify-center relative">
+                                                {job.company_logo ? (
+                                                    <img
+                                                        src={job.company_logo}
+                                                        alt={job.company_name}
+                                                        className="max-w-[120px] max-h-[80px] object-contain"
+                                                    />
+                                                ) : (
+                                                    <Building2 className="w-16 h-16 text-maroon-400 dark:text-maroon-500" />
+                                                )}
+                                                {job.is_featured && (
+                                                    <div className="absolute top-3 right-3 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-1 rounded-full flex items-center">
+                                                        <Star className="w-3 h-3 mr-1 fill-current" />
+                                                        Featured
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                        <div className="p-6">
+                                            <div className="flex items-center justify-between mb-3">
+                                                {getEmploymentTypeBadge(job.employment_type)}
+                                                {job.work_arrangement === 'remote' && (
+                                                    <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 px-2 py-1 rounded-full flex items-center">
+                                                        <Globe className="w-3 h-3 mr-1" />
+                                                        Remote
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <h3 className="text-xl font-bold text-maroon-900 dark:text-maroon-100 mb-1 group-hover:text-maroon-700 dark:group-hover:text-maroon-300 transition-colors line-clamp-1">
+                                                {job.title}
+                                            </h3>
+                                            <p className="text-maroon-600 dark:text-maroon-400 font-medium mb-2">
+                                                {job.company_name}
+                                            </p>
+                                            {job.location && (
+                                                <div className="flex items-center text-gray-500 dark:text-gray-400 text-sm mb-3">
+                                                    <MapPin className="w-4 h-4 mr-1" />
+                                                    <span className="line-clamp-1">{job.location}</span>
+                                                </div>
+                                            )}
+                                            {job.salary_range && (
+                                                <p className="text-maroon-700 dark:text-maroon-300 font-semibold text-sm mb-3">
+                                                    {job.salary_range}
+                                                </p>
+                                            )}
+                                            <div
+                                                className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2 mb-4 prose prose-sm max-w-none"
+                                                dangerouslySetInnerHTML={{ __html: sanitizeHtml(job.content) }}
+                                            />
+                                            {job.expires_at && (
+                                                <div className="flex items-center text-amber-600 dark:text-amber-400 text-xs mb-3">
+                                                    <Clock className="w-3 h-3 mr-1" />
+                                                    <span>Deadline: {formatDate(job.expires_at)}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center">
+                                                    <Calendar className="w-3 h-3 mr-1" />
+                                                    {formatDate(job.created_at)}
+                                                </span>
+                                                <span className="flex items-center text-maroon-600 dark:text-maroon-400 text-sm font-medium group-hover:text-maroon-800 dark:group-hover:text-maroon-300">
+                                                    View Details
+                                                    <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </ScrollFadeIn>
             </div>
 
             {/* Job Detail Dialog */}
@@ -682,7 +692,7 @@ export default function JobBoard() {
                                     ) : (
                                         <div
                                             className="text-sm text-gray-600 dark:text-gray-400 prose prose-sm max-w-none dark:prose-invert"
-                                            dangerouslySetInnerHTML={{ __html: selectedJob.content }}
+                                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedJob.content) }}
                                         />
                                     )}
                                 </div>

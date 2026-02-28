@@ -170,11 +170,9 @@ export default function ProfileSettings({ auth }: PageProps) {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('Upload response:', data); // Debug log
                 if (data.success) {
                     // Update local state immediately with the new image URL
                     const imageUrl = data.data.url;
-                    console.log('Setting image URL:', imageUrl, 'for type:', type); // Debug log
                     if (type === 'profile_picture') {
                         setProfileData(prev => ({ ...prev, profilePicture: imageUrl }));
                     } else {
@@ -233,7 +231,6 @@ export default function ProfileSettings({ auth }: PageProps) {
 
             if (response.ok) {
                 const data = await response.json();
-                console.log('Delete response:', data); // Debug log
                 if (data.success) {
                     // Update local state
                     if (type === 'profile_picture') {

@@ -7,6 +7,7 @@ use App\Mail\AnnouncementNotificationMail;
 use App\Mail\JobPostingNotificationMail;
 use App\Mail\SurveyNotificationMail;
 use App\Models\Announcement;
+use App\Models\Content;
 use App\Models\EmailLog;
 use App\Models\EmailPreference;
 use App\Models\EmailTemplate;
@@ -29,7 +30,7 @@ class EmailNotificationService
     /**
      * Send announcement notification to all eligible alumni
      */
-    public function sendAnnouncementNotification(Announcement $announcement): array
+    public function sendAnnouncementNotification(Announcement|Content $announcement): array
     {
         $recipients = $this->getAnnouncementRecipients($announcement);
         
@@ -39,7 +40,7 @@ class EmailNotificationService
     /**
      * Send job posting notification to all eligible alumni
      */
-    public function sendJobPostingNotification(JobPosting $jobPosting): array
+    public function sendJobPostingNotification(JobPosting|Content $jobPosting): array
     {
         $recipients = $this->getJobPostingRecipients($jobPosting);
         
@@ -59,7 +60,7 @@ class EmailNotificationService
     /**
      * Get recipients for announcement based on target type
      */
-    protected function getAnnouncementRecipients(Announcement $announcement): array
+    protected function getAnnouncementRecipients(Announcement|Content $announcement): array
     {
         $query = User::query()
             ->where('role', 'alumni')
@@ -91,7 +92,7 @@ class EmailNotificationService
     /**
      * Get recipients for job posting
      */
-    protected function getJobPostingRecipients(JobPosting $jobPosting): array
+    protected function getJobPostingRecipients(JobPosting|Content $jobPosting): array
     {
         return User::query()
             ->where('role', 'alumni')

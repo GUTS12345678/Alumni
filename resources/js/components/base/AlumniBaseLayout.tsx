@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BackToTop } from '@/components/ui/back-to-top';
 import { Head, router, Link, usePage } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { useSessionGuard } from '@/hooks/useSessionGuard';
@@ -14,6 +15,7 @@ import {
     Users,
     Heart,
     HelpCircle,
+    LifeBuoy,
     Menu,
     ChevronLeft,
     ChevronRight,
@@ -22,7 +24,8 @@ import {
     MessageCircle,
     Bell,
     UserCheck,
-    Layers
+    Layers,
+    MoreHorizontal
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import AppearanceToggleDropdown from '@/components/appearance-dropdown';
@@ -73,6 +76,7 @@ const alumniNavigation = [
         section: "Career & Networking",
         items: [
             { name: "Career Timeline", href: "/alumni/career", icon: TrendingUp },
+            { name: "Job Board", href: "/alumni/job-board", icon: Briefcase },
             { name: "Alumni Network", href: "/alumni/network", icon: Users },
             { name: "My Connections", href: "/alumni/connections", icon: UserCheck },
             { name: "Mentorship", href: "/alumni/mentorship", icon: Heart }
@@ -81,9 +85,18 @@ const alumniNavigation = [
     {
         section: "Resources",
         items: [
+            { name: "Support Tickets", href: "/alumni/support", icon: LifeBuoy },
             { name: "Help & Support", href: "/alumni/help", icon: HelpCircle }
         ]
     }
+];
+
+// Bottom navigation items for mobile (5 core actions)
+const mobileBottomNavItems = [
+    { name: "Home", href: "/alumni/dashboard", icon: LayoutDashboard },
+    { name: "Network", href: "/alumni/network", icon: Users },
+    { name: "Messages", href: "/alumni/messages", icon: MessageCircle },
+    { name: "Profile", href: "/alumni/profile", icon: User },
 ];
 
 const getLogoUrl = (path: string | null): string => {
@@ -325,15 +338,7 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
                     <header className="bg-white dark:bg-gray-900 border-b border-beige-200 dark:border-gray-700 px-4 py-3 flex-shrink-0 shadow-sm dark:shadow-gray-950/20">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                                    className="md:hidden text-gray-700 dark:text-gray-300 hover:text-maroon-700 dark:hover:text-maroon-300 hover:bg-beige-50 dark:hover:bg-gray-800"
-                                >
-                                    <Menu className="h-5 w-5" />
-                                </Button>
-                                <h1 className="ml-2 text-xl font-semibold text-maroon-800 dark:text-maroon-200">{title}</h1>
+                                <h1 className="ml-1 text-xl font-semibold text-maroon-800 dark:text-maroon-200">{title}</h1>
                             </div>
 
                             <div className="flex items-center space-x-4">
@@ -349,11 +354,65 @@ export default function AlumniBaseLayout({ children, title = "Alumni Portal" }: 
 
                     {/* Page Content - Scrollable */}
                     <main className="flex-1 overflow-y-auto bg-beige-50 dark:bg-gray-950 scrollbar-none">
-                        <div className="container mx-auto px-4 pt-6 pb-8 max-w-7xl min-h-full animate-fade-in-up">
+                        <div className="container mx-auto px-4 pt-6 pb-24 md:pb-8 max-w-7xl min-h-full animate-fade-in-up">
                             {children}
                         </div>
+                        <BackToTop />
                     </main>
                 </div>
+
+                {/* Mobile Bottom Navigation Bar */}
+                <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white dark:bg-gray-900 border-t border-beige-200 dark:border-gray-700 shadow-[0_-2px_10px_rgba(0,0,0,0.06)] dark:shadow-[0_-2px_10px_rgba(0,0,0,0.3)]">
+                    <div className="flex items-center justify-around h-16 px-1 max-w-md mx-auto">
+                        {mobileBottomNavItems.map((item) => {
+                            const Icon = item.icon;
+                            const isActive = isActivePath(item.href);
+                            return (
+                                <Link
+                                    key={item.name}
+                                    href={item.href}
+                                    className={cn(
+                                        "flex flex-col items-center justify-center flex-1 h-full pt-1 pb-1 relative transition-colors duration-200",
+                                        isActive
+                                            ? "text-maroon-700 dark:text-maroon-300"
+                                            : "text-gray-400 dark:text-gray-500 active:text-maroon-600 dark:active:text-maroon-400"
+                                    )}
+                                >
+                                    {/* Active indicator dot */}
+                                    {isActive && (
+                                        <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-maroon-600 dark:bg-maroon-400 rounded-b-full" />
+                                    )}
+                                    <Icon className={cn(
+                                        "h-5 w-5 mb-0.5",
+                                        isActive ? "stroke-[2.5]" : "stroke-[1.5]"
+                                    )} />
+                                    <span className={cn(
+                                        "text-[10px] leading-tight",
+                                        isActive ? "font-semibold" : "font-medium"
+                                    )}>
+                                        {item.name}
+                                    </span>
+                                </Link>
+                            );
+                        })}
+                        {/* More button — opens sidebar */}
+                        <button
+                            type="button"
+                            onClick={() => setMobileMenuOpen(true)}
+                            className={cn(
+                                "flex flex-col items-center justify-center flex-1 h-full pt-1 pb-1 transition-colors duration-200",
+                                mobileMenuOpen
+                                    ? "text-maroon-700 dark:text-maroon-300"
+                                    : "text-gray-400 dark:text-gray-500 active:text-maroon-600 dark:active:text-maroon-400"
+                            )}
+                        >
+                            <MoreHorizontal className="h-5 w-5 mb-0.5 stroke-[1.5]" />
+                            <span className="text-[10px] leading-tight font-medium">More</span>
+                        </button>
+                    </div>
+                    {/* iOS safe area padding */}
+                    <div className="h-[env(safe-area-inset-bottom)]" />
+                </nav>
             </div>
         </>
     );

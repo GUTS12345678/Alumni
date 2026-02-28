@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BackToTop } from '@/components/ui/back-to-top';
 import { Head, router } from '@inertiajs/react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -403,6 +404,7 @@ export default function ResetPassword({ email, token }: ResetPasswordProps) {
                     </div>
                 </div>
             </div>
+            <BackToTop />
         </>
     );
 }

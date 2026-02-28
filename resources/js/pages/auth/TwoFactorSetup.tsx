@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BackToTop } from '@/components/ui/back-to-top';
 import { Head, router } from '@inertiajs/react';
 import { Shield, CheckCircle, Copy, Key, Smartphone } from 'lucide-react';
 
@@ -103,9 +104,9 @@ export default function TwoFactorSetup({ secret, qrCodeUrl, email }: TwoFactorSe
                                 Scan this QR code with your authenticator app
                             </p>
                             <div className="inline-block bg-white p-4 rounded-lg shadow-sm">
-                                <img 
-                                    src={qrCodeUrl} 
-                                    alt="2FA QR Code" 
+                                <img
+                                    src={qrCodeUrl}
+                                    alt="2FA QR Code"
                                     className="w-64 h-64"
                                 />
                             </div>
@@ -157,9 +158,8 @@ export default function TwoFactorSetup({ secret, qrCodeUrl, email }: TwoFactorSe
                                 onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                                 placeholder="000000"
                                 maxLength={6}
-                                className={`w-full px-4 py-3 border rounded-lg text-center text-2xl font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-maroon-500 ${
-                                    error ? 'border-red-500' : 'border-gray-300'
-                                }`}
+                                className={`w-full px-4 py-3 border rounded-lg text-center text-2xl font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-maroon-500 ${error ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                 required
                                 autoFocus
                             />
@@ -198,6 +198,7 @@ export default function TwoFactorSetup({ secret, qrCodeUrl, email }: TwoFactorSe
                     </div>
                 </div>
             </div>
+            <BackToTop />
         </>
     );
 }

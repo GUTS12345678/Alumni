@@ -64,7 +64,10 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useAdminChannel } from '@/hooks/useAdminChannel';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { useExport } from '@/hooks/useExport';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { ExportProgressDialog } from '@/components/ExportProgressDialog';
+import { ScrollFadeIn } from '@/components/scroll-animations';
 
 // Helper function to get CSRF token
 const getCsrfToken = (): string => {
@@ -102,6 +105,7 @@ interface Department {
 export default function Announcements() {
     const { toast } = useToast();
     const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
+    const { exportData, cancelExport, ...exportState } = useExport();
     // Campus context for filtering
     const { selectedCampus } = useCampus();
 
@@ -199,45 +203,19 @@ export default function Announcements() {
     }, [search]);
 
     const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
-        try {
-            const params = new URLSearchParams();
-            params.append('format', format);
-            if (debouncedSearch) params.append('search', debouncedSearch);
-            if (statusFilter) params.append('is_published', statusFilter);
-            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
+        const params: Record<string, string> = {};
+        if (debouncedSearch) params.search = debouncedSearch;
+        if (statusFilter) params.is_published = statusFilter;
+        if (selectedCampus?.id) params.campus_id = selectedCampus.id.toString();
 
-            const response = await fetch(`/api/v1/announcements/admin/export?${params.toString()}`, {
-                headers: {
-                    'Accept': 'application/octet-stream',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                credentials: 'include',
-            });
-
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                const extension = format === 'excel' ? 'xlsx' : format;
-                a.download = `announcements_${new Date().toISOString().split('T')[0]}.${extension}`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-
-                toast({
-                    title: 'Export Successful',
-                    description: `Announcements exported as ${format.toUpperCase()}.`,
-                });
-            } else {
-                console.error('Export failed:', response.statusText);
-                alert('Export failed. Please try again.');
-            }
-        } catch (error) {
-            console.error('Export error:', error);
-            alert('Export failed. Please try again.');
-        }
+        exportData({
+            url: '/api/v1/announcements/admin/export',
+            params,
+            filename: 'announcements',
+            format,
+            onSuccess: (f) => toast({ title: 'Export Successful', description: `Announcements exported as ${f.toUpperCase()}.` }),
+            onError: () => toast({ title: 'Export Failed', description: 'Failed to export announcements.', variant: 'destructive' }),
+        });
     };
 
     useEffect(() => {
@@ -512,216 +490,222 @@ export default function Announcements() {
             <Head title="Announcements Management" />
 
             <div className="space-y-6">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold flex items-center gap-2">
-                            <Bell className="h-6 w-6" />
-                            Announcements
-                        </h1>
-                        <p className="text-muted-foreground">
-                            Manage announcements and broadcasts to alumni
-                        </p>
+                <ScrollFadeIn>
+                    {/* Header */}
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div>
+                            <h1 className="text-2xl font-bold flex items-center gap-2">
+                                <Bell className="h-6 w-6" />
+                                Announcements
+                            </h1>
+                            <p className="text-muted-foreground">
+                                Manage announcements and broadcasts to alumni
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline">
+                                        <Download className="h-4 w-4 mr-2" />
+                                        Export
+                                        <ChevronDown className="h-4 w-4 ml-2" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleExport('csv')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as CSV
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExport('excel')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as Excel
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as PDF
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            <Button onClick={() => openForm()}>
+                                <Plus className="h-4 w-4 mr-2" />
+                                New Announcement
+                            </Button>
+                        </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline">
-                                    <Download className="h-4 w-4 mr-2" />
-                                    Export
-                                    <ChevronDown className="h-4 w-4 ml-2" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleExport('csv')}>
-                                    <FileText className="h-4 w-4 mr-2" />
-                                    Export as CSV
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleExport('excel')}>
-                                    <FileText className="h-4 w-4 mr-2" />
-                                    Export as Excel
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleExport('pdf')}>
-                                    <FileText className="h-4 w-4 mr-2" />
-                                    Export as PDF
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                        <Button onClick={() => openForm()}>
-                            <Plus className="h-4 w-4 mr-2" />
-                            New Announcement
-                        </Button>
+                </ScrollFadeIn>
+
+                <ScrollFadeIn delay={100}>
+                    {/* Filters */}
+                    <Card>
+                        <CardContent className="pt-6">
+                            <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Search announcements..."
+                                        value={search}
+                                        onChange={(e) => setSearch(e.target.value)}
+                                        className="pl-10"
+                                    />
+                                </div>
+                                <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}>
+                                    <SelectTrigger className="w-40">
+                                        <SelectValue placeholder="All Status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Status</SelectItem>
+                                        <SelectItem value="true">Published</SelectItem>
+                                        <SelectItem value="false">Draft</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <Button type="submit">Search</Button>
+                            </form>
+                        </CardContent>
+                    </Card>
+                </ScrollFadeIn>
+
+                <ScrollFadeIn delay={100}>
+                    {/* Announcements Count */}
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-maroon-800 dark:text-gray-200">
+                            {loading ? 'Loading...' : `${announcements.length} Announcements`}
+                        </h2>
                     </div>
-                </div>
 
-                {/* Filters */}
-                <Card>
-                    <CardContent className="pt-6">
-                        <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4">
-                            <div className="relative flex-1">
-                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    placeholder="Search announcements..."
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                    className="pl-10"
-                                />
-                            </div>
-                            <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}>
-                                <SelectTrigger className="w-40">
-                                    <SelectValue placeholder="All Status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Status</SelectItem>
-                                    <SelectItem value="true">Published</SelectItem>
-                                    <SelectItem value="false">Draft</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Button type="submit">Search</Button>
-                        </form>
-                    </CardContent>
-                </Card>
-
-                {/* Announcements Count */}
-                <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-maroon-800 dark:text-gray-200">
-                        {loading ? 'Loading...' : `${announcements.length} Announcements`}
-                    </h2>
-                </div>
-
-                {/* Announcements Grid */}
-                {loading ? (
-                    <div className="flex items-center justify-center h-64">
-                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                    </div>
-                ) : announcements.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-64 text-muted-foreground bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700">
-                        <Bell className="h-16 w-16 mb-4 text-gray-300" />
-                        <h3 className="text-lg font-medium">No announcements found</h3>
-                        <p className="text-sm">Create your first announcement to get started</p>
-                        <Button variant="link" onClick={() => openForm()} className="mt-2 text-maroon-600 dark:text-maroon-400">
-                            Create announcement
-                        </Button>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {announcements.map((announcement) => (
-                            <div
-                                key={announcement.id}
-                                onClick={() => setViewingAnnouncement(announcement)}
-                                className="group bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1 hover:border-maroon-300"
-                            >
-                                {/* Image Section */}
-                                {announcement.featured_image_url ? (
-                                    <div className="h-48 overflow-hidden relative">
-                                        <img
-                                            src={announcement.featured_image_url}
-                                            alt={announcement.title}
-                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                        />
-                                        <div className="absolute top-3 left-3">
-                                            {getPriorityBadge(announcement.priority)}
+                    {/* Announcements Grid */}
+                    {loading ? (
+                        <div className="flex items-center justify-center h-64">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : announcements.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-64 text-muted-foreground bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700">
+                            <Bell className="h-16 w-16 mb-4 text-gray-300" />
+                            <h3 className="text-lg font-medium">No announcements found</h3>
+                            <p className="text-sm">Create your first announcement to get started</p>
+                            <Button variant="link" onClick={() => openForm()} className="mt-2 text-maroon-600 dark:text-maroon-400">
+                                Create announcement
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {announcements.map((announcement) => (
+                                <div
+                                    key={announcement.id}
+                                    onClick={() => setViewingAnnouncement(announcement)}
+                                    className="group bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1 hover:border-maroon-300"
+                                >
+                                    {/* Image Section */}
+                                    {announcement.featured_image_url ? (
+                                        <div className="h-48 overflow-hidden relative">
+                                            <img
+                                                src={announcement.featured_image_url}
+                                                alt={announcement.title}
+                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                            />
+                                            <div className="absolute top-3 left-3">
+                                                {getPriorityBadge(announcement.priority)}
+                                            </div>
+                                            <div className="absolute top-3 right-3">
+                                                <Badge variant={announcement.is_published ? 'default' : 'secondary'} className="text-xs">
+                                                    {announcement.is_published ? 'Published' : 'Draft'}
+                                                </Badge>
+                                            </div>
                                         </div>
-                                        <div className="absolute top-3 right-3">
-                                            <Badge variant={announcement.is_published ? 'default' : 'secondary'} className="text-xs">
-                                                {announcement.is_published ? 'Published' : 'Draft'}
-                                            </Badge>
+                                    ) : (
+                                        <div className="h-48 bg-gradient-to-br from-maroon-50 to-maroon-100 dark:from-maroon-900/30 dark:to-maroon-800/30 flex items-center justify-center relative">
+                                            <Bell className="w-16 h-16 text-maroon-300" />
+                                            <div className="absolute top-3 left-3">
+                                                {getPriorityBadge(announcement.priority)}
+                                            </div>
+                                            <div className="absolute top-3 right-3">
+                                                <Badge variant={announcement.is_published ? 'default' : 'secondary'} className="text-xs">
+                                                    {announcement.is_published ? 'Published' : 'Draft'}
+                                                </Badge>
+                                            </div>
                                         </div>
-                                    </div>
-                                ) : (
-                                    <div className="h-48 bg-gradient-to-br from-maroon-50 to-maroon-100 dark:from-maroon-900/30 dark:to-maroon-800/30 flex items-center justify-center relative">
-                                        <Bell className="w-16 h-16 text-maroon-300" />
-                                        <div className="absolute top-3 left-3">
-                                            {getPriorityBadge(announcement.priority)}
+                                    )}
+
+                                    {/* Content Section */}
+                                    <div className="p-5">
+                                        <h3 className="text-lg font-bold text-maroon-900 dark:text-gray-100 mb-1 group-hover:text-maroon-700 dark:group-hover:text-gray-300 transition-colors line-clamp-1">
+                                            {announcement.title}
+                                        </h3>
+                                        <p className="text-maroon-600 dark:text-gray-400 text-sm font-medium mb-2">
+                                            By {announcement.created_by?.name || 'Admin'}
+                                        </p>
+
+                                        {/* Target & Info */}
+                                        <div className="flex items-center text-gray-500 dark:text-gray-400 text-sm mb-3">
+                                            <Users className="w-4 h-4 mr-1" />
+                                            <span className="line-clamp-1">{getTargetLabel(announcement)}</span>
                                         </div>
-                                        <div className="absolute top-3 right-3">
-                                            <Badge variant={announcement.is_published ? 'default' : 'secondary'} className="text-xs">
-                                                {announcement.is_published ? 'Published' : 'Draft'}
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                )}
 
-                                {/* Content Section */}
-                                <div className="p-5">
-                                    <h3 className="text-lg font-bold text-maroon-900 dark:text-gray-100 mb-1 group-hover:text-maroon-700 dark:group-hover:text-gray-300 transition-colors line-clamp-1">
-                                        {announcement.title}
-                                    </h3>
-                                    <p className="text-maroon-600 dark:text-gray-400 text-sm font-medium mb-2">
-                                        By {announcement.created_by?.name || 'Admin'}
-                                    </p>
+                                        {/* Content Preview */}
+                                        <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2 mb-4">
+                                            {announcement.content || (announcement.pages?.[0]?.content ? announcement.pages[0].content.replace(/<[^>]*>/g, '') : 'No content')}
+                                        </p>
 
-                                    {/* Target & Info */}
-                                    <div className="flex items-center text-gray-500 dark:text-gray-400 text-sm mb-3">
-                                        <Users className="w-4 h-4 mr-1" />
-                                        <span className="line-clamp-1">{getTargetLabel(announcement)}</span>
-                                    </div>
-
-                                    {/* Content Preview */}
-                                    <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2 mb-4">
-                                        {announcement.content || (announcement.pages?.[0]?.content ? announcement.pages[0].content.replace(/<[^>]*>/g, '') : 'No content')}
-                                    </p>
-
-                                    {/* Footer */}
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                                            <span className="flex items-center">
-                                                <Calendar className="w-3 h-3 mr-1" />
-                                                {formatDate(announcement.created_at).split(',')[0]}
-                                            </span>
-                                            <span className="flex items-center">
-                                                <Eye className="w-3 h-3 mr-1" />
-                                                {announcement.reads_count || 0}
-                                            </span>
-                                            {announcement.show_on_landing && (
+                                        {/* Footer */}
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                                                 <span className="flex items-center">
-                                                    <Globe className="w-3 h-3 mr-1" />
-                                                    Landing
+                                                    <Calendar className="w-3 h-3 mr-1" />
+                                                    {formatDate(announcement.created_at).split(',')[0]}
                                                 </span>
-                                            )}
+                                                <span className="flex items-center">
+                                                    <Eye className="w-3 h-3 mr-1" />
+                                                    {announcement.reads_count || 0}
+                                                </span>
+                                                {announcement.show_on_landing && (
+                                                    <span className="flex items-center">
+                                                        <Globe className="w-3 h-3 mr-1" />
+                                                        Landing
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <span className="flex items-center text-maroon-600 dark:text-gray-400 text-sm font-medium group-hover:text-maroon-800 dark:group-hover:text-gray-200">
+                                                View
+                                                <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                                            </span>
                                         </div>
-                                        <span className="flex items-center text-maroon-600 dark:text-gray-400 text-sm font-medium group-hover:text-maroon-800 dark:group-hover:text-gray-200">
-                                            View
-                                            <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                                        </span>
+                                    </div>
+
+                                    {/* Quick Actions Bar */}
+                                    <div className="border-t border-beige-200 dark:border-gray-700 px-5 py-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={(e) => { e.stopPropagation(); openForm(announcement); }}
+                                            className="h-7 text-xs"
+                                        >
+                                            <Edit className="h-3 w-3 mr-1" /> Edit
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={(e) => { e.stopPropagation(); togglePublish(announcement); }}
+                                            className="h-7 text-xs"
+                                        >
+                                            {announcement.is_published ? (
+                                                <><Clock className="h-3 w-3 mr-1" /> Unpublish</>
+                                            ) : (
+                                                <><Send className="h-3 w-3 mr-1" /> Publish</>
+                                            )}
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={(e) => { e.stopPropagation(); deleteAnnouncement(announcement); }}
+                                            className="h-7 text-xs text-destructive hover:text-destructive"
+                                        >
+                                            <Trash2 className="h-3 w-3 mr-1" /> Delete
+                                        </Button>
                                     </div>
                                 </div>
-
-                                {/* Quick Actions Bar */}
-                                <div className="border-t border-beige-200 dark:border-gray-700 px-5 py-2 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={(e) => { e.stopPropagation(); openForm(announcement); }}
-                                        className="h-7 text-xs"
-                                    >
-                                        <Edit className="h-3 w-3 mr-1" /> Edit
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={(e) => { e.stopPropagation(); togglePublish(announcement); }}
-                                        className="h-7 text-xs"
-                                    >
-                                        {announcement.is_published ? (
-                                            <><Clock className="h-3 w-3 mr-1" /> Unpublish</>
-                                        ) : (
-                                            <><Send className="h-3 w-3 mr-1" /> Publish</>
-                                        )}
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={(e) => { e.stopPropagation(); deleteAnnouncement(announcement); }}
-                                        className="h-7 text-xs text-destructive hover:text-destructive"
-                                    >
-                                        <Trash2 className="h-3 w-3 mr-1" /> Delete
-                                    </Button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                            ))}
+                        </div>
+                    )}
+                </ScrollFadeIn>
             </div>
 
             {/* Announcement Form Dialog */}
@@ -1083,6 +1067,7 @@ export default function Announcements() {
                 </DialogContent>
             </Dialog>
             <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
+            <ExportProgressDialog {...exportState} onCancel={cancelExport} />
         </AdminBaseLayout>
     );
 }

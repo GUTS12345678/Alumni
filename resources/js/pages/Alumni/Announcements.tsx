@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Head, usePage } from '@inertiajs/react';
+import { sanitizeHtml } from '@/lib/sanitize';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +38,7 @@ import {
 } from '@/components/ui/select';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
 import { cn } from '@/lib/utils';
+import { ScrollFadeIn } from '@/components/scroll-animations';
 import { PageProps as InertiaPageProps } from '@inertiajs/core';
 
 // Helper function to get CSRF token
@@ -68,6 +70,7 @@ interface PageProps extends InertiaPageProps {
             name: string;
         };
     };
+    [key: string]: unknown;
 }
 
 export default function Announcements() {
@@ -110,16 +113,22 @@ export default function Announcements() {
         fetchAnnouncements();
         fetchUnreadCount();
 
-        // Set up real-time listener
-        if (window.Echo && auth.user) {
+        // Set up real-time listener (lazy-loads Echo/Pusher)
+        let cancelled = false;
+        (async () => {
+            if (!auth.user) return;
+            try { await import('@/echo'); } catch { return; }
+            if (cancelled || !window.Echo) return;
+
             window.Echo.private('announcements.all')
                 .listen('.announcement.published', (e: { announcement: Announcement }) => {
                     setAnnouncements(prev => [e.announcement, ...prev]);
                     setUnreadCount(prev => prev + 1);
                 });
-        }
+        })();
 
         return () => {
+            cancelled = true;
             if (window.Echo) {
                 window.Echo.leave('announcements.all');
             }
@@ -261,135 +270,139 @@ export default function Announcements() {
             <Head title="Announcements" />
 
             <div className="space-y-6">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold flex items-center gap-2 text-maroon-800 dark:text-maroon-200">
-                            <Megaphone className="h-6 w-6 text-maroon-600 dark:text-maroon-400" />
-                            Announcements
-                            {unreadCount > 0 && (
-                                <Badge variant="destructive">{unreadCount} new</Badge>
-                            )}
-                        </h1>
-                        <p className="text-gray-600 dark:text-gray-400">
-                            Stay updated with the latest news and announcements
-                        </p>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
-                        <div className="relative flex-1 sm:flex-none">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                            <Input
-                                placeholder="Search announcements..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9 w-full sm:w-64 dark:bg-gray-800 dark:border-gray-700"
-                            />
+                <ScrollFadeIn>
+                    {/* Header */}
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div>
+                            <h1 className="text-2xl font-bold flex items-center gap-2 text-maroon-800 dark:text-maroon-200">
+                                <Megaphone className="h-6 w-6 text-maroon-600 dark:text-maroon-400" />
+                                Announcements
+                                {unreadCount > 0 && (
+                                    <Badge variant="destructive">{unreadCount} new</Badge>
+                                )}
+                            </h1>
+                            <p className="text-gray-600 dark:text-gray-400">
+                                Stay updated with the latest news and announcements
+                            </p>
                         </div>
-                        <Select value={filter} onValueChange={(v: 'all' | 'unread') => setFilter(v)}>
-                            <SelectTrigger className="w-full sm:w-32 dark:bg-gray-800 dark:border-gray-700">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All</SelectItem>
-                                <SelectItem value="unread">Unread</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </div>
 
-                {/* Announcements Grid */}
-                {loading ? (
-                    <div className="flex items-center justify-center h-64">
-                        <Loader2 className="h-8 w-8 animate-spin text-maroon-600 dark:text-maroon-400" />
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
+                            <div className="relative flex-1 sm:flex-none">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <Input
+                                    placeholder="Search announcements..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="pl-9 w-full sm:w-64 dark:bg-gray-800 dark:border-gray-700"
+                                />
+                            </div>
+                            <Select value={filter} onValueChange={(v: 'all' | 'unread') => setFilter(v)}>
+                                <SelectTrigger className="w-full sm:w-32 dark:bg-gray-800 dark:border-gray-700">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All</SelectItem>
+                                    <SelectItem value="unread">Unread</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
-                ) : filteredAnnouncements.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700">
-                        <Megaphone className="h-16 w-16 mb-4 text-gray-300 dark:text-gray-600" />
-                        <p className="text-lg font-medium">No announcements</p>
-                        <p className="text-sm">
-                            {filter === 'unread'
-                                ? "You've read all announcements"
-                                : 'There are no announcements yet'}
-                        </p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-                        {filteredAnnouncements.map((announcement, index) => (
-                            <div
-                                key={announcement.id}
-                                onClick={() => viewAnnouncement(announcement, index)}
-                                className={cn(
-                                    'group bg-white dark:bg-gray-800 rounded-2xl border overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1',
-                                    !announcement.is_read
-                                        ? 'border-maroon-300 dark:border-maroon-600 ring-2 ring-maroon-100 dark:ring-maroon-900'
-                                        : 'border-beige-200 dark:border-gray-700'
-                                )}
-                            >
-                                {/* Image or Placeholder */}
-                                {announcement.featured_image ? (
-                                    <div className="h-48 overflow-hidden">
-                                        <img
-                                            src={announcement.featured_image}
-                                            alt={announcement.title}
-                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="h-48 bg-gradient-to-br from-maroon-100 to-maroon-200 dark:from-maroon-900/50 dark:to-maroon-800/30 flex items-center justify-center">
-                                        <Megaphone className="w-16 h-16 text-maroon-400 dark:text-maroon-500" />
-                                    </div>
-                                )}
+                </ScrollFadeIn>
 
-                                <div className="p-6">
-                                    {/* Priority and Date */}
-                                    <div className="flex items-center justify-between mb-3">
-                                        <span className={cn('text-xs px-2 py-1 rounded-full border', getPriorityColor(announcement.priority))}>
-                                            {announcement.priority.charAt(0).toUpperCase() + announcement.priority.slice(1)}
-                                        </span>
-                                        <div className="flex items-center gap-2">
-                                            {!announcement.is_read && (
-                                                <span className="flex items-center text-xs text-maroon-600 dark:text-maroon-400 font-medium">
-                                                    <Circle className="h-2 w-2 fill-current mr-1" />
-                                                    New
+                <ScrollFadeIn delay={100}>
+                    {/* Announcements Grid */}
+                    {loading ? (
+                        <div className="flex items-center justify-center h-64">
+                            <Loader2 className="h-8 w-8 animate-spin text-maroon-600 dark:text-maroon-400" />
+                        </div>
+                    ) : filteredAnnouncements.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 rounded-2xl border border-beige-200 dark:border-gray-700">
+                            <Megaphone className="h-16 w-16 mb-4 text-gray-300 dark:text-gray-600" />
+                            <p className="text-lg font-medium">No announcements</p>
+                            <p className="text-sm">
+                                {filter === 'unread'
+                                    ? "You've read all announcements"
+                                    : 'There are no announcements yet'}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                            {filteredAnnouncements.map((announcement, index) => (
+                                <div
+                                    key={announcement.id}
+                                    onClick={() => viewAnnouncement(announcement, index)}
+                                    className={cn(
+                                        'group bg-white dark:bg-gray-800 rounded-2xl border overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:scale-[1.02] hover:-translate-y-1',
+                                        !announcement.is_read
+                                            ? 'border-maroon-300 dark:border-maroon-600 ring-2 ring-maroon-100 dark:ring-maroon-900'
+                                            : 'border-beige-200 dark:border-gray-700'
+                                    )}
+                                >
+                                    {/* Image or Placeholder */}
+                                    {announcement.featured_image ? (
+                                        <div className="h-48 overflow-hidden">
+                                            <img
+                                                src={announcement.featured_image}
+                                                alt={announcement.title}
+                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="h-48 bg-gradient-to-br from-maroon-100 to-maroon-200 dark:from-maroon-900/50 dark:to-maroon-800/30 flex items-center justify-center">
+                                            <Megaphone className="w-16 h-16 text-maroon-400 dark:text-maroon-500" />
+                                        </div>
+                                    )}
+
+                                    <div className="p-6">
+                                        {/* Priority and Date */}
+                                        <div className="flex items-center justify-between mb-3">
+                                            <span className={cn('text-xs px-2 py-1 rounded-full border', getPriorityColor(announcement.priority))}>
+                                                {announcement.priority.charAt(0).toUpperCase() + announcement.priority.slice(1)}
+                                            </span>
+                                            <div className="flex items-center gap-2">
+                                                {!announcement.is_read && (
+                                                    <span className="flex items-center text-xs text-maroon-600 dark:text-maroon-400 font-medium">
+                                                        <Circle className="h-2 w-2 fill-current mr-1" />
+                                                        New
+                                                    </span>
+                                                )}
+                                                <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center">
+                                                    <Calendar className="w-3 h-3 mr-1" />
+                                                    {formatDate(announcement.created_at).split(',')[0]}
                                                 </span>
-                                            )}
-                                            <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center">
-                                                <Calendar className="w-3 h-3 mr-1" />
-                                                {formatDate(announcement.created_at).split(',')[0]}
+                                            </div>
+                                        </div>
+
+                                        {/* Title */}
+                                        <h3 className={cn(
+                                            'text-xl text-maroon-900 dark:text-maroon-100 mb-2 group-hover:text-maroon-700 dark:group-hover:text-maroon-300 transition-colors line-clamp-2',
+                                            !announcement.is_read ? 'font-bold' : 'font-semibold'
+                                        )}>
+                                            {announcement.title}
+                                        </h3>
+
+                                        {/* Content Preview */}
+                                        <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-3">
+                                            {announcement.content.replace(/<[^>]*>/g, '')}
+                                        </p>
+
+                                        {/* Footer */}
+                                        <div className="mt-4 flex items-center justify-between">
+                                            <span className="flex items-center text-xs text-gray-500 dark:text-gray-400">
+                                                <User className="h-3 w-3 mr-1" />
+                                                {announcement.created_by?.name || 'Admin'}
+                                            </span>
+                                            <span className="flex items-center text-maroon-600 dark:text-maroon-400 text-sm font-medium group-hover:text-maroon-800 dark:group-hover:text-maroon-300">
+                                                Read more
+                                                <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
                                             </span>
                                         </div>
                                     </div>
-
-                                    {/* Title */}
-                                    <h3 className={cn(
-                                        'text-xl text-maroon-900 dark:text-maroon-100 mb-2 group-hover:text-maroon-700 dark:group-hover:text-maroon-300 transition-colors line-clamp-2',
-                                        !announcement.is_read ? 'font-bold' : 'font-semibold'
-                                    )}>
-                                        {announcement.title}
-                                    </h3>
-
-                                    {/* Content Preview */}
-                                    <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-3">
-                                        {announcement.content.replace(/<[^>]*>/g, '')}
-                                    </p>
-
-                                    {/* Footer */}
-                                    <div className="mt-4 flex items-center justify-between">
-                                        <span className="flex items-center text-xs text-gray-500 dark:text-gray-400">
-                                            <User className="h-3 w-3 mr-1" />
-                                            {announcement.created_by?.name || 'Admin'}
-                                        </span>
-                                        <span className="flex items-center text-maroon-600 dark:text-maroon-400 text-sm font-medium group-hover:text-maroon-800 dark:group-hover:text-maroon-300">
-                                            Read more
-                                            <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
-                                        </span>
-                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                            ))}
+                        </div>
+                    )}
+                </ScrollFadeIn>
             </div>
 
             {/* Announcement Detail Dialog */}
@@ -444,7 +457,7 @@ export default function Announcements() {
                                     <div className="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300">
                                         <div
                                             className="whitespace-pre-wrap"
-                                            dangerouslySetInnerHTML={{ __html: selectedAnnouncement.content }}
+                                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedAnnouncement.content) }}
                                         />
                                     </div>
                                 )}

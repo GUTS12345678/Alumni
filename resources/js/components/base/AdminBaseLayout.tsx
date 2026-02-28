@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { BackToTop } from '@/components/ui/back-to-top';
 import { Head, Link } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { useSessionGuard } from '@/hooks/useSessionGuard';
@@ -34,7 +35,9 @@ import {
     MessageCircle,
     Archive,
     Layers,
-    History
+    History,
+    Globe,
+    MoreHorizontal
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -90,6 +93,9 @@ const adminNavigation = [
         section: "Content & Communication",
         items: [
             { name: "Content Management", href: "/admin/content", icon: Layers },
+            { name: "Announcements", href: "/admin/announcements", icon: Bell },
+            { name: "Job Board", href: "/admin/job-board", icon: Briefcase },
+            { name: "Landing Page", href: "/admin/landing-content", icon: Globe },
             { name: "Messages", href: "/admin/messages", icon: MessageCircle },
             { name: "Message Archives", href: "/admin/message-archives", icon: History }
         ]
@@ -109,7 +115,6 @@ const adminNavigation = [
             { name: "Departments", href: "/super-admin/departments", icon: Building },
             { name: "Department Settings", href: "/super-admin/department-settings", icon: Palette },
             { name: "Course Management", href: "/super-admin/courses", icon: BookOpen },
-            { name: "Permission Matrix", href: "/super-admin/permissions", icon: Lock },
             { name: "System Settings", href: "/super-admin/settings", icon: Settings }
         ],
         requiredRole: 'super_admin' // Only show to super admins
@@ -119,9 +124,18 @@ const adminNavigation = [
         items: [
             { name: "Email Templates", href: "/admin/email-templates", icon: Mail },
             { name: "Archive", href: "/admin/archive", icon: Archive },
-            { name: "Backup & Export", href: "/admin/backup", icon: Download }
+            { name: "Backup & Export", href: "/admin/backup", icon: Download },
+            { name: "System Monitor", href: "/super-admin/metrics", icon: Activity }
         ]
     }
+];
+
+// Bottom navigation items for mobile (5 core admin actions)
+const adminBottomNavItems = [
+    { name: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
+    { name: "Alumni", href: "/admin/alumni", icon: Users },
+    { name: "Surveys", href: "/admin/surveys", icon: ClipboardList },
+    { name: "Content", href: "/admin/content", icon: Layers },
 ];
 
 const getLogoUrl = (path: string | null): string => {
@@ -139,7 +153,7 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [currentUser, setCurrentUser] = useState<User | null>(user || null);
-    const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+    const [isCheckingAuth, setIsCheckingAuth] = useState(!user);
     const [appearanceSettings, setAppearanceSettings] = useState<{
         logoLight: string | null;
         logoDark: string | null;
@@ -649,15 +663,7 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
                     <header className="bg-white dark:bg-gray-900 border-b border-beige-200 dark:border-gray-800 px-4 py-3 relative z-10 flex-shrink-0">
                         <div className="flex items-center justify-between min-w-0">
                             <div className="flex items-center min-w-0 flex-1">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="md:hidden text-gray-700 dark:text-gray-200 hover:text-maroon-700 dark:hover:text-maroon-300 hover:bg-beige-50 dark:hover:bg-gray-800 mr-2 flex-shrink-0"
-                                    onClick={() => setMobileMenuOpen(true)}
-                                >
-                                    <Menu className="h-5 w-5" />
-                                </Button>
-                                <h1 className="text-lg md:text-xl font-semibold text-maroon-800 dark:text-maroon-300 truncate min-w-0">{title}</h1>
+                                <h1 className="text-lg md:text-xl font-semibold text-maroon-800 dark:text-maroon-300 truncate min-w-0 ml-1 md:ml-0">{title}</h1>
                             </div>
 
                             <div className="flex items-center space-x-2 md:space-x-4 flex-shrink-0 ml-4">
@@ -726,11 +732,64 @@ export default function AdminBaseLayout({ children, title = "Admin Panel", user 
 
                     {/* Page Content - Scrollable content area */}
                     <main className="bg-beige-50 dark:bg-gray-950 flex-1 overflow-y-auto">
-                        <div className="px-4 py-6 max-w-full animate-fade-in-up">
+                        <div className="px-4 py-6 pb-24 md:pb-6 max-w-full animate-fade-in-up">
                             {children}
                         </div>
+                        <BackToTop />
                     </main>
                 </div>
+
+                {/* Mobile Bottom Navigation Bar */}
+                <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white dark:bg-gray-900 border-t border-beige-200 dark:border-gray-700 shadow-[0_-2px_10px_rgba(0,0,0,0.06)] dark:shadow-[0_-2px_10px_rgba(0,0,0,0.3)]">
+                    <div className="flex items-center justify-around h-16 px-1 max-w-md mx-auto">
+                        {adminBottomNavItems.map((item) => {
+                            const Icon = item.icon;
+                            const isActive = isActivePath(item.href);
+                            return (
+                                <Link
+                                    key={item.name}
+                                    href={item.href}
+                                    className={cn(
+                                        "flex flex-col items-center justify-center flex-1 h-full pt-1 pb-1 relative transition-colors duration-200",
+                                        isActive
+                                            ? "text-maroon-700 dark:text-maroon-300"
+                                            : "text-gray-400 dark:text-gray-500 active:text-maroon-600 dark:active:text-maroon-400"
+                                    )}
+                                >
+                                    {isActive && (
+                                        <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-maroon-600 dark:bg-maroon-400 rounded-b-full" />
+                                    )}
+                                    <Icon className={cn(
+                                        "h-5 w-5 mb-0.5",
+                                        isActive ? "stroke-[2.5]" : "stroke-[1.5]"
+                                    )} />
+                                    <span className={cn(
+                                        "text-[10px] leading-tight",
+                                        isActive ? "font-semibold" : "font-medium"
+                                    )}>
+                                        {item.name}
+                                    </span>
+                                </Link>
+                            );
+                        })}
+                        {/* More button — opens sidebar */}
+                        <button
+                            type="button"
+                            onClick={() => setMobileMenuOpen(true)}
+                            className={cn(
+                                "flex flex-col items-center justify-center flex-1 h-full pt-1 pb-1 transition-colors duration-200",
+                                mobileMenuOpen
+                                    ? "text-maroon-700 dark:text-maroon-300"
+                                    : "text-gray-400 dark:text-gray-500 active:text-maroon-600 dark:active:text-maroon-400"
+                            )}
+                        >
+                            <MoreHorizontal className="h-5 w-5 mb-0.5 stroke-[1.5]" />
+                            <span className="text-[10px] leading-tight font-medium">More</span>
+                        </button>
+                    </div>
+                    {/* iOS safe area padding */}
+                    <div className="h-[env(safe-area-inset-bottom)]" />
+                </nav>
             </div>
         </>
     );

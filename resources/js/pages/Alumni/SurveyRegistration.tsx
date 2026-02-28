@@ -1,24 +1,26 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Head, Link } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { GraduationCap, ArrowLeft, ArrowRight, User, Briefcase, Heart, Lock, CheckCircle, AlertCircle, Eye, EyeOff, Shield, Sparkles, Building, Mail, RefreshCw, X, Award, School } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
 import axios from 'axios';
+import {
+    GraduationCap, ArrowLeft, ArrowRight, User, Briefcase, Heart, Lock,
+    CheckCircle, AlertCircle, Eye, EyeOff, Shield, Sparkles, Building,
+    Mail, RefreshCw, X, Award, School, ChevronDown, Loader2, Check,
+    Phone, MapPin, Calendar, Hash, FileText
+} from 'lucide-react';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface SurveyData {
-    // Data Privacy Consent
     dataPrivacyConsent: boolean;
     dataPrivacyConsentDate: string;
-
-    // Personal Information
     firstName: string;
     lastName: string;
-    maidenName: string; // Pre-marital name for married females
+    maidenName: string;
     age: string;
     gender: string;
     placeOfBirth: string;
@@ -29,8 +31,6 @@ interface SurveyData {
     telNo: string;
     mobileNo: string;
     email: string;
-
-    // School Information
     campusId: string;
     campus: string;
     campusOther: string;
@@ -41,376 +41,85 @@ interface SurveyData {
     yearGraduated: string;
     enrollmentYear: string;
     honorsAwards: string;
-
-    // Eligibility / Government Examinations
-    examinations: Array<{
-        name: string;
-        place: string;
-        dateTaken: string;
-        rating: string;
-    }>;
-
-    // Employment
-    presentlyEmployed: string; // Yes or No
-    employmentLocation: string; // Local or Abroad/Foreign
+    examinations: Array<{ name: string; place: string; dateTaken: string; rating: string }>;
+    presentlyEmployed: string;
+    employmentLocation: string;
     notEmployedReason: string;
     companyName: string;
     companyAddress: string;
     presentPosition: string;
     dateHired: string;
     yearsOfService: string;
-    jobAlignedToCourse: string; // Yes or No
+    jobAlignedToCourse: string;
     averageMonthlyIncome: string;
-    employmentStatus: string; // Permanent, Temporary, etc.
-    jobLevelPosition: string; // Clerical, Supervisory, etc.
-    majorLineOfBusiness: string; // Education, Business, etc.
+    employmentStatus: string;
+    jobLevelPosition: string;
+    majorLineOfBusiness: string;
     businessOther: string;
-
-    // Achievement / Award Received
     achievements: string;
-
-    // What I Want My EARIST Family to Know About Me
     aboutMe: string;
-
-    // Account Setup
     studentId: string;
     password: string;
     confirmPassword: string;
 }
 
-interface Campus {
-    id: number;
-    name: string;
-    code: string;
-    display_name: string;
-}
+interface Campus { id: number; name: string; code: string; display_name: string; }
+interface Department { id: number; name: string; code: string; campus_id?: number; }
+interface Course { id: number; name: string; code: string; department_id: number; }
 
-interface Department {
-    id: number;
-    name: string;
-    code: string;
-    campus_id?: number;
-}
+// ─── Step definitions ────────────────────────────────────────────────────────
 
-interface Course {
-    id: number;
-    name: string;
-    code: string;
-    department_id: number;
-}
-
-interface Question {
-    key: string;
-    label: string;
-    type: string;
-    required: boolean;
-    options?: string[] | { value: string; label: string }[];
-    step?: string;
-    min?: string;
-    max?: string;
-}
-
-const sections = [
-    {
-        id: 'privacy',
-        title: 'Data Privacy Consent',
-        description: 'Your privacy rights and data protection',
-        icon: Shield,
-        questions: [
-            { key: 'dataPrivacyConsent', label: 'Data Privacy Consent', type: 'privacy-consent', required: true }
-        ]
-    },
-    {
-        id: 'personal',
-        title: 'Personal Information',
-        description: 'Tell us about yourself',
-        icon: User,
-        questions: [
-            { key: 'firstName', label: 'Name (First Name)', type: 'text', required: true },
-            { key: 'lastName', label: 'Last Name', type: 'text', required: true },
-            { key: 'maidenName', label: 'Maiden Name / Pre-Marital Name (for married females)', type: 'text', required: false },
-            { key: 'age', label: 'Age', type: 'number', required: false },
-            {
-                key: 'gender',
-                label: 'Gender',
-                type: 'radio',
-                required: false,
-                options: ['Male', 'Female']
-            },
-            { key: 'placeOfBirth', label: 'Place of Birth', type: 'text', required: false },
-            {
-                key: 'civilStatus',
-                label: 'Civil Status',
-                type: 'radio',
-                required: false,
-                options: ['Single', 'Married', 'Separated', 'Widowed']
-            },
-            { key: 'spouseName', label: 'Spouse Name', type: 'text', required: false },
-            { key: 'numberOfChildren', label: 'No. of Children', type: 'number', required: false },
-            { key: 'residenceAddress', label: 'Residence/Mailing Address', type: 'textarea', required: false },
-            { key: 'telNo', label: 'Tel. No.', type: 'tel', required: false },
-            { key: 'mobileNo', label: 'Mobile No.', type: 'tel', required: false },
-            { key: 'email', label: 'Email', type: 'email', required: true }
-        ]
-    },
-    {
-        id: 'school',
-        title: 'School Information',
-        description: 'Your academic credentials',
-        icon: School,
-        questions: [
-            { key: 'campusId', label: 'Campus/College', type: 'campus-select', required: true },
-            { key: 'campusOther', label: 'If Others, please specify', type: 'text', required: false },
-            { key: 'departmentId', label: 'Department', type: 'department-select', required: true },
-            { key: 'courseId', label: 'Course (includes Major)', type: 'course-select', required: true },
-            { key: 'yearGraduated', label: 'Year Graduated', type: 'number', required: true, min: '1978', max: '2026' },
-            { key: 'enrollmentYear', label: 'Year Enrolled in EARIST', type: 'number', required: false, min: '1970', max: '2026' },
-            { key: 'honorsAwards', label: 'Honor/Awards Received (Cum Laude, Magna Cum Laude, etc.)', type: 'textarea', required: false }
-        ]
-    },
-    {
-        id: 'eligibility',
-        title: 'Eligibility / Government Examination(s) Passed',
-        description: 'Professional licenses and certifications',
-        icon: Award,
-        questions: [
-            { key: 'examinations', label: 'Government Examinations', type: 'examination-list', required: false }
-        ]
-    },
-    {
-        id: 'employment',
-        title: 'Employment',
-        description: 'Your current career status',
-        icon: Briefcase,
-        questions: [
-            {
-                key: 'presentlyEmployed',
-                label: 'Are you presently employed?',
-                type: 'radio',
-                required: true,
-                options: ['Yes', 'No']
-            },
-            {
-                key: 'employmentLocation',
-                label: 'If Yes, where are you employed?',
-                type: 'radio',
-                required: false,
-                options: ['Local', 'Abroad/Foreign']
-            },
-            { key: 'notEmployedReason', label: 'If No, please state the reason(s) why you are not employed', type: 'textarea', required: false },
-            { key: 'companyName', label: 'Name of the Agency/Company/Business', type: 'text', required: false },
-            { key: 'companyAddress', label: 'Address of the Agency/Company/Business', type: 'text', required: false },
-            { key: 'presentPosition', label: 'Present Position', type: 'text', required: false },
-            { key: 'dateHired', label: 'Date Hired in Present Job', type: 'date', required: false },
-            { key: 'yearsOfService', label: 'Years of Service in the current position', type: 'number', required: false, step: '0.5' },
-            {
-                key: 'jobAlignedToCourse',
-                label: 'Your Present job is aligned to your course graduated?',
-                type: 'radio',
-                required: false,
-                options: ['Yes', 'No']
-            },
-            {
-                key: 'averageMonthlyIncome',
-                label: 'Average Monthly Income',
-                type: 'radio',
-                required: false,
-                options: [
-                    'Below 5,000.00',
-                    '5,001.00 to 10,000.00',
-                    '15,001.00 to 20,000.00',
-                    '20,001.00 to 25,000.00',
-                    '25,001.00 & up',
-                    'Others (pls. Specify)'
-                ]
-            },
-            {
-                key: 'employmentStatus',
-                label: 'Employment Status',
-                type: 'radio',
-                required: false,
-                options: [
-                    'Permanent',
-                    'Temporary/Provisional',
-                    'Contractual',
-                    'Casual',
-                    'Job Order',
-                    'Self-Employed',
-                    'Others (pls. Specify)'
-                ]
-            },
-            {
-                key: 'jobLevelPosition',
-                label: 'Job Level Position',
-                type: 'radio',
-                required: false,
-                options: [
-                    'Clerical',
-                    'Supervisory',
-                    'Technical',
-                    'Managerial',
-                    'Professional',
-                    'Self-Employed',
-                    'Others (pls. Specify)'
-                ]
-            },
-            {
-                key: 'majorLineOfBusiness',
-                label: 'Major Line of Business of the Agency/company you are presently employed',
-                type: 'radio',
-                required: false,
-                options: [
-                    'Education',
-                    'Business',
-                    'Manufacturing',
-                    'Hotel/Restaurant',
-                    'Government',
-                    'Information Tech./Arts',
-                    'Construction/Builder',
-                    'Others (pls. Specify)'
-                ]
-            },
-            { key: 'businessOther', label: 'If Others, please specify', type: 'text', required: false }
-        ]
-    },
-    {
-        id: 'achievements',
-        title: 'Achievement / Award Received',
-        description: 'Your accomplishments and recognitions',
-        icon: Award,
-        questions: [
-            { key: 'achievements', label: 'List your achievements and awards', type: 'textarea', required: false }
-        ]
-    },
-    {
-        id: 'aboutme',
-        title: 'What I Want My EARIST Family to Know About Me',
-        description: 'Share your story with the EARIST community',
-        icon: Heart,
-        questions: [
-            { key: 'aboutMe', label: 'Tell us about yourself', type: 'textarea', required: false }
-        ]
-    },
-    {
-        id: 'account',
-        title: 'Account Setup',
-        description: 'Secure your alumni portal access',
-        icon: Lock,
-        questions: [
-            { key: 'studentId', label: 'Student ID', type: 'text', required: true },
-            { key: 'password', label: 'Create Password', type: 'password', required: true },
-            { key: 'confirmPassword', label: 'Confirm Password', type: 'password', required: true }
-        ]
-    }
+const steps = [
+    { id: 'privacy',      title: 'Data Privacy',      icon: Shield },
+    { id: 'personal',     title: 'Personal Info',      icon: User },
+    { id: 'school',       title: 'School Info',        icon: School },
+    { id: 'eligibility',  title: 'Eligibility',        icon: Award },
+    { id: 'employment',   title: 'Employment',         icon: Briefcase },
+    { id: 'extras',       title: 'Achievements & Bio', icon: Heart },
+    { id: 'account',      title: 'Account Setup',      icon: Lock },
 ];
 
+// ─── Component ───────────────────────────────────────────────────────────────
+
 export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number }) {
-    const [currentSection, setCurrentSection] = useState(0);
+    const [step, setStep] = useState(0);
     const [formData, setFormData] = useState<SurveyData>({
-        dataPrivacyConsent: false,
-        dataPrivacyConsentDate: '',
-        firstName: '',
-        lastName: '',
-        maidenName: '',
-        age: '',
-        gender: '',
-        placeOfBirth: '',
-        civilStatus: '',
-        spouseName: '',
-        numberOfChildren: '',
-        residenceAddress: '',
-        telNo: '',
-        mobileNo: '',
-        email: '',
-        campusId: '',
-        campus: '',
-        campusOther: '',
-        departmentId: '',
-        courseId: '',
-        course: '',
-        major: '',
-        yearGraduated: '',
-        enrollmentYear: '',
-        honorsAwards: '',
-        examinations: [],
-        presentlyEmployed: '',
-        employmentLocation: '',
-        notEmployedReason: '',
-        companyName: '',
-        companyAddress: '',
-        presentPosition: '',
-        dateHired: '',
-        yearsOfService: '',
-        jobAlignedToCourse: '',
-        averageMonthlyIncome: '',
-        employmentStatus: '',
-        jobLevelPosition: '',
-        majorLineOfBusiness: '',
-        businessOther: '',
-        achievements: '',
-        aboutMe: '',
-        studentId: '',
-        password: '',
-        confirmPassword: ''
+        dataPrivacyConsent: false, dataPrivacyConsentDate: '',
+        firstName: '', lastName: '', maidenName: '', age: '', gender: '',
+        placeOfBirth: '', civilStatus: '', spouseName: '', numberOfChildren: '',
+        residenceAddress: '', telNo: '', mobileNo: '', email: '',
+        campusId: '', campus: '', campusOther: '', departmentId: '',
+        courseId: '', course: '', major: '', yearGraduated: '', enrollmentYear: '',
+        honorsAwards: '', examinations: [],
+        presentlyEmployed: '', employmentLocation: '', notEmployedReason: '',
+        companyName: '', companyAddress: '', presentPosition: '', dateHired: '',
+        yearsOfService: '', jobAlignedToCourse: '', averageMonthlyIncome: '',
+        employmentStatus: '', jobLevelPosition: '', majorLineOfBusiness: '',
+        businessOther: '', achievements: '', aboutMe: '',
+        studentId: '', password: '', confirmPassword: ''
     });
 
     const [errors, setErrors] = useState<Record<string, string>>({});
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const [error, setError] = useState<string>(''); // General form-level error message
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [responseToken, setResponseToken] = useState<string | null>(null);
+    const [submissionStatus, setSubmissionStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+    const [submissionMessage, setSubmissionMessage] = useState('');
+    const contentRef = useRef<HTMLDivElement>(null);
 
     // Validation states
-    const [emailValidation, setEmailValidation] = useState<{
-        checking: boolean;
-        exists: boolean;
-        message: string;
-    }>({ checking: false, exists: false, message: '' });
+    const [emailValidation, setEmailValidation] = useState<{ checking: boolean; exists: boolean; message: string }>({ checking: false, exists: false, message: '' });
+    const [studentIdValidation, setStudentIdValidation] = useState<{ checking: boolean; exists: boolean; message: string }>({ checking: false, exists: false, message: '' });
+    const [phoneValidation, setPhoneValidation] = useState<{ checking: boolean; exists: boolean; field: string; message: string }>({ checking: false, exists: false, field: '', message: '' });
 
-    const [studentIdValidation, setStudentIdValidation] = useState<{
-        checking: boolean;
-        exists: boolean;
-        message: string;
-    }>({ checking: false, exists: false, message: '' });
-
-    // Phone number validation state
-    const [phoneValidation, setPhoneValidation] = useState<{
-        checking: boolean;
-        exists: boolean;
-        field: string;
-        message: string;
-    }>({ checking: false, exists: false, field: '', message: '' });
-
-    // OTP verification state
+    // OTP
     const [otpState, setOtpState] = useState<{
-        sent: boolean;
-        verified: boolean;
-        sending: boolean;
-        verifying: boolean;
-        code: string;
-        message: string;
-        error: boolean;
-        countdown: number;
+        sent: boolean; verified: boolean; sending: boolean; verifying: boolean;
+        code: string; message: string; error: boolean; countdown: number;
     }>({ sent: false, verified: false, sending: false, verifying: false, code: '', message: '', error: false, countdown: 0 });
 
-    // Add public-page class to html for proper scrolling (same as LandingPage)
-    useEffect(() => {
-        document.documentElement.classList.add('public-page');
-        return () => {
-            document.documentElement.classList.remove('public-page');
-        };
-    }, []);
-
-    // Countdown timer for OTP resend
-    useEffect(() => {
-        if (otpState.countdown > 0) {
-            const timer = setTimeout(() => {
-                setOtpState(prev => ({ ...prev, countdown: prev.countdown - 1 }));
-            }, 1000);
-            return () => clearTimeout(timer);
-        }
-    }, [otpState.countdown]);
-
-    // Department and Course state
+    // Academic data
     const [campuses, setCampuses] = useState<Campus[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [courses, setCourses] = useState<Course[]>([]);
@@ -418,543 +127,303 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
     const [loadingDepartments, setLoadingDepartments] = useState(false);
     const [loadingCourses, setLoadingCourses] = useState(false);
 
-    // Fetch campuses on component mount
+    // ─── Effects ─────────────────────────────────────────────────────────────
+
     useEffect(() => {
-        const fetchCampuses = async () => {
+        document.documentElement.classList.add('public-page');
+        return () => { document.documentElement.classList.remove('public-page'); };
+    }, []);
+
+    useEffect(() => {
+        if (otpState.countdown > 0) {
+            const t = setTimeout(() => setOtpState(p => ({ ...p, countdown: p.countdown - 1 })), 1000);
+            return () => clearTimeout(t);
+        }
+    }, [otpState.countdown]);
+
+    // Fetch campuses
+    useEffect(() => {
+        (async () => {
             try {
                 setLoadingCampuses(true);
-                const response = await axios.get('/api/v1/campuses');
-                if (response.data.success) {
-                    setCampuses(response.data.data || []);
-                }
-            } catch (error) {
-                console.error('Error fetching campuses:', error);
-            } finally {
-                setLoadingCampuses(false);
-            }
-        };
-
-        fetchCampuses();
+                const r = await axios.get('/api/v1/campuses');
+                if (r.data.success) setCampuses(r.data.data || []);
+            } catch { /* ignore */ } finally { setLoadingCampuses(false); }
+        })();
     }, []);
 
     // Fetch departments when campus changes
     useEffect(() => {
-        const fetchDepartments = async () => {
-            if (!formData.campusId) {
-                setDepartments([]);
-                return;
-            }
-
+        if (!formData.campusId) { setDepartments([]); return; }
+        (async () => {
             try {
                 setLoadingDepartments(true);
-                const response = await axios.get('/api/v1/admin/departments/active', {
-                    params: { campus_id: formData.campusId }
-                });
-                if (response.data.success) {
-                    setDepartments(response.data.data || []);
-                }
-            } catch (error) {
-                console.error('Error fetching departments:', error);
-            } finally {
-                setLoadingDepartments(false);
-            }
-        };
-
-        fetchDepartments();
+                const r = await axios.get('/api/v1/admin/departments/active', { params: { campus_id: formData.campusId } });
+                if (r.data.success) setDepartments(r.data.data || []);
+            } catch { /* ignore */ } finally { setLoadingDepartments(false); }
+        })();
     }, [formData.campusId]);
 
     // Fetch courses when department changes
     useEffect(() => {
-        const fetchCourses = async () => {
-            if (!formData.departmentId) {
-                setCourses([]);
-                return;
-            }
-
+        if (!formData.departmentId) { setCourses([]); return; }
+        (async () => {
             try {
                 setLoadingCourses(true);
-                const response = await axios.get(`/api/v1/admin/departments/${formData.departmentId}/courses`);
-                if (response.data.success) {
-                    setCourses(response.data.data || []);
-                }
-            } catch (error) {
-                console.error('Error fetching courses:', error);
-                setCourses([]);
-            } finally {
-                setLoadingCourses(false);
-            }
-        };
-
-        fetchCourses();
+                const r = await axios.get(`/api/v1/admin/departments/${formData.departmentId}/courses`);
+                if (r.data.success) setCourses(r.data.data || []);
+            } catch { setCourses([]); } finally { setLoadingCourses(false); }
+        })();
     }, [formData.departmentId]);
 
-    const currentSectionData = sections[currentSection];
-    const totalSections = sections.length;
-    const progress = ((currentSection + 1) / totalSections) * 100;
-
-    // Debounced validation for email
+    // Debounced email check
     useEffect(() => {
-        const checkEmail = async () => {
-            if (!formData.email || !formData.email.includes('@')) {
-                setEmailValidation({ checking: false, exists: false, message: '' });
-                return;
-            }
-
-            setEmailValidation({ checking: true, exists: false, message: 'Checking email...' });
-
+        if (!formData.email || !formData.email.includes('@')) {
+            setEmailValidation({ checking: false, exists: false, message: '' });
+            return;
+        }
+        setEmailValidation({ checking: true, exists: false, message: 'Checking...' });
+        const t = setTimeout(async () => {
             try {
-                const response = await axios.post('/api/v1/check-email', {
-                    email: formData.email
-                });
-
-                if (response.data.exists) {
-                    setEmailValidation({
-                        checking: false,
-                        exists: true,
-                        message: 'This email is already registered. Please use a different email or login.'
-                    });
-                } else {
-                    setEmailValidation({
-                        checking: false,
-                        exists: false,
-                        message: 'Email is available'
-                    });
-                }
-            } catch {
-                setEmailValidation({ checking: false, exists: false, message: '' });
-            }
-        };
-
-        const timer = setTimeout(checkEmail, 800);
-        return () => clearTimeout(timer);
+                const r = await axios.post('/api/v1/check-email', { email: formData.email });
+                setEmailValidation(r.data.exists
+                    ? { checking: false, exists: true, message: 'Email already registered' }
+                    : { checking: false, exists: false, message: 'Available' });
+            } catch { setEmailValidation({ checking: false, exists: false, message: '' }); }
+        }, 800);
+        return () => clearTimeout(t);
     }, [formData.email]);
 
-    // Debounced validation for student ID
+    // Debounced student ID check
     useEffect(() => {
-        const checkStudentId = async () => {
-            if (!formData.studentId || formData.studentId.length < 3) {
-                setStudentIdValidation({ checking: false, exists: false, message: '' });
-                return;
-            }
-
-            setStudentIdValidation({ checking: true, exists: false, message: 'Checking student ID...' });
-
+        if (!formData.studentId || formData.studentId.length < 3) {
+            setStudentIdValidation({ checking: false, exists: false, message: '' });
+            return;
+        }
+        setStudentIdValidation({ checking: true, exists: false, message: 'Checking...' });
+        const t = setTimeout(async () => {
             try {
-                const response = await axios.post('/api/v1/check-student-id', {
-                    student_id: formData.studentId
-                });
-
-                if (response.data.exists) {
-                    setStudentIdValidation({
-                        checking: false,
-                        exists: true,
-                        message: 'This student ID is already registered. Please verify your ID or contact support.'
-                    });
-                } else {
-                    setStudentIdValidation({
-                        checking: false,
-                        exists: false,
-                        message: 'Student ID is available'
-                    });
-                }
-            } catch {
-                setStudentIdValidation({ checking: false, exists: false, message: '' });
-            }
-        };
-
-        const timer = setTimeout(checkStudentId, 800);
-        return () => clearTimeout(timer);
+                const r = await axios.post('/api/v1/check-student-id', { student_id: formData.studentId });
+                setStudentIdValidation(r.data.exists
+                    ? { checking: false, exists: true, message: 'Student ID already registered' }
+                    : { checking: false, exists: false, message: 'Available' });
+            } catch { setStudentIdValidation({ checking: false, exists: false, message: '' }); }
+        }, 800);
+        return () => clearTimeout(t);
     }, [formData.studentId]);
 
-    // Debounced validation for phone numbers (tel & mobile)
+    // Debounced phone check
     useEffect(() => {
-        const checkPhone = async () => {
-            const phone = formData.mobileNo || formData.telNo;
-            if (!phone || phone.length < 7) {
-                setPhoneValidation({ checking: false, exists: false, field: '', message: '' });
-                return;
-            }
-
-            setPhoneValidation({ checking: true, exists: false, field: '', message: 'Checking phone...' });
-
+        const phone = formData.mobileNo || formData.telNo;
+        if (!phone || phone.length < 7) {
+            setPhoneValidation({ checking: false, exists: false, field: '', message: '' });
+            return;
+        }
+        setPhoneValidation({ checking: true, exists: false, field: '', message: 'Checking...' });
+        const t = setTimeout(async () => {
             try {
-                const response = await axios.post('/api/v1/check-phone', { phone });
-
-                if (response.data.exists) {
-                    setPhoneValidation({
-                        checking: false,
-                        exists: true,
-                        field: formData.mobileNo ? 'mobileNo' : 'telNo',
-                        message: 'This phone number is already registered.'
-                    });
-                } else {
-                    setPhoneValidation({
-                        checking: false,
-                        exists: false,
-                        field: '',
-                        message: ''
-                    });
-                }
-            } catch {
-                setPhoneValidation({ checking: false, exists: false, field: '', message: '' });
-            }
-        };
-
-        const timer = setTimeout(checkPhone, 800);
-        return () => clearTimeout(timer);
+                const r = await axios.post('/api/v1/check-phone', { phone });
+                setPhoneValidation(r.data.exists
+                    ? { checking: false, exists: true, field: formData.mobileNo ? 'mobileNo' : 'telNo', message: 'Phone already registered' }
+                    : { checking: false, exists: false, field: '', message: '' });
+            } catch { setPhoneValidation({ checking: false, exists: false, field: '', message: '' }); }
+        }, 800);
+        return () => clearTimeout(t);
     }, [formData.telNo, formData.mobileNo]);
 
-    const handleInputChange = useCallback((key: string, value: string | boolean | Array<{ name: string; place: string; dateTaken: string; rating: string }>) => {
+    // ─── Handlers ────────────────────────────────────────────────────────────
+
+    const set = useCallback((key: string, value: string | boolean | SurveyData['examinations']) => {
         setFormData(prev => {
-            // If campus changes, reset department and course selection and populate campus name
             if (key === 'campusId') {
-                const selectedCampus = campuses.find(c => c.id.toString() === value);
-                return {
-                    ...prev,
-                    campusId: value as string,
-                    campus: selectedCampus?.name || '',
-                    departmentId: '',
-                    courseId: ''
-                };
+                const c = campuses.find(c => c.id.toString() === value);
+                return { ...prev, campusId: value as string, campus: c?.name || '', departmentId: '', courseId: '' };
             }
-            // If department changes, reset course selection and populate department name
-            if (key === 'departmentId') {
-                return {
-                    ...prev,
-                    departmentId: value as string,
-                    courseId: ''
-                };
-            }
-            // If course changes, populate course and major names
+            if (key === 'departmentId') return { ...prev, departmentId: value as string, courseId: '' };
             if (key === 'courseId') {
-                const selectedCourse = courses.find(c => c.id.toString() === value);
-                return {
-                    ...prev,
-                    courseId: value as string,
-                    course: selectedCourse?.name || '',
-                    major: selectedCourse?.name || '' // Course includes major
-                };
+                const c = courses.find(c => c.id.toString() === value);
+                return { ...prev, courseId: value as string, course: c?.name || '', major: c?.name || '' };
             }
             return { ...prev, [key]: value } as SurveyData;
         });
-        // Clear error when user starts typing
-        if (errors[key]) {
-            setErrors(prev => ({ ...prev, [key]: '' }));
-        }
-        // Reset OTP state when email changes
-        if (key === 'email') {
-            setOtpState({ sent: false, verified: false, sending: false, verifying: false, code: '', message: '', error: false, countdown: 0 });
-        }
+        if (errors[key]) setErrors(prev => ({ ...prev, [key]: '' }));
+        if (key === 'email') setOtpState({ sent: false, verified: false, sending: false, verifying: false, code: '', message: '', error: false, countdown: 0 });
     }, [errors, campuses, courses]);
 
-    // Send OTP to email
     const handleSendOtp = useCallback(async () => {
-        if (!formData.email || !formData.email.includes('@') || emailValidation.exists || emailValidation.checking) {
-            return;
-        }
-
-        setOtpState(prev => ({ ...prev, sending: true, message: '', error: false }));
-
+        if (!formData.email || !formData.email.includes('@') || emailValidation.exists || emailValidation.checking) return;
+        setOtpState(p => ({ ...p, sending: true, message: '', error: false }));
         try {
-            const response = await axios.post('/api/v1/otp/send', {
-                email: formData.email,
-                purpose: 'registration'
-            });
-
-            if (response.data.success) {
-                setOtpState(prev => ({
-                    ...prev,
-                    sent: true,
-                    sending: false,
-                    message: 'Verification code sent! Check your email inbox.',
-                    error: false,
-                    countdown: 60 // 60 seconds countdown before resend
-                }));
+            const r = await axios.post('/api/v1/otp/send', { email: formData.email, purpose: 'registration' });
+            if (r.data.success) setOtpState(p => ({ ...p, sent: true, sending: false, message: 'Code sent! Check your inbox.', error: false, countdown: 60 }));
+        } catch (e: unknown) {
+            let msg = 'Failed to send code.';
+            if (e && typeof e === 'object' && 'response' in e) {
+                const ax = e as { response?: { status?: number; data?: { message?: string } } };
+                msg = ax.response?.data?.message || msg;
             }
-        } catch (error: unknown) {
-            let errorMessage = 'Failed to send verification code. Please try again.';
-            if (error && typeof error === 'object' && 'response' in error) {
-                const axiosError = error as { response?: { status?: number; data?: { message?: string } } };
-                if (axiosError.response?.status === 429) {
-                    errorMessage = axiosError.response?.data?.message || 'Too many requests. Please wait before trying again.';
-                } else if (axiosError.response?.data?.message) {
-                    errorMessage = axiosError.response.data.message;
-                }
-            }
-            setOtpState(prev => ({
-                ...prev,
-                sending: false,
-                message: errorMessage,
-                error: true
-            }));
+            setOtpState(p => ({ ...p, sending: false, message: msg, error: true }));
         }
     }, [formData.email, emailValidation.exists, emailValidation.checking]);
 
-    // Verify OTP code
     const handleVerifyOtp = useCallback(async () => {
-        if (!otpState.code || otpState.code.length !== 6) {
-            setOtpState(prev => ({ ...prev, message: 'Please enter a 6-digit code', error: true }));
-            return;
-        }
-
-        setOtpState(prev => ({ ...prev, verifying: true, message: '', error: false }));
-
+        if (!otpState.code || otpState.code.length !== 6) { setOtpState(p => ({ ...p, message: 'Enter 6-digit code', error: true })); return; }
+        setOtpState(p => ({ ...p, verifying: true, message: '', error: false }));
         try {
-            const response = await axios.post('/api/v1/otp/verify', {
-                email: formData.email,
-                otp: otpState.code,
-                purpose: 'registration'
-            });
-
-            if (response.data.success && response.data.verified) {
-                setOtpState(prev => ({
-                    ...prev,
-                    verified: true,
-                    verifying: false,
-                    message: 'Email verified successfully!',
-                    error: false
-                }));
+            const r = await axios.post('/api/v1/otp/verify', { email: formData.email, otp: otpState.code, purpose: 'registration' });
+            if (r.data.success && r.data.verified) setOtpState(p => ({ ...p, verified: true, verifying: false, message: 'Email verified!', error: false }));
+        } catch (e: unknown) {
+            let msg = 'Invalid or expired code.';
+            if (e && typeof e === 'object' && 'response' in e) {
+                const ax = e as { response?: { status?: number; data?: { message?: string } } };
+                msg = ax.response?.data?.message || msg;
             }
-        } catch (error: unknown) {
-            let errorMessage = 'Invalid or expired verification code. Please try again.';
-            if (error && typeof error === 'object' && 'response' in error) {
-                const axiosError = error as { response?: { status?: number; data?: { message?: string } } };
-                if (axiosError.response?.status === 429) {
-                    errorMessage = axiosError.response?.data?.message || 'Too many attempts. Please wait before trying again.';
-                } else if (axiosError.response?.data?.message) {
-                    errorMessage = axiosError.response.data.message;
-                }
-            }
-            setOtpState(prev => ({
-                ...prev,
-                verifying: false,
-                message: errorMessage,
-                error: true
-            }));
+            setOtpState(p => ({ ...p, verifying: false, message: msg, error: true }));
         }
     }, [formData.email, otpState.code]);
 
-    // Handle OTP code input
-    const handleOtpChange = useCallback((value: string) => {
-        // Only allow digits and max 6 characters
-        const cleanValue = value.replace(/\D/g, '').slice(0, 6);
-        setOtpState(prev => ({ ...prev, code: cleanValue, message: '', error: false }));
-    }, []);
+    // ─── Validation ──────────────────────────────────────────────────────────
 
-    const validateSection = useCallback(() => {
-        const newErrors: Record<string, string> = {};
-        const section = sections[currentSection];
+    const validateStep = useCallback((s: number): boolean => {
+        const errs: Record<string, string> = {};
 
-        section.questions.forEach(question => {
-            if (question.required && !formData[question.key as keyof SurveyData]) {
-                newErrors[question.key] = `${question.label} is required`;
-            }
-        });
-
-        // Check for duplicate email in personal section (section index 1)
-        if (currentSection === 1 && emailValidation.exists) {
-            newErrors.email = 'This email is already registered';
+        if (s === 0) {
+            if (!formData.dataPrivacyConsent) errs.dataPrivacyConsent = 'You must agree to proceed';
         }
-
-        // Check for duplicate student ID in account section (section index 7)
-        if (currentSection === 7 && studentIdValidation.exists) {
-            newErrors.studentId = 'This student ID is already registered';
-        }
-
-        // Require OTP verification in personal section (section index 1)
-        if (currentSection === 1 && formData.email && !otpState.verified) {
-            newErrors.email = 'Please verify your email with the OTP code sent to your inbox';
-        }
-
-        // Check for duplicate phone number in personal section (section index 1)
-        if (currentSection === 1 && phoneValidation.exists) {
-            if (formData.telNo && phoneValidation.field === 'telNo') {
-                newErrors.telNo = 'This telephone number is already registered';
-            }
-            if (formData.mobileNo && phoneValidation.field === 'mobileNo') {
-                newErrors.mobileNo = 'This mobile number is already registered';
+        if (s === 1) {
+            if (!formData.firstName.trim()) errs.firstName = 'First name is required';
+            if (!formData.lastName.trim()) errs.lastName = 'Last name is required';
+            if (!formData.email.trim()) errs.email = 'Email is required';
+            else if (emailValidation.exists) errs.email = 'Email already registered';
+            else if (!otpState.verified) errs.email = 'Please verify your email';
+            if (phoneValidation.exists) {
+                if (formData.mobileNo && phoneValidation.field === 'mobileNo') errs.mobileNo = 'Phone already registered';
+                if (formData.telNo && phoneValidation.field === 'telNo') errs.telNo = 'Phone already registered';
             }
         }
-
-        // Special validation for password confirmation
-        if (currentSection === 7) { // Account setup section (index 7)
-            if (formData.password !== formData.confirmPassword) {
-                newErrors.confirmPassword = 'Passwords do not match';
+        if (s === 2) {
+            if (!formData.campusId) errs.campusId = 'Campus is required';
+            if (!formData.departmentId) errs.departmentId = 'Department is required';
+            if (!formData.courseId) errs.courseId = 'Course is required';
+            if (!formData.yearGraduated) errs.yearGraduated = 'Year graduated is required';
+        }
+        if (s === 4) {
+            if (!formData.presentlyEmployed) errs.presentlyEmployed = 'Please select';
+        }
+        if (s === 6) {
+            if (!formData.studentId.trim()) errs.studentId = 'Student ID is required';
+            else if (studentIdValidation.exists) errs.studentId = 'Student ID already registered';
+            if (!formData.password) errs.password = 'Password is required';
+            else if (formData.password.length < 8) errs.password = 'Min 8 characters';
+            else {
+                if (!/[A-Z]/.test(formData.password) || !/[a-z]/.test(formData.password) || !/[0-9]/.test(formData.password))
+                    errs.password = 'Must have uppercase, lowercase, and number';
             }
-            if (formData.password && formData.password.length < 8) {
-                newErrors.password = 'Password must be at least 8 characters long';
-            }
-            // Check for password strength
-            if (formData.password && formData.password.length >= 8) {
-                const hasUpperCase = /[A-Z]/.test(formData.password);
-                const hasLowerCase = /[a-z]/.test(formData.password);
-                const hasNumber = /[0-9]/.test(formData.password);
-                const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(formData.password);
-
-                if (!hasUpperCase || !hasLowerCase || !hasNumber) {
-                    newErrors.password = 'Password must contain uppercase, lowercase, and numbers';
-                }
-
-                if (!hasSpecialChar) {
-                    newErrors.password = 'Password is weak. Consider adding special characters (!@#$%^&*)';
-                }
-            }
+            if (!formData.confirmPassword) errs.confirmPassword = 'Confirm your password';
+            else if (formData.password !== formData.confirmPassword) errs.confirmPassword = 'Passwords do not match';
         }
 
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    }, [currentSection, formData, emailValidation.exists, studentIdValidation.exists, otpState.verified, phoneValidation.exists, phoneValidation.field]);
+        setErrors(errs);
+        return Object.keys(errs).length === 0;
+    }, [formData, emailValidation.exists, otpState.verified, phoneValidation, studentIdValidation.exists]);
 
-    const handleNext = useCallback(() => {
-        // Special validation for privacy section - require consent
-        if (currentSection === 0 && !formData.dataPrivacyConsent) {
-            setError('You must agree to the Data Privacy Consent to proceed with registration.');
-            // Smooth scroll to error message
-            setTimeout(() => {
-                const errorElement = document.querySelector('.text-red-600');
-                errorElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 100);
-            return;
+    const goNext = useCallback(() => {
+        if (validateStep(step) && step < steps.length - 1) {
+            setStep(s => s + 1);
+            contentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
         }
+    }, [step, validateStep]);
 
-        if (validateSection()) {
-            if (currentSection < totalSections - 1) {
-                setCurrentSection(prev => prev + 1);
-                // Clear error when moving to next section
-                setError('');
-                // Scroll to top of page smoothly
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
+    const goPrev = useCallback(() => {
+        if (step > 0) {
+            setStep(s => s - 1);
+            contentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
         }
-    }, [currentSection, totalSections, validateSection, formData.dataPrivacyConsent]);
+    }, [step]);
 
-    const handlePrevious = useCallback(() => {
-        if (currentSection > 0) {
-            setCurrentSection(prev => prev - 1);
-            // Scroll to top of page smoothly
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+    const goToStep = useCallback((target: number) => {
+        if (target <= step) { setStep(target); return; }
+        for (let i = step; i < target; i++) {
+            if (!validateStep(i)) { setStep(i); return; }
         }
-    }, [currentSection]);
+        setStep(target);
+    }, [step, validateStep]);
 
-    const [responseToken, setResponseToken] = useState<string | null>(null);
-    const [showPassword, setShowPassword] = useState(false);
-    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-    const [submissionStatus, setSubmissionStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
-    const [submissionMessage, setSubmissionMessage] = useState('');
+    // ─── Submit ──────────────────────────────────────────────────────────────
 
     const handleSubmit = useCallback(async () => {
-        if (!validateSection()) return;
-
+        if (!validateStep(step)) return;
         setIsSubmitting(true);
         setSubmissionStatus('submitting');
 
         try {
-            // Step 1: Start survey response if not already started
-            let currentResponseToken = responseToken;
-            if (!currentResponseToken) {
-                const startResponse = await axios.post(`/api/v1/surveys/${surveyId}/start`);
-                currentResponseToken = startResponse.data.data.response_token;
-                setResponseToken(currentResponseToken);
+            // Start survey
+            let token = responseToken;
+            if (!token) {
+                const r = await axios.post(`/api/v1/surveys/${surveyId}/start`);
+                token = r.data.data.response_token;
+                setResponseToken(token);
             }
 
-            // Step 2: Fetch the survey's actual questions so we can use real question IDs
-            const surveyResponse = await axios.get(`/api/v1/surveys/${surveyId}`);
-            const surveyQuestions = surveyResponse.data?.data?.survey?.questions || [];
+            // Fetch questions & submit answers
+            const surveyRes = await axios.get(`/api/v1/surveys/${surveyId}`);
+            const surveyQuestions = surveyRes.data?.data?.survey?.questions || [];
 
-            // Map form data to survey questions by matching labels (case-insensitive)
-            const answerMapping: Record<string, string> = {
-                'first name': 'firstName',
-                'last name': 'lastName',
-                'student id': 'studentId',
-                'student number': 'studentId',
-                'email': 'email',
-                'email address': 'email',
-                'phone': 'mobileNo',
-                'phone number': 'mobileNo',
-                'mobile': 'mobileNo',
-                'mobile no': 'mobileNo',
-                'tel': 'telNo',
-                'telephone': 'telNo',
-                'gender': 'gender',
-                'age': 'age',
+            const answerMap: Record<string, string> = {
+                'first name': 'firstName', 'last name': 'lastName',
+                'student id': 'studentId', 'student number': 'studentId',
+                'email': 'email', 'email address': 'email',
+                'phone': 'mobileNo', 'phone number': 'mobileNo',
+                'mobile': 'mobileNo', 'mobile no': 'mobileNo',
+                'tel': 'telNo', 'telephone': 'telNo',
+                'gender': 'gender', 'age': 'age',
                 'place of birth': 'placeOfBirth',
-                'civil status': 'civilStatus',
-                'civil_status': 'civilStatus',
+                'civil status': 'civilStatus', 'civil_status': 'civilStatus',
                 'maiden name': 'maidenName',
-                'spouse': 'spouseName',
-                'spouse name': 'spouseName',
-                'children': 'numberOfChildren',
-                'number of children': 'numberOfChildren',
-                'address': 'residenceAddress',
-                'residence': 'residenceAddress',
-                'mailing address': 'residenceAddress',
-                'campus': 'campus',
-                'department': 'departmentId',
-                'course': 'course',
-                'program': 'course',
-                'major': 'major',
-                'year graduated': 'yearGraduated',
-                'graduation year': 'yearGraduated',
+                'spouse': 'spouseName', 'spouse name': 'spouseName',
+                'children': 'numberOfChildren', 'number of children': 'numberOfChildren',
+                'address': 'residenceAddress', 'residence': 'residenceAddress', 'mailing address': 'residenceAddress',
+                'campus': 'campus', 'department': 'departmentId',
+                'course': 'course', 'program': 'course', 'major': 'major',
+                'year graduated': 'yearGraduated', 'graduation year': 'yearGraduated',
                 'enrollment year': 'enrollmentYear',
-                'honors': 'honorsAwards',
-                'awards': 'honorsAwards',
-                'presently employed': 'presentlyEmployed',
-                'employed': 'presentlyEmployed',
-                'employment location': 'employmentLocation',
-                'local or abroad': 'employmentLocation',
-                'where are you employed': 'employmentLocation',
-                'company': 'companyName',
-                'company name': 'companyName',
-                'company address': 'companyAddress',
-                'position': 'presentPosition',
-                'present position': 'presentPosition',
-                'job title': 'presentPosition',
-                'date hired': 'dateHired',
-                'years of service': 'yearsOfService',
+                'honors': 'honorsAwards', 'awards': 'honorsAwards',
+                'presently employed': 'presentlyEmployed', 'employed': 'presentlyEmployed',
+                'employment location': 'employmentLocation', 'local or abroad': 'employmentLocation', 'where are you employed': 'employmentLocation',
+                'company': 'companyName', 'company name': 'companyName', 'company address': 'companyAddress',
+                'position': 'presentPosition', 'present position': 'presentPosition', 'job title': 'presentPosition',
+                'date hired': 'dateHired', 'years of service': 'yearsOfService',
                 'job aligned': 'jobAlignedToCourse',
-                'monthly income': 'averageMonthlyIncome',
-                'income': 'averageMonthlyIncome',
+                'monthly income': 'averageMonthlyIncome', 'income': 'averageMonthlyIncome',
                 'employment status': 'employmentStatus',
                 'job level': 'jobLevelPosition',
                 'line of business': 'majorLineOfBusiness',
-                'achievements': 'achievements',
-                'about me': 'aboutMe',
+                'achievements': 'achievements', 'about me': 'aboutMe',
             };
 
-            // Submit answers using real question IDs
-            for (const question of surveyQuestions) {
-                const questionText = (question.question_text || '').toLowerCase().trim();
-                // Try to find a matching form field
-                let formKey: string | undefined;
-                for (const [pattern, key] of Object.entries(answerMapping)) {
-                    if (questionText.includes(pattern)) {
-                        formKey = key;
-                        break;
-                    }
+            for (const q of surveyQuestions) {
+                const qt = (q.question_text || '').toLowerCase().trim();
+                let fk: string | undefined;
+                for (const [pat, key] of Object.entries(answerMap)) {
+                    if (qt.includes(pat)) { fk = key; break; }
                 }
-
-                if (formKey) {
-                    const answer = formData[formKey as keyof SurveyData];
-                    if (answer) {
+                if (fk) {
+                    const ans = formData[fk as keyof SurveyData];
+                    if (ans) {
                         try {
                             await axios.post(`/api/v1/surveys/${surveyId}/answer`, {
-                                response_token: currentResponseToken,
-                                question_id: question.id,
-                                answer: typeof answer === 'object' ? JSON.stringify(answer) : answer
+                                response_token: token,
+                                question_id: q.id,
+                                answer: typeof ans === 'object' ? JSON.stringify(ans) : ans
                             });
-                        } catch (answerError) {
-                            // Log but don't fail the entire submission for individual answer errors
-                            console.warn(`Could not submit answer for question ${question.id}:`, answerError);
-                        }
+                        } catch { /* non-critical */ }
                     }
                 }
             }
 
-            // Step 3: Complete the survey and create account
-            // Send all profile-relevant data directly so the backend can
-            // populate alumni_profiles accurately (not relying on keyword matching)
+            // Complete survey & create account
             await axios.post(`/api/v1/surveys/${surveyId}/complete`, {
-                response_token: currentResponseToken,
+                response_token: token,
                 email: formData.email,
                 password: formData.password,
                 profile_data: {
@@ -963,7 +432,13 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                     maiden_name: formData.maidenName,
                     student_id: formData.studentId,
                     phone: formData.mobileNo,
+                    tel_no: formData.telNo,
                     gender: formData.gender,
+                    age: formData.age,
+                    place_of_birth: formData.placeOfBirth,
+                    civil_status: formData.civilStatus,
+                    spouse_name: formData.spouseName,
+                    number_of_children: formData.numberOfChildren,
                     current_address: formData.residenceAddress,
                     campus_id: formData.campusId || null,
                     department_id: formData.departmentId || null,
@@ -971,6 +446,8 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
                     degree_program: formData.course,
                     major: formData.major,
                     graduation_year: formData.yearGraduated,
+                    enrollment_year: formData.enrollmentYear,
+                    honors_awards: formData.honorsAwards,
                     presently_employed: formData.presentlyEmployed,
                     employment_location: formData.employmentLocation,
                     not_employed_reason: formData.notEmployedReason,
@@ -990,1153 +467,757 @@ export default function SurveyRegistration({ surveyId = 1 }: { surveyId?: number
             });
 
             setSubmissionStatus('success');
-            setSubmissionMessage('Registration completed successfully! You can now log in with your credentials.');
-
-            // Redirect to login page after 3 seconds
-            setTimeout(() => {
-                window.location.href = '/login';
-            }, 3000);
-
+            setSubmissionMessage('Registration completed! Redirecting to login...');
+            setTimeout(() => { window.location.href = '/login'; }, 3000);
         } catch (error: unknown) {
-            console.error('Survey submission failed:', error);
+            console.error('Registration failed:', error);
             setSubmissionStatus('error');
-
             if (error && typeof error === 'object' && 'response' in error) {
-                const axiosError = error as { response?: { status?: number; data?: { message?: string; errors?: Record<string, string[]> } } };
-
-                // Log detailed validation errors
-                if (axiosError.response?.data?.errors) {
-                    console.error('Validation errors:', axiosError.response.data.errors);
-                }
-
-                // Handle 409 Conflict - Email already exists
-                if (axiosError.response?.status === 409) {
-                    setSubmissionMessage(
-                        axiosError.response?.data?.message ||
-                        'This email address is already registered. Please use a different email or try logging in.'
-                    );
-                } else if (axiosError.response?.status === 422) {
-                    // Validation error
-                    const errors = axiosError.response?.data?.errors;
-                    if (errors) {
-                        const errorMessages = Object.entries(errors)
-                            .map(([field, messages]) => `${field}: ${messages.join(', ')}`)
-                            .join('\n');
-                        setSubmissionMessage(`Validation failed:\n${errorMessages}`);
-                    } else {
-                        setSubmissionMessage(axiosError.response?.data?.message || 'Validation failed. Please check your inputs.');
-                    }
-                } else if (axiosError.response?.data?.message) {
-                    setSubmissionMessage(axiosError.response.data.message);
+                const ax = error as { response?: { status?: number; data?: { message?: string; errors?: Record<string, string[]> } } };
+                if (ax.response?.status === 409) {
+                    setSubmissionMessage(ax.response?.data?.message || 'Email already registered.');
+                } else if (ax.response?.status === 422 && ax.response?.data?.errors) {
+                    setSubmissionMessage(Object.entries(ax.response.data.errors).map(([f, m]) => `${f}: ${m.join(', ')}`).join('\n'));
                 } else {
-                    setSubmissionMessage('Registration failed. Please try again.');
+                    setSubmissionMessage(ax.response?.data?.message || 'Registration failed. Please try again.');
                 }
             } else {
-                setSubmissionMessage('Registration failed. Please check your connection and try again.');
+                setSubmissionMessage('Registration failed. Check your connection.');
             }
         } finally {
             setIsSubmitting(false);
         }
-    }, [formData, validateSection, surveyId, responseToken]); const renderQuestion = (question: Question) => {
-        const rawValue = formData[question.key as keyof SurveyData];
-        const value = typeof rawValue === 'string' ? rawValue : '';
-        const error = errors[question.key];
+    }, [formData, validateStep, step, surveyId, responseToken]);
 
-        switch (question.type) {
-            case 'campus-select':
-                return (
-                    <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
-                            {question.label}
-                            {question.required && <span className="text-red-500 ml-1">*</span>}
-                        </Label>
-                        <div className="relative">
-                            <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
-                            <select
-                                id={question.key}
-                                value={value as string}
-                                onChange={(e) => handleInputChange(question.key, e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 border border-beige-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 appearance-none cursor-pointer"
-                                disabled={loadingCampuses}
-                            >
-                                <option value="">
-                                    {loadingCampuses ? 'Loading campuses...' : 'Select your campus'}
-                                </option>
-                                {campuses.map((campus) => (
-                                    <option key={campus.id} value={campus.id}>
-                                        {campus.display_name || campus.name}
-                                    </option>
-                                ))}
-                            </select>
-                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </div>
-                        </div>
-                        {error && <p className="text-sm text-red-600">{error}</p>}
-                        {!error && campuses.length === 0 && !loadingCampuses && (
-                            <p className="text-sm text-amber-600">No campuses available. Please contact the administrator.</p>
-                        )}
-                    </div>
-                );
+    // ─── Reusable UI pieces ──────────────────────────────────────────────────
 
-            case 'department-select':
-                return (
-                    <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
-                            {question.label}
-                            {question.required && <span className="text-red-500 ml-1">*</span>}
-                        </Label>
-                        <div className="relative">
-                            <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
-                            <select
-                                id={question.key}
-                                value={value as string}
-                                onChange={(e) => handleInputChange(question.key, e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 border border-beige-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 appearance-none cursor-pointer disabled:bg-gray-100 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
-                                disabled={!formData.campusId || loadingDepartments}
-                            >
-                                <option value="">
-                                    {!formData.campusId
-                                        ? 'Please select a campus first'
-                                        : loadingDepartments
-                                            ? 'Loading departments...'
-                                            : 'Select your department/college'}
-                                </option>
-                                {departments.map((dept) => (
-                                    <option key={dept.id} value={dept.id}>
-                                        {dept.name} ({dept.code})
-                                    </option>
-                                ))}
-                            </select>
-                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </div>
-                        </div>
-                        {error && <p className="text-sm text-red-600">{error}</p>}
-                        {!error && formData.campusId && departments.length === 0 && !loadingDepartments && (
-                            <p className="text-sm text-amber-600">No departments available for this campus.</p>
-                        )}
-                    </div>
-                );
+    const fieldClass = "w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500 dark:text-gray-100 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-500";
+    const labelClass = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
+    const errorClass = "text-xs text-red-500 mt-1 flex items-center gap-1";
 
-            case 'course-select':
-                return (
-                    <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
-                            {question.label}
-                            {question.required && <span className="text-red-500 ml-1">*</span>}
-                        </Label>
-                        <div className="relative">
-                            <GraduationCap className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500 pointer-events-none" />
-                            <select
-                                id={question.key}
-                                value={value as string}
-                                onChange={(e) => handleInputChange(question.key, e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 border border-beige-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 appearance-none cursor-pointer disabled:bg-gray-100 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
-                                disabled={!formData.departmentId || loadingCourses}
-                            >
-                                <option value="">
-                                    {!formData.departmentId
-                                        ? 'Please select a department first'
-                                        : loadingCourses
-                                            ? 'Loading courses...'
-                                            : 'Select your course/program'}
-                                </option>
-                                {courses.map((course) => (
-                                    <option key={course.id} value={course.id}>
-                                        {course.name} ({course.code})
-                                    </option>
-                                ))}
-                            </select>
-                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
-                                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </div>
-                        </div>
-                        {error && <p className="text-sm text-red-600">{error}</p>}
-                        {!error && formData.departmentId && courses.length === 0 && !loadingCourses && (
-                            <p className="text-sm text-amber-600">No courses available for this department.</p>
-                        )}
-                    </div>
-                );
+    const FieldError = ({ msg }: { msg?: string }) => msg ? <p className={errorClass}><AlertCircle className="h-3 w-3 shrink-0" />{msg}</p> : null;
 
-            case 'select':
-                return (
-                    <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
-                            {question.label}
-                            {question.required && <span className="text-red-500 ml-1">*</span>}
-                        </Label>
-                        <select
-                            id={question.key}
-                            value={value}
-                            onChange={(e) => handleInputChange(question.key, e.target.value)}
-                            className="w-full px-4 py-2.5 border border-beige-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-maroon-500 focus:border-maroon-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 appearance-none cursor-pointer"
-                        >
-                            <option value="">Select {question.label.toLowerCase()}</option>
-                            {question.options?.map((option) => {
-                                const opt = option as { value: string; label: string };
-                                return (
-                                    <option key={opt.value} value={opt.value}>
-                                        {opt.label}
-                                    </option>
-                                );
-                            })}
-                        </select>
-                        {error && <p className="text-sm text-red-600">{error}</p>}
-                    </div>
-                );
+    const ValidationBadge = ({ checking, exists, message }: { checking: boolean; exists: boolean; message: string }) => {
+        if (!message) return null;
+        if (checking) return <span className="text-xs text-gray-400 flex items-center gap-1 mt-0.5"><Loader2 className="h-3 w-3 animate-spin" />{message}</span>;
+        if (exists) return <span className="text-xs text-red-500 flex items-center gap-1 mt-0.5"><AlertCircle className="h-3 w-3" />{message}</span>;
+        return <span className="text-xs text-green-600 flex items-center gap-1 mt-0.5"><CheckCircle className="h-3 w-3" />{message}</span>;
+    };
 
-            case 'radio':
-                return (
-                    <div className="space-y-3">
-                        <Label className="text-base font-medium text-maroon-800 dark:text-maroon-200">{question.label}</Label>
-                        <RadioGroup
-                            value={value}
-                            onValueChange={(val) => handleInputChange(question.key, val)}
-                            className="grid grid-cols-1 gap-3"
-                        >
-                            {Array.isArray(question.options) && question.options.map((option) => {
-                                const optionValue = typeof option === 'string' ? option : option.value;
-                                const optionLabel = typeof option === 'string' ? option : option.label;
-                                return (
-                                    <div key={optionValue} className="flex items-center space-x-3 p-3 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                                        <RadioGroupItem value={optionValue} id={`${question.key}-${optionValue}`} className="h-5 w-5" />
-                                        <Label
-                                            htmlFor={`${question.key}-${optionValue}`}
-                                            className="text-base text-gray-900 dark:text-gray-100 cursor-pointer flex-1 font-medium"
-                                        >
-                                            {optionLabel}
-                                        </Label>
-                                    </div>
-                                );
-                            })}
-                        </RadioGroup>
-                        {error && <p className="text-sm text-red-600">{error}</p>}
-                    </div>
-                );
+    // Inline radio pill selector
+    const InlineRadio = ({ name, options, value, onChange }: { name: string; options: string[]; value: string; onChange: (v: string) => void }) => (
+        <RadioGroup value={value} onValueChange={onChange} className="flex flex-wrap gap-2">
+            {options.map(opt => (
+                <label key={opt} className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm cursor-pointer transition-all select-none",
+                    value === opt
+                        ? "bg-maroon-600 text-white border-maroon-600 shadow-sm"
+                        : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-maroon-400 hover:bg-maroon-50 dark:hover:bg-gray-700"
+                )}>
+                    <RadioGroupItem value={opt} id={`${name}-${opt}`} className="sr-only" />
+                    {opt}
+                </label>
+            ))}
+        </RadioGroup>
+    );
 
-            case 'textarea':
-                return (
-                    <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
-                            {question.label}
-                        </Label>
-                        <Textarea
-                            id={question.key}
-                            value={value}
-                            onChange={(e) => handleInputChange(question.key, e.target.value)}
-                            className="min-h-[100px] border-beige-300 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400"
-                            placeholder={`Enter your ${question.label.toLowerCase()}`}
-                        />
-                        {error && <p className="text-sm text-red-600">{error}</p>}
-                    </div>
-                );
+    // Select with chevron
+    const SelectField = ({ value, onChange, disabled, children, className: cls }: { value: string; onChange: (v: string) => void; disabled?: boolean; children: React.ReactNode; className?: string }) => (
+        <div className="relative">
+            <select value={value} onChange={e => onChange(e.target.value)} disabled={disabled} className={cn(fieldClass, "appearance-none cursor-pointer pr-8 disabled:opacity-50 disabled:cursor-not-allowed", cls)}>
+                {children}
+            </select>
+            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+        </div>
+    );
 
-            case 'password':
-                return (
-                    <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
-                            {question.label}
-                            {question.required && <span className="text-red-500 ml-1">*</span>}
-                        </Label>
-                        <div className="relative">
-                            <Input
-                                id={question.key}
-                                type={question.key === 'password' ? (showPassword ? 'text' : 'password') : (showConfirmPassword ? 'text' : 'password')}
-                                value={value}
-                                onChange={(e) => handleInputChange(question.key, e.target.value)}
-                                className="border-beige-300 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 pr-10"
-                                placeholder={`Enter your ${question.label.toLowerCase()}`}
-                            />
-                            <button
-                                type="button"
-                                onClick={() => question.key === 'password' ? setShowPassword(!showPassword) : setShowConfirmPassword(!showConfirmPassword)}
-                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
-                            >
-                                {(question.key === 'password' ? showPassword : showConfirmPassword) ? (
-                                    <EyeOff className="h-4 w-4" />
-                                ) : (
-                                    <Eye className="h-4 w-4" />
-                                )}
-                            </button>
-                        </div>
-                        {error && <p className="text-sm text-red-600">{error}</p>}
-                        {question.key === 'password' && !error && value && (
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                                Password strength: {value.length >= 8 ? 'Strong' : value.length >= 6 ? 'Medium' : 'Weak'}
-                            </div>
-                        )}
-                    </div>
-                );
+    // ─── Step Content ────────────────────────────────────────────────────────
 
-            case 'checkbox-group':
-                return (
-                    <div className="space-y-3">
-                        <Label className="text-base font-medium text-maroon-800 dark:text-maroon-200">
-                            {question.label}
-                            {question.required && <span className="text-red-500 ml-1">*</span>}
-                        </Label>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                            {Array.isArray(question.options) && question.options.map((option) => {
-                                const optionValue = typeof option === 'string' ? option : option.value;
-                                const optionLabel = typeof option === 'string' ? option : option.label;
-                                const currentValues = value ? value.split(',').filter(Boolean) : [];
-                                const isChecked = currentValues.includes(optionValue);
-
-                                return (
-                                    <button
-                                        key={optionValue}
-                                        type="button"
-                                        onClick={() => {
-                                            if (isChecked) {
-                                                handleInputChange(question.key, currentValues.filter(v => v !== optionValue).join(','));
-                                            } else {
-                                                handleInputChange(question.key, [...currentValues, optionValue].join(','));
-                                            }
-                                        }}
-                                        className={cn(
-                                            "w-full p-3 text-left text-sm font-medium rounded-lg border-2 transition-all duration-200",
-                                            isChecked
-                                                ? "bg-maroon-600 text-white border-maroon-600 shadow-md"
-                                                : "bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600 hover:border-maroon-400 hover:bg-maroon-50 dark:hover:bg-gray-600"
-                                        )}
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <span>{optionLabel}</span>
-                                            {isChecked && (
-                                                <CheckCircle className="h-4 w-4 ml-2 flex-shrink-0" />
-                                            )}
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                        {error && <p className="text-sm text-red-600">{error}</p>}
-                    </div>
-                );
-
-            case 'examination-list':
+    const renderStep = () => {
+        switch (step) {
+            // ── Privacy ──────────────────────────────────────────────────
+            case 0:
                 return (
                     <div className="space-y-4">
-                        <Label className="text-base font-medium text-maroon-800 dark:text-maroon-200">
-                            {question.label}
-                            {question.required && <span className="text-red-500 ml-1">*</span>}
-                        </Label>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Add your professional licenses and government examinations passed</p>
-
-                        {formData.examinations.map((exam, index) => (
-                            <div key={index} className="border-2 border-maroon-200 dark:border-gray-600 rounded-lg p-4 space-y-3 bg-maroon-50 dark:bg-gray-700/50">
-                                <div className="flex justify-between items-center">
-                                    <h4 className="font-semibold text-maroon-800 dark:text-maroon-200">Examination {index + 1}</h4>
-                                    <Button
-                                        type="button"
-                                        onClick={() => {
-                                            const newExams = formData.examinations.filter((_, i) => i !== index);
-                                            handleInputChange('examinations', newExams);
-                                        }}
-                                        variant="outline"
-                                        size="sm"
-                                        className="border-red-300 text-red-600 hover:bg-red-50"
-                                    >
-                                        <X className="h-4 w-4 mr-1" />
-                                        Remove
-                                    </Button>
+                        <div className="bg-gradient-to-r from-maroon-600 to-maroon-700 text-white p-4 rounded-xl">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-white/20 p-2 rounded-full"><Shield className="h-5 w-5" /></div>
+                                <div>
+                                    <h3 className="font-bold">Data Privacy Consent Form</h3>
+                                    <p className="text-maroon-100 text-xs mt-0.5">RA 10173 — Data Privacy Act of 2012</p>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            </div>
+                        </div>
+
+                        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 text-sm text-gray-700 dark:text-gray-300 space-y-2 leading-relaxed">
+                            <p className="italic font-medium text-gray-600 dark:text-gray-400">In accordance with RA 10173, I consent to the following:</p>
+                            {[
+                                'I am aware that EARISTAA has collected and stored my personal data during Graduation Process including demographic profile and contact details.',
+                                'I consent for EARISTAA to collect, use, record, disclose, transfer, store, organize, update, monitor and/or process my personal information.',
+                                'I agree to personally update these data thru email request as needed.',
+                                'I authorize EARISTAA to manage my data for sharing with accredited partners and government agencies.',
+                                'I understand that EARISTAA shall warrant to me the right to receive notices on changes in data processing or personal data breaches.',
+                                'I affirm my right to be informed, to access, rectify, suspend and withdraw my personal data pursuant to RA 10173.'
+                            ].map((text, i) => (
+                                <div key={i} className="flex gap-2">
+                                    <span className="font-bold text-maroon-600 dark:text-maroon-400 shrink-0 w-5 text-right">{i + 1}.</span>
+                                    <p>{text}</p>
+                                </div>
+                            ))}
+                            <div className="border-t border-gray-200 dark:border-gray-700 pt-3 mt-2">
+                                <p className="italic text-center text-xs text-gray-500 dark:text-gray-400">
+                                    By clicking "I Agree" below, I warrant that I have read, understood and agreed to all provisions above.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <Button
+                                type="button"
+                                onClick={() => { window.location.href = '/'; }}
+                                variant="outline"
+                                className="flex-1 border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 h-11 font-semibold"
+                            >
+                                <X className="w-4 h-4 mr-2" />I Disagree
+                            </Button>
+                            <Button
+                                type="button"
+                                onClick={() => { set('dataPrivacyConsent', true); set('dataPrivacyConsentDate', new Date().toISOString()); }}
+                                className={cn(
+                                    "flex-1 h-11 font-semibold transition-all",
+                                    formData.dataPrivacyConsent
+                                        ? "bg-green-600 hover:bg-green-700 text-white"
+                                        : "bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
+                                )}
+                            >
+                                {formData.dataPrivacyConsent
+                                    ? <><Check className="w-4 h-4 mr-2" />Consent Granted</>
+                                    : <><CheckCircle className="w-4 h-4 mr-2" />I Agree</>
+                                }
+                            </Button>
+                        </div>
+                        <FieldError msg={errors.dataPrivacyConsent} />
+                    </div>
+                );
+
+            // ── Personal Info ────────────────────────────────────────────
+            case 1:
+                return (
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label className={labelClass}>First Name <span className="text-red-500">*</span></label>
+                                <Input value={formData.firstName} onChange={e => set('firstName', e.target.value)} placeholder="Juan" className={fieldClass} />
+                                <FieldError msg={errors.firstName} />
+                            </div>
+                            <div>
+                                <label className={labelClass}>Last Name <span className="text-red-500">*</span></label>
+                                <Input value={formData.lastName} onChange={e => set('lastName', e.target.value)} placeholder="Dela Cruz" className={fieldClass} />
+                                <FieldError msg={errors.lastName} />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label className={labelClass}>Gender</label>
+                                <InlineRadio name="gender" options={['Male', 'Female']} value={formData.gender} onChange={v => set('gender', v)} />
+                            </div>
+                            <div>
+                                <label className={labelClass}>Civil Status</label>
+                                <InlineRadio name="civilStatus" options={['Single', 'Married', 'Separated', 'Widowed']} value={formData.civilStatus} onChange={v => set('civilStatus', v)} />
+                            </div>
+                        </div>
+
+                        {formData.gender === 'Female' && formData.civilStatus === 'Married' && (
+                            <div>
+                                <label className={labelClass}>Maiden Name</label>
+                                <Input value={formData.maidenName} onChange={e => set('maidenName', e.target.value)} placeholder="Pre-marital last name" className={fieldClass} />
+                            </div>
+                        )}
+                        {formData.civilStatus === 'Married' && (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className={labelClass}>Spouse Name</label>
+                                    <Input value={formData.spouseName} onChange={e => set('spouseName', e.target.value)} className={fieldClass} />
+                                </div>
+                                <div>
+                                    <label className={labelClass}>No. of Children</label>
+                                    <Input type="number" value={formData.numberOfChildren} onChange={e => set('numberOfChildren', e.target.value)} className={fieldClass} />
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label className={labelClass}>Age</label>
+                                <Input type="number" value={formData.age} onChange={e => set('age', e.target.value)} placeholder="25" className={fieldClass} />
+                            </div>
+                            <div>
+                                <label className={labelClass}>Place of Birth</label>
+                                <Input value={formData.placeOfBirth} onChange={e => set('placeOfBirth', e.target.value)} placeholder="Manila, Philippines" className={fieldClass} />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className={labelClass}><MapPin className="inline h-3.5 w-3.5 mr-1" />Residence / Mailing Address</label>
+                            <Textarea value={formData.residenceAddress} onChange={e => set('residenceAddress', e.target.value)} placeholder="Complete address" className={cn(fieldClass, "min-h-[60px]")} />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label className={labelClass}><Phone className="inline h-3.5 w-3.5 mr-1" />Tel. No.</label>
+                                <Input value={formData.telNo} onChange={e => set('telNo', e.target.value)} type="tel" className={fieldClass} />
+                                <FieldError msg={errors.telNo} />
+                            </div>
+                            <div>
+                                <label className={labelClass}><Phone className="inline h-3.5 w-3.5 mr-1" />Mobile No.</label>
+                                <Input value={formData.mobileNo} onChange={e => set('mobileNo', e.target.value)} type="tel" placeholder="09XX XXX XXXX" className={fieldClass} />
+                                <FieldError msg={errors.mobileNo} />
+                                {phoneValidation.message && <ValidationBadge {...phoneValidation} />}
+                            </div>
+                        </div>
+
+                        {/* Email + OTP */}
+                        <div>
+                            <label className={labelClass}><Mail className="inline h-3.5 w-3.5 mr-1" />Email <span className="text-red-500">*</span></label>
+                            <div className="relative">
+                                <Input
+                                    value={formData.email}
+                                    onChange={e => set('email', e.target.value)}
+                                    type="email"
+                                    placeholder="alumni@email.com"
+                                    className={cn(fieldClass, "pr-9", emailValidation.exists && "border-red-400", !emailValidation.exists && emailValidation.message && !emailValidation.checking && "border-green-400")}
+                                />
+                                {formData.email && (
+                                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                                        {emailValidation.checking && <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />}
+                                        {!emailValidation.checking && emailValidation.exists && <AlertCircle className="h-4 w-4 text-red-500" />}
+                                        {!emailValidation.checking && !emailValidation.exists && emailValidation.message && <CheckCircle className="h-4 w-4 text-green-500" />}
+                                    </div>
+                                )}
+                            </div>
+                            <ValidationBadge {...emailValidation} />
+                            <FieldError msg={errors.email} />
+
+                            {emailValidation.exists && (
+                                <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg text-sm">
+                                    <p className="text-red-700 dark:text-red-300 mb-2">This email is already registered.</p>
+                                    <div className="flex gap-2">
+                                        <a href="/login" className="px-3 py-1.5 text-xs font-medium rounded-lg bg-maroon-600 text-white hover:bg-maroon-700 transition-colors"><Lock className="inline h-3 w-3 mr-1" />Login</a>
+                                        <a href="/forgot-password" className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"><RefreshCw className="inline h-3 w-3 mr-1" />Forgot Password</a>
+                                    </div>
+                                </div>
+                            )}
+
+                            {formData.email && !emailValidation.exists && !emailValidation.checking && emailValidation.message && (
+                                <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg">
+                                    {otpState.verified ? (
+                                        <div className="flex items-center gap-2 text-green-600">
+                                            <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center"><Check className="h-3.5 w-3.5 text-white" /></div>
+                                            <span className="text-sm font-medium">Email verified!</span>
+                                        </div>
+                                    ) : !otpState.sent ? (
+                                        <div className="flex items-center justify-between gap-3">
+                                            <p className="text-xs text-gray-600 dark:text-gray-400">Verify your email to continue</p>
+                                            <Button type="button" onClick={handleSendOtp} disabled={otpState.sending} size="sm" className="bg-maroon-600 hover:bg-maroon-700 text-white h-8 px-3 text-xs shrink-0">
+                                                {otpState.sending ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Sending...</> : <><Mail className="h-3 w-3 mr-1" />Send Code</>}
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <p className="text-xs text-gray-600 dark:text-gray-400">Enter the 6-digit code sent to <strong>{formData.email}</strong></p>
+                                            <div className="flex gap-2">
+                                                <Input
+                                                    value={otpState.code}
+                                                    onChange={e => { const v = e.target.value.replace(/\D/g, '').slice(0, 6); setOtpState(p => ({ ...p, code: v, message: '', error: false })); }}
+                                                    placeholder="000000"
+                                                    maxLength={6}
+                                                    className={cn("flex-1 text-center text-lg tracking-[0.3em] font-mono h-9", fieldClass, otpState.error && "border-red-400")}
+                                                />
+                                                <Button type="button" onClick={handleVerifyOtp} disabled={otpState.verifying || otpState.code.length !== 6} size="sm" className="bg-green-600 hover:bg-green-700 text-white h-9 px-3 text-xs shrink-0">
+                                                    {otpState.verifying ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Verify'}
+                                                </Button>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                {otpState.message && <span className={cn("text-xs", otpState.error ? "text-red-500" : "text-green-600")}>{otpState.message}</span>}
+                                                <span className="ml-auto text-xs text-gray-400">
+                                                    {otpState.countdown > 0 ? `Resend in ${otpState.countdown}s` : (
+                                                        <button type="button" onClick={handleSendOtp} disabled={otpState.sending} className="text-maroon-600 hover:text-maroon-800 dark:text-maroon-400 font-medium">Resend</button>
+                                                    )}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+
+            // ── School Info ──────────────────────────────────────────────
+            case 2:
+                return (
+                    <div className="space-y-4">
+                        <div>
+                            <label className={labelClass}><Building className="inline h-3.5 w-3.5 mr-1" />Campus <span className="text-red-500">*</span></label>
+                            <SelectField value={formData.campusId} onChange={v => set('campusId', v)} disabled={loadingCampuses}>
+                                <option value="">{loadingCampuses ? 'Loading...' : 'Select campus'}</option>
+                                {campuses.map(c => <option key={c.id} value={c.id}>{c.display_name || c.name}</option>)}
+                            </SelectField>
+                            <FieldError msg={errors.campusId} />
+                        </div>
+
+                        {(() => { const sc = campuses.find(c => c.id.toString() === formData.campusId); return sc?.name.toLowerCase().includes('other'); })() && (
+                            <div>
+                                <label className={labelClass}>Specify other campus</label>
+                                <Input value={formData.campusOther} onChange={e => set('campusOther', e.target.value)} className={fieldClass} />
+                            </div>
+                        )}
+
+                        <div>
+                            <label className={labelClass}><Building className="inline h-3.5 w-3.5 mr-1" />Department <span className="text-red-500">*</span></label>
+                            <SelectField value={formData.departmentId} onChange={v => set('departmentId', v)} disabled={!formData.campusId || loadingDepartments}>
+                                <option value="">{!formData.campusId ? 'Select campus first' : loadingDepartments ? 'Loading...' : 'Select department'}</option>
+                                {departments.map(d => <option key={d.id} value={d.id}>{d.name} ({d.code})</option>)}
+                            </SelectField>
+                            <FieldError msg={errors.departmentId} />
+                        </div>
+
+                        <div>
+                            <label className={labelClass}><GraduationCap className="inline h-3.5 w-3.5 mr-1" />Course / Program <span className="text-red-500">*</span></label>
+                            <SelectField value={formData.courseId} onChange={v => set('courseId', v)} disabled={!formData.departmentId || loadingCourses}>
+                                <option value="">{!formData.departmentId ? 'Select department first' : loadingCourses ? 'Loading...' : 'Select course'}</option>
+                                {courses.map(c => <option key={c.id} value={c.id}>{c.name} ({c.code})</option>)}
+                            </SelectField>
+                            <FieldError msg={errors.courseId} />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label className={labelClass}><Calendar className="inline h-3.5 w-3.5 mr-1" />Year Graduated <span className="text-red-500">*</span></label>
+                                <Input type="number" min="1978" max="2026" value={formData.yearGraduated} onChange={e => set('yearGraduated', e.target.value)} placeholder="2024" className={fieldClass} />
+                                <FieldError msg={errors.yearGraduated} />
+                            </div>
+                            <div>
+                                <label className={labelClass}><Calendar className="inline h-3.5 w-3.5 mr-1" />Year Enrolled</label>
+                                <Input type="number" min="1970" max="2026" value={formData.enrollmentYear} onChange={e => set('enrollmentYear', e.target.value)} placeholder="2020" className={fieldClass} />
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className={labelClass}><Award className="inline h-3.5 w-3.5 mr-1" />Honor / Awards Received</label>
+                            <Textarea value={formData.honorsAwards} onChange={e => set('honorsAwards', e.target.value)} placeholder="Cum Laude, Magna Cum Laude, etc." className={cn(fieldClass, "min-h-[60px]")} />
+                        </div>
+                    </div>
+                );
+
+            // ── Eligibility ──────────────────────────────────────────────
+            case 3:
+                return (
+                    <div className="space-y-4">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Add your professional licenses and government examinations passed. This section is optional.</p>
+
+                        {formData.examinations.map((exam, i) => (
+                            <div key={i} className="border border-gray-200 dark:border-gray-700 rounded-xl p-3 space-y-3 bg-gray-50 dark:bg-gray-800/50">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Examination {i + 1}</span>
+                                    <button type="button" onClick={() => set('examinations', formData.examinations.filter((_, idx) => idx !== i))} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 transition-colors">
+                                        <X className="h-3 w-3" />Remove
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div>
-                                        <Label htmlFor={`exam-name-${index}`} className="text-sm">Name of Examination</Label>
-                                        <Input
-                                            id={`exam-name-${index}`}
-                                            value={exam.name}
-                                            onChange={(e) => {
-                                                const newExams = [...formData.examinations];
-                                                newExams[index].name = e.target.value;
-                                                handleInputChange('examinations', newExams);
-                                            }}
-                                            placeholder="e.g., Civil Engineering Board Exam"
-                                            className="mt-1"
-                                        />
+                                        <label className={labelClass}>Name of Examination</label>
+                                        <Input value={exam.name} onChange={e => { const n = [...formData.examinations]; n[i] = { ...n[i], name: e.target.value }; set('examinations', n); }} placeholder="e.g., Civil Engineering" className={fieldClass} />
                                     </div>
                                     <div>
-                                        <Label htmlFor={`exam-place-${index}`} className="text-sm">Place of Examination</Label>
-                                        <Input
-                                            id={`exam-place-${index}`}
-                                            value={exam.place}
-                                            onChange={(e) => {
-                                                const newExams = [...formData.examinations];
-                                                newExams[index].place = e.target.value;
-                                                handleInputChange('examinations', newExams);
-                                            }}
-                                            placeholder="e.g., Manila"
-                                            className="mt-1"
-                                        />
+                                        <label className={labelClass}>Place</label>
+                                        <Input value={exam.place} onChange={e => { const n = [...formData.examinations]; n[i] = { ...n[i], place: e.target.value }; set('examinations', n); }} placeholder="e.g., Manila" className={fieldClass} />
                                     </div>
                                     <div>
-                                        <Label htmlFor={`exam-date-${index}`} className="text-sm">Date Taken</Label>
-                                        <Input
-                                            id={`exam-date-${index}`}
-                                            type="date"
-                                            value={exam.dateTaken}
-                                            onChange={(e) => {
-                                                const newExams = [...formData.examinations];
-                                                newExams[index].dateTaken = e.target.value;
-                                                handleInputChange('examinations', newExams);
-                                            }}
-                                            className="mt-1"
-                                        />
+                                        <label className={labelClass}>Date Taken</label>
+                                        <Input type="date" value={exam.dateTaken} onChange={e => { const n = [...formData.examinations]; n[i] = { ...n[i], dateTaken: e.target.value }; set('examinations', n); }} className={fieldClass} />
                                     </div>
                                     <div>
-                                        <Label htmlFor={`exam-rating-${index}`} className="text-sm">Rating</Label>
-                                        <Input
-                                            id={`exam-rating-${index}`}
-                                            value={exam.rating}
-                                            onChange={(e) => {
-                                                const newExams = [...formData.examinations];
-                                                newExams[index].rating = e.target.value;
-                                                handleInputChange('examinations', newExams);
-                                            }}
-                                            placeholder="e.g., 85.5%"
-                                            className="mt-1"
-                                        />
+                                        <label className={labelClass}>Rating</label>
+                                        <Input value={exam.rating} onChange={e => { const n = [...formData.examinations]; n[i] = { ...n[i], rating: e.target.value }; set('examinations', n); }} placeholder="e.g., 85.5%" className={fieldClass} />
                                     </div>
                                 </div>
                             </div>
                         ))}
 
-                        <Button
-                            type="button"
-                            onClick={() => {
-                                const newExams = [...formData.examinations, { name: '', place: '', dateTaken: '', rating: '' }];
-                                handleInputChange('examinations', newExams);
-                            }}
-                            variant="outline"
-                            className="w-full border-2 border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-maroon-300 hover:bg-maroon-50 dark:hover:bg-gray-700"
-                        >
-                            <Award className="h-4 w-4 mr-2" />
-                            Add Examination
+                        <Button type="button" variant="outline" onClick={() => set('examinations', [...formData.examinations, { name: '', place: '', dateTaken: '', rating: '' }])} className="w-full border-dashed border-2 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-maroon-400 hover:text-maroon-600 dark:hover:text-maroon-400 transition-colors">
+                            <Award className="h-4 w-4 mr-2" />Add Examination
                         </Button>
-                        {error && <p className="text-sm text-red-600">{error}</p>}
+
+                        {formData.examinations.length === 0 && (
+                            <div className="text-center py-8 text-gray-400 dark:text-gray-500">
+                                <FileText className="h-10 w-10 mx-auto mb-2 opacity-40" />
+                                <p className="text-sm">No examinations added yet</p>
+                                <p className="text-xs mt-1">Click the button above to add one, or skip this step</p>
+                            </div>
+                        )}
                     </div>
                 );
 
-            case 'privacy-consent':
+            // ── Employment ───────────────────────────────────────────────
+            case 4:
                 return (
-                    <div className="space-y-6">
-                        {/* Data Privacy Header */}
-                        <div className="bg-gradient-to-r from-maroon-600 to-maroon-700 text-white p-4 rounded-lg">
-                            <div className="flex items-center space-x-3">
-                                <div className="bg-white/20 p-2 rounded-full">
-                                    <Shield className="h-6 w-6" />
-                                </div>
+                    <div className="space-y-4">
+                        <div>
+                            <label className={labelClass}>Are you presently employed? <span className="text-red-500">*</span></label>
+                            <InlineRadio name="presentlyEmployed" options={['Yes', 'No']} value={formData.presentlyEmployed} onChange={v => set('presentlyEmployed', v)} />
+                            <FieldError msg={errors.presentlyEmployed} />
+                        </div>
+
+                        {formData.presentlyEmployed === 'No' && (
+                            <div>
+                                <label className={labelClass}>Reason not employed</label>
+                                <Textarea value={formData.notEmployedReason} onChange={e => set('notEmployedReason', e.target.value)} placeholder="State the reasons..." className={cn(fieldClass, "min-h-[60px]")} />
+                            </div>
+                        )}
+
+                        {formData.presentlyEmployed === 'Yes' && (
+                            <>
                                 <div>
-                                    <h3 className="text-lg font-bold">Data Privacy Consent Form</h3>
-                                    <p className="text-maroon-100 text-xs mt-0.5">
-                                        Republic of the Philippines - RA 10173 or Data Privacy Act of 2012
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Consent Content */}
-                        <div className="bg-white dark:bg-gray-800 border-2 border-maroon-200 dark:border-gray-600 rounded-lg p-4 space-y-3">
-                            <p className="text-gray-700 dark:text-gray-300 font-medium text-sm">
-                                <em>In accordance with RA 10173 or Data Privacy Act of 2012, I consent to the following terms and condition on the collection, use, processing and disclosure of my personal data:</em>
-                            </p>
-
-                            <div className="space-y-2 text-gray-700 dark:text-gray-300 text-sm">
-                                <div className="flex items-start space-x-3">
-                                    <span className="font-bold text-maroon-700 dark:text-maroon-400 min-w-[24px]">1.</span>
-                                    <p>I am aware that EARISTAA has collected and stored my personal data during Graduation Process. These data include my demographic profile, contact details like address/email, landline/mobile numbers.</p>
+                                    <label className={labelClass}>Where are you employed?</label>
+                                    <InlineRadio name="employmentLocation" options={['Local', 'Abroad/Foreign']} value={formData.employmentLocation} onChange={v => set('employmentLocation', v)} />
                                 </div>
 
-                                <div className="flex items-start space-x-3">
-                                    <span className="font-bold text-maroon-700 dark:text-maroon-400 min-w-[24px]">2.</span>
-                                    <p>I express my consent for EARISTAA to collect, use, record, disclose, transfer, store, organize update, monitor and/or process my personal information.</p>
-                                </div>
-
-                                <div className="flex items-start space-x-3">
-                                    <span className="font-bold text-maroon-700 dark:text-maroon-400 min-w-[24px]">3.</span>
-                                    <p>I agree to personally update these data thru email request as needed.</p>
-                                </div>
-
-                                <div className="flex items-start space-x-3">
-                                    <span className="font-bold text-maroon-700 dark:text-maroon-400 min-w-[24px]">4.</span>
-                                    <p>For the efficient management of the school records, I authorize EARISTAA to manage my data for sharing with accredited company/industry partners government agencies.</p>
-                                </div>
-
-                                <div className="flex items-start space-x-3">
-                                    <span className="font-bold text-maroon-700 dark:text-maroon-400 min-w-[24px]">5.</span>
-                                    <p>To ensure the protection of my rights as a data subject, I understand that EARISTAA shall warrant to me the following Rights/:</p>
-                                    <div className="ml-6 italic text-sm text-gray-600 dark:text-gray-400">
-                                        Received notices on changes in the above-cited purposes for my data processing, or personal data breaches provided for in Section 39 of the Data Privacy Act's Implementing Guidelines;
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className={labelClass}>Company / Agency Name</label>
+                                        <Input value={formData.companyName} onChange={e => set('companyName', e.target.value)} className={fieldClass} />
+                                    </div>
+                                    <div>
+                                        <label className={labelClass}>Company Address</label>
+                                        <Input value={formData.companyAddress} onChange={e => set('companyAddress', e.target.value)} className={fieldClass} />
                                     </div>
                                 </div>
 
-                                <div className="flex items-start space-x-3">
-                                    <span className="font-bold text-maroon-700 dark:text-maroon-400 min-w-[24px]">6.</span>
-                                    <p>I hereby affirm my right to be informed, to access, and rectify and suspend and withdraw my personal data pursuant to the provision of the RA 10173 and its implementing rules and regulations.</p>
-                                </div>
-                            </div>
-
-                            <div className="border-t-2 border-maroon-200 dark:border-gray-600 pt-3 mt-3">
-                                <p className="text-gray-700 dark:text-gray-300 italic font-medium text-center text-sm">
-                                    By clicking "I Agree" below, I warrant that I have read, understood all of the above provision, and agreed with its full implementation.
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Agree/Disagree Buttons */}
-                        <div className="bg-gradient-to-r from-maroon-50 to-beige-50 dark:from-gray-800 dark:to-gray-800 border-2 border-maroon-300 dark:border-gray-600 rounded-lg p-3">
-                            <div className="flex flex-col sm:flex-row gap-3 justify-center items-stretch sm:items-center">
-                                <Button
-                                    type="button"
-                                    onClick={() => {
-                                        // Redirect to landing page
-                                        window.location.href = '/';
-                                    }}
-                                    variant="outline"
-                                    className="flex-1 sm:flex-none border-2 border-red-500 text-red-700 hover:bg-red-50 hover:border-red-600 h-10 px-6 text-sm font-bold transition-all duration-300 min-w-[160px]"
-                                >
-                                    <X className="w-4 h-4 mr-2" />
-                                    I Disagree
-                                </Button>
-                                <Button
-                                    type="button"
-                                    onClick={() => {
-                                        handleInputChange('dataPrivacyConsent', true);
-                                        handleInputChange('dataPrivacyConsentDate', new Date().toISOString());
-                                    }}
-                                    className="flex-1 sm:flex-none bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white h-10 px-6 text-sm font-bold shadow-lg hover:shadow-xl transition-all duration-300 min-w-[160px]"
-                                >
-                                    <CheckCircle className="w-4 h-4 mr-2" />
-                                    I Agree
-                                </Button>
-                            </div>
-
-                            {/* Consent Status Indicator */}
-                            {formData.dataPrivacyConsent && (
-                                <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-700 rounded-lg">
-                                    <div className="flex items-center justify-center space-x-3">
-                                        <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                                            <CheckCircle className="h-5 w-5 text-white" />
-                                        </div>
-                                        <div>
-                                            <p className="font-semibold text-green-900 dark:text-green-200">Consent Granted</p>
-                                            <p className="text-sm text-green-700 dark:text-green-400">You may now proceed to the next step.</p>
-                                        </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className={labelClass}>Present Position</label>
+                                        <Input value={formData.presentPosition} onChange={e => set('presentPosition', e.target.value)} className={fieldClass} />
+                                    </div>
+                                    <div>
+                                        <label className={labelClass}><Calendar className="inline h-3.5 w-3.5 mr-1" />Date Hired</label>
+                                        <Input type="date" value={formData.dateHired} onChange={e => set('dateHired', e.target.value)} className={fieldClass} />
                                     </div>
                                 </div>
-                            )}
 
-                            {error && !formData.dataPrivacyConsent && (
-                                <p className="text-sm text-red-600 flex items-center justify-center mt-4">
-                                    <AlertCircle className="h-4 w-4 mr-1" />
-                                    {error}
-                                </p>
-                            )}
-                        </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className={labelClass}>Years of Service</label>
+                                        <Input type="number" step="0.5" value={formData.yearsOfService} onChange={e => set('yearsOfService', e.target.value)} className={fieldClass} />
+                                    </div>
+                                    <div>
+                                        <label className={labelClass}>Job aligned to course?</label>
+                                        <InlineRadio name="jobAligned" options={['Yes', 'No']} value={formData.jobAlignedToCourse} onChange={v => set('jobAlignedToCourse', v)} />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className={labelClass}>Average Monthly Income</label>
+                                    <InlineRadio name="income" options={['Below 5,000.00', '5,001.00 to 10,000.00', '10,001.00 to 15,000.00', '15,001.00 to 20,000.00', '20,001.00 to 25,000.00', '25,001.00 & up']} value={formData.averageMonthlyIncome} onChange={v => set('averageMonthlyIncome', v)} />
+                                </div>
+
+                                <div>
+                                    <label className={labelClass}>Employment Status</label>
+                                    <InlineRadio name="empStatus" options={['Permanent', 'Temporary/Provisional', 'Contractual', 'Casual', 'Job Order', 'Self-Employed']} value={formData.employmentStatus} onChange={v => set('employmentStatus', v)} />
+                                </div>
+
+                                <div>
+                                    <label className={labelClass}>Job Level Position</label>
+                                    <InlineRadio name="jobLevel" options={['Clerical', 'Supervisory', 'Technical', 'Managerial', 'Professional', 'Self-Employed']} value={formData.jobLevelPosition} onChange={v => set('jobLevelPosition', v)} />
+                                </div>
+
+                                <div>
+                                    <label className={labelClass}>Major Line of Business</label>
+                                    <InlineRadio name="lineOfBiz" options={['Education', 'Business', 'Manufacturing', 'Hotel/Restaurant', 'Government', 'Information Tech./Arts', 'Construction/Builder', 'Others']} value={formData.majorLineOfBusiness} onChange={v => set('majorLineOfBusiness', v)} />
+                                </div>
+
+                                {formData.majorLineOfBusiness?.toLowerCase().includes('other') && (
+                                    <div>
+                                        <label className={labelClass}>Specify other line of business</label>
+                                        <Input value={formData.businessOther} onChange={e => set('businessOther', e.target.value)} className={fieldClass} />
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                 );
 
-            default:
+            // ── Achievements & About Me (combined) ──────────────────────
+            case 5:
                 return (
-                    <div className="space-y-2">
-                        <Label htmlFor={question.key} className="text-base font-medium text-maroon-800 dark:text-maroon-200">
-                            {question.label}
-                            {question.required && <span className="text-red-500 ml-1">*</span>}
-                        </Label>
-                        <div className="relative">
-                            <Input
-                                id={question.key}
-                                type={question.type}
-                                value={value}
-                                onChange={(e) => handleInputChange(question.key, e.target.value)}
-                                className={cn(
-                                    "border-beige-300 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400",
-                                    question.type === 'date' && "max-w-xs",
-                                    question.key === 'email' && emailValidation.exists && "border-red-500 pr-10",
-                                    question.key === 'email' && !emailValidation.exists && emailValidation.message && "border-green-500 pr-10",
-                                    question.key === 'studentId' && studentIdValidation.exists && "border-red-500 pr-10",
-                                    question.key === 'studentId' && !studentIdValidation.exists && studentIdValidation.message && "border-green-500 pr-10"
-                                )}
-                                placeholder={`Enter your ${question.label.toLowerCase()}`}
-                                step={question.step}
-                                min={question.min}
-                                max={question.max}
-                            />
-                            {/* Email validation indicator */}
-                            {question.key === 'email' && value && (
-                                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                                    {emailValidation.checking && (
-                                        <div className="h-4 w-4 border-2 border-maroon-600 border-t-transparent rounded-full animate-spin" />
-                                    )}
-                                    {!emailValidation.checking && emailValidation.exists && (
-                                        <AlertCircle className="h-5 w-5 text-red-500" />
-                                    )}
-                                    {!emailValidation.checking && !emailValidation.exists && emailValidation.message && (
-                                        <CheckCircle className="h-5 w-5 text-green-500" />
-                                    )}
-                                </div>
-                            )}
-                            {/* Student ID validation indicator */}
-                            {question.key === 'studentId' && value && (
-                                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                                    {studentIdValidation.checking && (
-                                        <div className="h-4 w-4 border-2 border-maroon-600 border-t-transparent rounded-full animate-spin" />
-                                    )}
-                                    {!studentIdValidation.checking && studentIdValidation.exists && (
-                                        <AlertCircle className="h-5 w-5 text-red-500" />
-                                    )}
-                                    {!studentIdValidation.checking && !studentIdValidation.exists && studentIdValidation.message && (
-                                        <CheckCircle className="h-5 w-5 text-green-500" />
-                                    )}
-                                </div>
-                            )}
+                    <div className="space-y-4">
+                        <div>
+                            <label className={labelClass}><Award className="inline h-3.5 w-3.5 mr-1" />Achievements / Awards Received</label>
+                            <Textarea value={formData.achievements} onChange={e => set('achievements', e.target.value)} placeholder="List your achievements and awards..." className={cn(fieldClass, "min-h-[100px]")} />
                         </div>
-                        {error && !question.key.includes('email') && <p className="text-sm text-red-600 flex items-center mt-1"><AlertCircle className="h-4 w-4 mr-1" />{error}</p>}
-                        {/* Email validation message */}
-                        {question.key === 'email' && !emailValidation.exists && emailValidation.message && !otpState.verified && (
-                            <p className="text-sm mt-1 flex items-center text-green-600">
-                                <CheckCircle className="h-4 w-4 mr-1" />{emailValidation.message}
-                            </p>
-                        )}
-                        {question.key === 'email' && emailValidation.exists && (
-                            <div className="mt-3 p-4 bg-red-50 dark:bg-red-900/20 border-2 border-red-300 dark:border-red-700 rounded-xl">
-                                <div className="flex items-center mb-2">
-                                    <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mr-2 flex-shrink-0" />
-                                    <span className="text-sm font-semibold text-red-800 dark:text-red-200">Email Already Registered</span>
-                                </div>
-                                <p className="text-sm text-red-700 dark:text-red-300 mb-3">
-                                    This email is already associated with an existing account. You can log in or reset your password instead.
-                                </p>
-                                <div className="flex flex-col sm:flex-row gap-2">
-                                    <a
-                                        href="/login"
-                                        className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold rounded-lg bg-maroon-600 hover:bg-maroon-700 text-white transition-colors duration-200 shadow-sm"
-                                    >
-                                        <Lock className="w-4 h-4 mr-1.5" />
-                                        Go to Login
-                                    </a>
-                                    <a
-                                        href="/forgot-password"
-                                        className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold rounded-lg border-2 border-maroon-300 dark:border-maroon-600 text-maroon-700 dark:text-maroon-300 hover:bg-maroon-50 dark:hover:bg-maroon-900/30 transition-colors duration-200"
-                                    >
-                                        <RefreshCw className="w-4 h-4 mr-1.5" />
-                                        Forgot Password?
-                                    </a>
-                                </div>
-                            </div>
-                        )}
+                        <div>
+                            <label className={labelClass}><Heart className="inline h-3.5 w-3.5 mr-1" />What I Want My EARIST Family to Know About Me</label>
+                            <Textarea value={formData.aboutMe} onChange={e => set('aboutMe', e.target.value)} placeholder="Share your story with the EARIST community..." className={cn(fieldClass, "min-h-[100px]")} />
+                        </div>
+                        <div className="text-center py-4 text-gray-400 dark:text-gray-500">
+                            <p className="text-xs">Both fields are optional. Feel free to skip if you prefer.</p>
+                        </div>
+                    </div>
+                );
 
-                        {/* OTP Verification Section */}
-                        {question.key === 'email' && value && !emailValidation.exists && !emailValidation.checking && emailValidation.message && (
-                            <div className="mt-4 p-4 bg-gradient-to-r from-maroon-50 to-beige-50 dark:from-gray-700 dark:to-gray-700 rounded-xl border-2 border-maroon-200 dark:border-gray-600">
-                                {!otpState.verified ? (
-                                    <>
-                                        <div className="flex items-center mb-3">
-                                            <Mail className="h-5 w-5 text-maroon-600 dark:text-maroon-400 mr-2" />
-                                            <span className="text-sm font-semibold text-maroon-800 dark:text-maroon-200">Email Verification Required</span>
-                                        </div>
+            // ── Account Setup ────────────────────────────────────────────
+            case 6:
+                return (
+                    <div className="space-y-4">
+                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                            <Lock className="h-4 w-4 shrink-0" />
+                            Set up your login credentials to access the alumni portal.
+                        </div>
 
-                                        {!otpState.sent ? (
-                                            <div className="space-y-3">
-                                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                    We'll send a 6-digit verification code to <strong>{value}</strong>
-                                                </p>
-                                                <Button
-                                                    type="button"
-                                                    onClick={handleSendOtp}
-                                                    disabled={otpState.sending}
-                                                    className="bg-maroon-600 hover:bg-maroon-700 text-white h-10 px-4"
-                                                >
-                                                    {otpState.sending ? (
-                                                        <>
-                                                            <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                                            Sending...
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Mail className="h-4 w-4 mr-2" />
-                                                            Send Verification Code
-                                                        </>
-                                                    )}
-                                                </Button>
-                                            </div>
-                                        ) : (
-                                            <div className="space-y-3">
-                                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                                    Enter the 6-digit code sent to <strong>{value}</strong>
-                                                </p>
-                                                <div className="flex flex-col sm:flex-row gap-3">
-                                                    <div className="flex-1">
-                                                        <Input
-                                                            type="text"
-                                                            value={otpState.code}
-                                                            onChange={(e) => handleOtpChange(e.target.value)}
-                                                            placeholder="Enter 6-digit code"
-                                                            maxLength={6}
-                                                            className={cn(
-                                                                "text-center text-lg tracking-widest font-mono",
-                                                                otpState.error && "border-red-500"
-                                                            )}
-                                                        />
-                                                    </div>
-                                                    <Button
-                                                        type="button"
-                                                        onClick={handleVerifyOtp}
-                                                        disabled={otpState.verifying || otpState.code.length !== 6}
-                                                        className="bg-green-600 hover:bg-green-700 text-white h-10 px-4"
-                                                    >
-                                                        {otpState.verifying ? (
-                                                            <>
-                                                                <div className="h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                                                Verifying...
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <CheckCircle className="h-4 w-4 mr-2" />
-                                                                Verify
-                                                            </>
-                                                        )}
-                                                    </Button>
-                                                </div>
-
-                                                {/* Resend OTP */}
-                                                <div className="flex items-center justify-between pt-2">
-                                                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                        Didn't receive the code?
-                                                    </span>
-                                                    {otpState.countdown > 0 ? (
-                                                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                            Resend in {otpState.countdown}s
-                                                        </span>
-                                                    ) : (
-                                                        <button
-                                                            type="button"
-                                                            onClick={handleSendOtp}
-                                                            disabled={otpState.sending}
-                                                            className="text-xs text-maroon-600 dark:text-maroon-400 hover:text-maroon-800 dark:hover:text-maroon-300 font-medium flex items-center"
-                                                        >
-                                                            <RefreshCw className="h-3 w-3 mr-1" />
-                                                            Resend Code
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* OTP Status Message */}
-                                        {otpState.message && (
-                                            <p className={cn(
-                                                "text-sm mt-3 flex items-center",
-                                                otpState.error ? "text-red-600" : "text-green-600"
-                                            )}>
-                                                {otpState.error ? (
-                                                    <AlertCircle className="h-4 w-4 mr-1" />
-                                                ) : (
-                                                    <CheckCircle className="h-4 w-4 mr-1" />
-                                                )}
-                                                {otpState.message}
-                                            </p>
-                                        )}
-                                    </>
-                                ) : (
-                                    <div className="flex items-center text-green-600">
-                                        <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center mr-3">
-                                            <CheckCircle className="h-5 w-5 text-white" />
-                                        </div>
-                                        <div>
-                                            <p className="font-semibold">Email Verified!</p>
-                                            <p className="text-sm text-gray-600 dark:text-gray-400">Your email has been successfully verified.</p>
-                                        </div>
+                        <div>
+                            <label className={labelClass}><Hash className="inline h-3.5 w-3.5 mr-1" />Student ID <span className="text-red-500">*</span></label>
+                            <div className="relative">
+                                <Input value={formData.studentId} onChange={e => set('studentId', e.target.value)} placeholder="Enter your student ID" className={cn(fieldClass, "pr-9", studentIdValidation.exists && "border-red-400")} />
+                                {formData.studentId && (
+                                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                                        {studentIdValidation.checking && <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />}
+                                        {!studentIdValidation.checking && studentIdValidation.exists && <AlertCircle className="h-4 w-4 text-red-500" />}
+                                        {!studentIdValidation.checking && !studentIdValidation.exists && studentIdValidation.message && <CheckCircle className="h-4 w-4 text-green-500" />}
                                     </div>
                                 )}
                             </div>
-                        )}
+                            <ValidationBadge {...studentIdValidation} />
+                            <FieldError msg={errors.studentId} />
+                        </div>
 
-                        {/* Student ID validation message */}
-                        {question.key === 'studentId' && !error && studentIdValidation.message && (
-                            <p className={cn(
-                                "text-sm mt-1 flex items-center",
-                                studentIdValidation.exists ? "text-red-600" : "text-green-600"
+                        <div>
+                            <label className={labelClass}><Lock className="inline h-3.5 w-3.5 mr-1" />Password <span className="text-red-500">*</span></label>
+                            <div className="relative">
+                                <Input
+                                    type={showPassword ? 'text' : 'password'}
+                                    value={formData.password}
+                                    onChange={e => set('password', e.target.value)}
+                                    placeholder="Min 8 chars, uppercase, lowercase, number"
+                                    className={cn(fieldClass, "pr-10")}
+                                />
+                                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </button>
+                            </div>
+                            <FieldError msg={errors.password} />
+                            {formData.password && !errors.password && (
+                                <div className="mt-1.5 flex gap-1">
+                                    {[
+                                        { test: formData.password.length >= 8, label: '8+' },
+                                        { test: /[A-Z]/.test(formData.password), label: 'A-Z' },
+                                        { test: /[a-z]/.test(formData.password), label: 'a-z' },
+                                        { test: /[0-9]/.test(formData.password), label: '0-9' },
+                                        { test: /[!@#$%^&*(),.?":{}|<>]/.test(formData.password), label: '!@#' },
+                                    ].map(r => (
+                                        <span key={r.label} className={cn(
+                                            "text-[10px] px-1.5 py-0.5 rounded-full font-medium transition-colors",
+                                            r.test ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500"
+                                        )}>
+                                            {r.label}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div>
+                            <label className={labelClass}><Lock className="inline h-3.5 w-3.5 mr-1" />Confirm Password <span className="text-red-500">*</span></label>
+                            <div className="relative">
+                                <Input
+                                    type={showConfirmPassword ? 'text' : 'password'}
+                                    value={formData.confirmPassword}
+                                    onChange={e => set('confirmPassword', e.target.value)}
+                                    placeholder="Re-enter password"
+                                    className={cn(fieldClass, "pr-10")}
+                                />
+                                <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
+                                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                                </button>
+                            </div>
+                            <FieldError msg={errors.confirmPassword} />
+                            {formData.confirmPassword && formData.password === formData.confirmPassword && (
+                                <p className="text-xs text-green-600 flex items-center gap-1 mt-1"><CheckCircle className="h-3 w-3" />Passwords match</p>
+                            )}
+                        </div>
+
+                        {/* Submission Status */}
+                        {submissionStatus !== 'idle' && (
+                            <div className={cn(
+                                "p-4 rounded-xl border flex items-start gap-3",
+                                submissionStatus === 'success' && "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700",
+                                submissionStatus === 'error' && "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700",
+                                submissionStatus === 'submitting' && "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700",
                             )}>
-                                {studentIdValidation.exists ? (
-                                    <><AlertCircle className="h-4 w-4 mr-1" />{studentIdValidation.message}</>
-                                ) : (
-                                    <><CheckCircle className="h-4 w-4 mr-1" />{studentIdValidation.message}</>
-                                )}
-                            </p>
+                                {submissionStatus === 'submitting' && <Loader2 className="h-5 w-5 text-blue-500 animate-spin shrink-0 mt-0.5" />}
+                                {submissionStatus === 'success' && <CheckCircle className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />}
+                                {submissionStatus === 'error' && <AlertCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />}
+                                <div>
+                                    <p className="text-sm font-semibold">
+                                        {submissionStatus === 'submitting' && 'Creating your account...'}
+                                        {submissionStatus === 'success' && 'Registration Successful!'}
+                                        {submissionStatus === 'error' && 'Registration Failed'}
+                                    </p>
+                                    {submissionMessage && <p className="text-xs mt-1 opacity-80 whitespace-pre-line">{submissionMessage}</p>}
+                                </div>
+                            </div>
                         )}
                     </div>
                 );
+
+            default: return null;
         }
     };
 
+    // ─── Layout ──────────────────────────────────────────────────────────────
+
+    const isLastStep = step === steps.length - 1;
+    const canGoNext = (() => {
+        if (step === 0 && !formData.dataPrivacyConsent) return false;
+        if (step === 1 && formData.email && !otpState.verified) return false;
+        if (step === 1 && emailValidation.exists) return false;
+        return true;
+    })();
+
     return (
         <>
-            <Head title="Alumni Registration Survey" />
-
-            <div className="min-h-screen bg-gradient-to-br from-maroon-50 via-beige-50 to-maroon-100 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 relative overflow-x-hidden">
-                {/* Decorative Background Elements */}
-                <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-maroon-200 dark:bg-maroon-800 rounded-full mix-blend-multiply dark:mix-blend-normal filter blur-3xl opacity-10 dark:opacity-20 animate-pulse"></div>
-                    <div className="absolute bottom-0 left-0 w-96 h-96 bg-beige-200 dark:bg-gray-700 rounded-full mix-blend-multiply dark:mix-blend-normal filter blur-3xl opacity-10 dark:opacity-20 animate-pulse" style={{ animationDelay: '3s' }}></div>
-                </div>
-
-                {/* Header */}
-                <div className="bg-gradient-to-r from-maroon-800 to-maroon-900 text-white py-3 shadow-lg relative z-10">
-                    <div className="container mx-auto px-4 max-w-7xl">
-                        <div className="flex items-center justify-between flex-wrap gap-3">
-                            <div className="flex items-center flex-1 min-w-[200px]">
-                                <div className="relative">
-                                    <GraduationCap className="h-8 w-8 mr-3 relative z-10" />
-                                </div>
-                                <div>
-                                    <h1 className="text-xl md:text-2xl font-bold tracking-tight">Alumni Tracer System</h1>
-                                    <p className="text-maroon-200 text-xs md:text-sm">Registration & Career Survey</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <Link
-                                    href="/login"
-                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs font-medium transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white border border-green-500 bg-green-600 text-white shadow-sm hover:bg-green-700 hover:border-green-400 h-8 px-3 py-1 cursor-pointer"
-                                >
-                                    <Lock className="w-3 h-3 mr-1" />
-                                    Skip & Login
-                                </Link>
-                                <Link
-                                    href="/"
-                                    className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs font-medium transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white border border-maroon-600 bg-transparent text-maroon-100 shadow-sm hover:bg-maroon-700 hover:text-white hover:border-white h-8 px-3 py-1 cursor-pointer"
-                                >
-                                    <ArrowLeft className="w-3 h-3 mr-1" />
-                                    Back to Home
-                                </Link>
-                            </div>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="max-w-full mx-auto mt-3">
-                            <div className="flex justify-between text-xs text-maroon-200 mb-2 font-medium">
-                                <span className="flex items-center">
-                                    <span className="w-5 h-5 bg-maroon-700 rounded-full flex items-center justify-center text-xs font-bold mr-2">
-                                        {currentSection + 1}
-                                    </span>
-                                    Step {currentSection + 1} of {totalSections}
-                                </span>
-                                <span className="bg-maroon-700/50 px-2 py-0.5 rounded-full text-xs">{Math.round(progress)}% Complete</span>
-                            </div>
-                            <div className="relative">
-                                <div className="h-2 bg-maroon-700/30 rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-300 rounded-full transition-all duration-500 ease-out shadow-lg"
-                                        style={{ width: `${progress}%` }}
-                                    >
-                                        <div className="h-full w-full bg-gradient-to-r from-transparent via-white/30 to-transparent animate-pulse"></div>
-                                    </div>
-                                </div>
-                            </div>
+            <Head title="Alumni Registration" />
+            <div className="h-screen flex flex-col bg-gray-50 dark:bg-gray-900 overflow-hidden">
+                {/* ── Top bar ─────────────────────────────────────────── */}
+                <header className="bg-gradient-to-r from-maroon-800 to-maroon-900 text-white px-4 py-2.5 flex items-center justify-between shrink-0 shadow-lg z-20">
+                    <div className="flex items-center gap-3">
+                        <GraduationCap className="h-6 w-6" />
+                        <div>
+                            <h1 className="text-sm font-bold leading-tight">EARIST Alumni Tracer</h1>
+                            <p className="text-[10px] text-maroon-200">Registration Survey</p>
                         </div>
                     </div>
-                </div>
+                    <div className="flex items-center gap-2">
+                        <Link href="/login" className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white transition-colors">
+                            <Lock className="h-3 w-3" />Login
+                        </Link>
+                        <Link href="/" className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-md border border-maroon-500 hover:bg-maroon-700 text-maroon-100 transition-colors">
+                            <ArrowLeft className="h-3 w-3" />Home
+                        </Link>
+                    </div>
+                </header>
 
-                {/* Main Content */}
-                <div className="container mx-auto px-4 py-4 relative z-10">
-                    <div className="max-w-6xl mx-auto">
-                        <Card className="border-maroon-200 dark:border-gray-700 shadow-lg bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm overflow-hidden">
-                            <CardHeader className="bg-gradient-to-r from-maroon-50 to-beige-50 dark:from-gray-800 dark:to-gray-800 border-b border-maroon-200 dark:border-gray-700 py-3 px-4">
-                                <div className="flex items-start">
-                                    <div className="w-12 h-12 bg-gradient-to-br from-maroon-600 to-maroon-700 rounded-xl flex items-center justify-center mr-3 shadow-lg flex-shrink-0">
-                                        {React.createElement(currentSectionData.icon, {
-                                            className: "h-6 w-6 text-white"
-                                        })}
-                                    </div>
-                                    <div className="flex-1">
-                                        <CardTitle className="text-xl md:text-2xl text-maroon-900 dark:text-white font-bold mb-1">
-                                            {currentSectionData.title}
-                                        </CardTitle>
-                                        <CardDescription className="text-maroon-600 dark:text-gray-400 text-sm">
-                                            {currentSectionData.description}
-                                        </CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-
-                            <CardContent className="p-4 md:p-6">
-                                <div className="space-y-8">
-                                    {currentSectionData.questions.map((question) => {
-                                        // For employment section, conditionally show fields based on employment status
-                                        if (currentSectionData.id === 'employment') {
-                                            // Always show "Are you presently employed?"
-                                            if (question.key === 'presentlyEmployed') {
-                                                // always visible
-                                            }
-                                            // Only show employment location when employed (Yes)
-                                            else if (question.key === 'employmentLocation') {
-                                                if (formData.presentlyEmployed !== 'Yes') return null;
-                                            }
-                                            // Only show "reason not employed" when not employed (No)
-                                            else if (question.key === 'notEmployedReason') {
-                                                if (formData.presentlyEmployed !== 'No') return null;
-                                            }
-                                            // Hide all other employment fields unless presently employed
-                                            else {
-                                                if (formData.presentlyEmployed !== 'Yes') return null;
-                                            }
-                                        }
-
-                                        // For school information, conditionally show campusOther only if campus name contains "Others"
-                                        if (currentSectionData.id === 'school' && question.key === 'campusOther') {
-                                            const selectedCampus = campuses.find(c => c.id.toString() === formData.campusId);
-                                            if (!selectedCampus || !selectedCampus.name.toLowerCase().includes('other')) {
-                                                return null;
-                                            }
-                                        }
-
-                                        // For personal information, conditionally show maiden name only for females
-                                        if (currentSectionData.id === 'personal' && question.key === 'maidenName') {
-                                            if (formData.gender !== 'Female') {
-                                                return null;
-                                            }
-                                        }
-
-                                        // For personal information, conditionally show spouse name only for married
-                                        if (currentSectionData.id === 'personal' && question.key === 'spouseName') {
-                                            if (formData.civilStatus !== 'Married') {
-                                                return null;
-                                            }
-                                        }
-
-                                        // For employment, conditionally show businessOther only if "Others" is selected in majorLineOfBusiness
-                                        if (currentSectionData.id === 'employment' && question.key === 'businessOther') {
-                                            if (!formData.majorLineOfBusiness || !formData.majorLineOfBusiness.toLowerCase().includes('other')) {
-                                                return null;
-                                            }
-                                        }
-
-                                        return (
-                                            <div key={question.key} className="animate-fade-in">
-                                                {renderQuestion(question)}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* Submission Status */}
-                                {submissionStatus !== 'idle' && (
-                                    <div className={`mt-8 p-5 rounded-xl flex items-start space-x-4 animate-fade-in shadow-lg ${submissionStatus === 'success'
-                                        ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border-2 border-green-300 dark:border-green-700'
-                                        : submissionStatus === 'error'
-                                            ? 'bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30 border-2 border-red-300 dark:border-red-700'
-                                            : 'bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 border-2 border-blue-300 dark:border-blue-700'
-                                        }`}>
-                                        <div className="flex-shrink-0">
-                                            {submissionStatus === 'success' && (
-                                                <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
-                                                    <CheckCircle className="h-6 w-6 text-white" />
-                                                </div>
-                                            )}
-                                            {submissionStatus === 'error' && (
-                                                <div className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center">
-                                                    <AlertCircle className="h-6 w-6 text-white" />
-                                                </div>
-                                            )}
-                                            {submissionStatus === 'submitting' && (
-                                                <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                                            )}
-                                        </div>
-                                        <div className="flex-1">
-                                            <p className={`text-base font-bold ${submissionStatus === 'success'
-                                                ? 'text-green-900 dark:text-green-200'
-                                                : submissionStatus === 'error'
-                                                    ? 'text-red-900 dark:text-red-200'
-                                                    : 'text-blue-900 dark:text-blue-200'
-                                                }`}>
-                                                {submissionStatus === 'submitting' && 'Processing your registration...'}
-                                                {submissionStatus === 'success' && 'Registration Successful!'}
-                                                {submissionStatus === 'error' && 'Registration Failed'}
-                                            </p>
-                                            {submissionMessage && (
-                                                <p className={`text-sm mt-2 leading-relaxed ${submissionStatus === 'success'
-                                                    ? 'text-green-800 dark:text-green-300'
-                                                    : submissionStatus === 'error'
-                                                        ? 'text-red-800 dark:text-red-300'
-                                                        : 'text-blue-800 dark:text-blue-300'
-                                                    }`}>
-                                                    {submissionMessage}
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Navigation Buttons */}
-                                <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mt-10 pt-8 border-t-2 border-maroon-100 dark:border-gray-700">
-                                    <Button
-                                        onClick={handlePrevious}
-                                        disabled={currentSection === 0 || isSubmitting}
-                                        variant="outline"
-                                        className="border-2 border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-gray-700 hover:border-maroon-500 disabled:opacity-50 h-12 px-6 text-base font-semibold transition-all duration-300 order-2 sm:order-1"
+                {/* ── Main area ────────────────────────────────────────── */}
+                <div className="flex flex-1 overflow-hidden">
+                    {/* ── Sidebar (desktop) ──────────────────────── */}
+                    <nav className="hidden md:flex flex-col w-56 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 shrink-0">
+                        <div className="flex-1 py-3 overflow-y-auto">
+                            {steps.map((s, i) => {
+                                const isActive = i === step;
+                                const isDone = i < step;
+                                const Icon = s.icon;
+                                return (
+                                    <button
+                                        key={s.id}
+                                        onClick={() => goToStep(i)}
+                                        className={cn(
+                                            "w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all text-sm",
+                                            isActive && "bg-maroon-50 dark:bg-maroon-900/30 text-maroon-700 dark:text-maroon-300 border-r-2 border-maroon-600",
+                                            isDone && !isActive && "text-green-700 dark:text-green-400 hover:bg-gray-50 dark:hover:bg-gray-700/50",
+                                            !isActive && !isDone && "text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                                        )}
                                     >
-                                        <ArrowLeft className="w-5 h-5 mr-2" />
-                                        Previous
-                                    </Button>
-
-                                    {currentSection < totalSections - 1 ? (
-                                        (() => {
-                                            // Determine if the "Next" button should be disabled
-                                            const privacyBlocked = currentSection === 0 && !formData.dataPrivacyConsent;
-                                            const emailBlocked = currentSection === 1 && formData.email && !otpState.verified;
-                                            const emailDuplicate = currentSection === 1 && emailValidation.exists;
-                                            const phoneDuplicate = currentSection === 1 && phoneValidation.exists;
-                                            const studentIdDuplicate = currentSection === 7 && studentIdValidation.exists;
-                                            const duplicateBlocked = emailDuplicate || phoneDuplicate || studentIdDuplicate;
-                                            const nextDisabled = isSubmitting || privacyBlocked || !!emailBlocked || duplicateBlocked;
-
-                                            return (
-                                                <div className="flex flex-col items-end space-y-1 order-1 sm:order-2">
-                                                    <Button
-                                                        onClick={handleNext}
-                                                        disabled={nextDisabled}
-                                                        className={`h-12 px-8 text-base font-semibold shadow-lg transition-all duration-300 ${nextDisabled
-                                                            ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed shadow-none'
-                                                            : 'bg-gradient-to-r from-maroon-600 to-maroon-700 hover:from-maroon-700 hover:to-maroon-800 text-white hover:shadow-xl'
-                                                            }`}
-                                                    >
-                                                        Next Step
-                                                        <ArrowRight className="w-5 h-5 ml-2" />
-                                                    </Button>
-                                                    {privacyBlocked && (
-                                                        <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center">
-                                                            <AlertCircle className="w-3 h-3 mr-1" />
-                                                            Please agree to the Data Privacy Consent first
-                                                        </p>
-                                                    )}
-                                                    {emailBlocked && !emailDuplicate && (
-                                                        <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center">
-                                                            <AlertCircle className="w-3 h-3 mr-1" />
-                                                            Please verify your email before proceeding
-                                                        </p>
-                                                    )}
-                                                    {emailDuplicate && (
-                                                        <p className="text-xs text-red-600 dark:text-red-400 flex items-center">
-                                                            <AlertCircle className="w-3 h-3 mr-1" />
-                                                            Email is already registered — use a different email
-                                                        </p>
-                                                    )}
-                                                    {phoneDuplicate && (
-                                                        <p className="text-xs text-red-600 dark:text-red-400 flex items-center">
-                                                            <AlertCircle className="w-3 h-3 mr-1" />
-                                                            Phone number is already registered
-                                                        </p>
-                                                    )}
-                                                    {studentIdDuplicate && (
-                                                        <p className="text-xs text-red-600 dark:text-red-400 flex items-center">
-                                                            <AlertCircle className="w-3 h-3 mr-1" />
-                                                            Student ID is already registered
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            );
-                                        })()
-                                    ) : (
-                                        <div className="flex flex-col items-stretch sm:items-end space-y-3 order-1 sm:order-2">
-                                            {submissionStatus === 'success' && (
-                                                <p className="text-sm text-green-600 text-center sm:text-right font-medium flex items-center justify-center sm:justify-end">
-                                                    <CheckCircle className="w-4 h-4 mr-1" />
-                                                    Redirecting to login page...
-                                                </p>
-                                            )}
-                                            {studentIdValidation.exists && (
-                                                <p className="text-xs text-red-600 dark:text-red-400 flex items-center justify-center sm:justify-end">
-                                                    <AlertCircle className="w-3 h-3 mr-1" />
-                                                    Student ID is already registered — please use a different one
-                                                </p>
-                                            )}
-                                            <Button
-                                                onClick={handleSubmit}
-                                                disabled={isSubmitting || submissionStatus === 'success' || studentIdValidation.exists}
-                                                className={`h-12 px-8 text-base font-bold shadow-lg transition-all duration-300 min-w-[220px] ${studentIdValidation.exists
-                                                    ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed shadow-none'
-                                                    : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white disabled:opacity-50 hover:shadow-xl'
-                                                    }`}
-                                            >
-                                                {isSubmitting ? (
-                                                    <>
-                                                        <div className="h-5 w-5 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                                        Creating Account...
-                                                    </>
-                                                ) : submissionStatus === 'success' ? (
-                                                    <>
-                                                        <CheckCircle className="w-5 h-5 mr-2" />
-                                                        Registration Complete
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Sparkles className="w-5 h-5 mr-2" />
-                                                        Complete Registration
-                                                    </>
-                                                )}
-                                            </Button>
+                                        <div className={cn(
+                                            "w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all",
+                                            isActive && "bg-maroon-600 text-white shadow-sm",
+                                            isDone && !isActive && "bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400",
+                                            !isActive && !isDone && "bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500"
+                                        )}>
+                                            {isDone && !isActive ? <Check className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}
                                         </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className={cn("text-xs leading-tight truncate", isActive ? "font-semibold" : "font-medium")}>{s.title}</p>
+                                            <p className="text-[10px] text-gray-400 dark:text-gray-500">Step {i + 1}</p>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+                            <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 mb-1.5">
+                                <span>Progress</span>
+                                <span>{Math.round(((step + 1) / steps.length) * 100)}%</span>
+                            </div>
+                            <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-maroon-500 to-maroon-600 rounded-full transition-all duration-500" style={{ width: `${((step + 1) / steps.length) * 100}%` }} />
+                            </div>
+                        </div>
+                    </nav>
+
+                    {/* ── Content area ────────────────────────────── */}
+                    <main className="flex-1 flex flex-col overflow-hidden">
+                        {/* Step header + desktop nav */}
+                        <div className="px-4 sm:px-6 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shrink-0">
+                            <div className="max-w-3xl mx-auto flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-gradient-to-br from-maroon-600 to-maroon-700 text-white shadow-sm">
+                                    {React.createElement(steps[step].icon, { className: "h-4 w-4" })}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h2 className="text-base font-bold text-gray-900 dark:text-white truncate">{steps[step].title}</h2>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">Step {step + 1} of {steps.length}</p>
+                                </div>
+                                <div className="hidden md:flex items-center gap-2">
+                                    <Button onClick={goPrev} disabled={step === 0 || isSubmitting} variant="outline" size="sm" className="h-8 px-3 text-xs">
+                                        <ArrowLeft className="h-3.5 w-3.5 mr-1" />Back
+                                    </Button>
+                                    {isLastStep ? (
+                                        <Button onClick={handleSubmit} disabled={isSubmitting || submissionStatus === 'success' || studentIdValidation.exists} size="sm" className="h-8 px-4 text-xs bg-green-600 hover:bg-green-700 text-white">
+                                            {isSubmitting ? <><Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />Creating...</> : <><Sparkles className="h-3.5 w-3.5 mr-1" />Complete Registration</>}
+                                        </Button>
+                                    ) : (
+                                        <Button onClick={goNext} disabled={!canGoNext || isSubmitting} size="sm" className="h-8 px-4 text-xs bg-maroon-600 hover:bg-maroon-700 text-white disabled:opacity-50">
+                                            Next<ArrowRight className="h-3.5 w-3.5 ml-1" />
+                                        </Button>
                                     )}
                                 </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Section Navigation Dots */}
-                        <div className="mt-8 flex justify-center">
-                            <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm px-6 py-4 rounded-full shadow-lg border-2 border-maroon-200 dark:border-gray-700">
-                                <div className="flex space-x-3">
-                                    {sections.map((section, index) => {
-                                        // Prevent jumping ahead if privacy not agreed, email not verified, or duplicates found
-                                        const canNavigate = (() => {
-                                            if (index <= currentSection) return true; // Can always go back
-                                            if (!formData.dataPrivacyConsent) return false; // Privacy not agreed
-                                            if (index > 1 && formData.email && !otpState.verified) return false; // Email not verified
-                                            if (index > 1 && emailValidation.exists) return false; // Duplicate email
-                                            if (index > 1 && phoneValidation.exists) return false; // Duplicate phone
-                                            if (index > 7 && studentIdValidation.exists) return false; // Duplicate student ID
-                                            return true;
-                                        })();
-
-                                        return (
-                                            <button
-                                                key={section.id}
-                                                onClick={() => canNavigate && setCurrentSection(index)}
-                                                disabled={!canNavigate}
-                                                className={`transition-all duration-300 rounded-full ${!canNavigate
-                                                    ? 'w-4 h-4 bg-gray-300 dark:bg-gray-600 cursor-not-allowed opacity-50'
-                                                    : index === currentSection
-                                                        ? 'w-10 h-4 bg-gradient-to-r from-maroon-600 to-maroon-700 shadow-md'
-                                                        : index < currentSection
-                                                            ? 'w-4 h-4 bg-maroon-400 hover:bg-maroon-500'
-                                                            : 'w-4 h-4 bg-beige-300 dark:bg-gray-600 hover:bg-beige-400 dark:hover:bg-gray-500'
-                                                    }`}
-                                                title={section.title}
-                                                aria-label={`Go to ${section.title}`}
-                                            />
-                                        );
-                                    })}
-                                </div>
                             </div>
                         </div>
 
-                        {/* Help Text */}
-                        <div className="mt-6 text-center">
-                            <p className="text-sm text-maroon-600 dark:text-gray-400">
-                                <span className="inline-flex items-center">
-                                    <Shield className="w-4 h-4 mr-1" />
-                                    Your information is secure and encrypted
-                                </span>
-                            </p>
+                        {/* Scrollable step content */}
+                        <div ref={contentRef} className="flex-1 overflow-y-auto pb-20 md:pb-6">
+                            <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4">
+                                {renderStep()}
+                            </div>
                         </div>
+                    </main>
+                </div>
+
+                {/* ── Mobile bottom bar ────────────────────────────── */}
+                <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-30 px-4 py-2 flex items-center gap-2 shadow-lg">
+                    <Button onClick={goPrev} disabled={step === 0 || isSubmitting} variant="outline" size="sm" className="h-9 px-3 shrink-0">
+                        <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="flex-1 flex items-center gap-1 justify-center">
+                        {steps.map((_, i) => (
+                            <button
+                                key={i}
+                                onClick={() => goToStep(i)}
+                                className={cn(
+                                    "h-1.5 rounded-full transition-all",
+                                    i === step ? "w-6 bg-maroon-600" : i < step ? "w-3 bg-green-400" : "w-3 bg-gray-200 dark:bg-gray-600"
+                                )}
+                            />
+                        ))}
                     </div>
+                    {isLastStep ? (
+                        <Button onClick={handleSubmit} disabled={isSubmitting || submissionStatus === 'success' || studentIdValidation.exists} size="sm" className="h-9 px-4 bg-green-600 hover:bg-green-700 text-white shrink-0">
+                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4 mr-1" />Submit</>}
+                        </Button>
+                    ) : (
+                        <Button onClick={goNext} disabled={!canGoNext || isSubmitting} size="sm" className="h-9 px-3 bg-maroon-600 hover:bg-maroon-700 text-white shrink-0 disabled:opacity-50">
+                            <ArrowRight className="h-4 w-4" />
+                        </Button>
+                    )}
                 </div>
             </div>
         </>

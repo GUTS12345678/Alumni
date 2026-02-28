@@ -672,6 +672,7 @@ class MessagingController extends Controller
                     'name' => $u->name,
                     'email' => $u->email,
                     'profile_picture' => $u->profile_picture_path,
+                    'profile_picture_path' => $u->profile_picture_path,
                     'role' => $u->role,
                     'student_id' => $u->alumniProfile?->student_id,
                     'graduation_year' => $u->alumniProfile?->graduation_year,

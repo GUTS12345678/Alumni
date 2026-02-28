@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
     User,
     Mail,
@@ -21,7 +22,12 @@ import {
     AlertCircle,
     Heart,
     Users,
-    TrendingUp
+    TrendingUp,
+    Globe,
+    Star,
+    DollarSign,
+    Clock,
+    Sparkles,
 } from 'lucide-react';
 
 interface AlumniProfile {
@@ -30,10 +36,18 @@ interface AlumniProfile {
     first_name: string;
     last_name: string;
     middle_name?: string;
+    maiden_name?: string;
+    suffix?: string;
     student_id?: string;
     birth_date?: string;
+    age?: number;
     gender?: string;
+    place_of_birth?: string;
+    civil_status?: string;
+    spouse_name?: string;
+    number_of_children?: number;
     phone?: string;
+    mobile_no?: string;
     alternate_email?: string;
     current_address?: string;
     city?: string;
@@ -48,21 +62,36 @@ interface AlumniProfile {
     gpa?: number;
     graduation_year?: number;
     graduation_date?: string;
+    enrollment_year?: number;
+    honors_awards?: string;
     employment_status?: string;
+    presently_employed?: string;
+    employment_location_type?: string;
     current_job_title?: string;
     current_employer?: string;
+    company_address?: string;
     company_industry?: string;
     company_size?: string;
+    major_line_of_business?: string;
     current_salary?: number;
     salary_currency?: string;
+    salary_range?: string;
+    average_monthly_income?: string;
+    career_field?: string;
+    job_level_position?: string;
     job_start_date?: string;
+    date_hired?: string;
+    years_of_service?: number;
     job_description?: string;
     job_related_to_degree?: boolean;
+    job_aligned_to_course?: string;
     job_mismatch_reason?: string;
     job_satisfaction?: number;
     unemployment_reason?: string;
     skills?: string[];
     certifications?: string[];
+    achievements?: string;
+    about_me?: string;
     career_goals?: string;
     feedback_to_institution?: string;
     willing_to_mentor?: boolean;
@@ -72,12 +101,72 @@ interface AlumniProfile {
     completion_percentage?: number;
     created_at?: string;
     survey_completed?: boolean;
+    profile_picture_path?: string;
+}
+
+const formatEmploymentStatus = (status?: string): { label: string; className: string } => {
+    const map: Record<string, { label: string; className: string }> = {
+        employed_full_time: { label: 'Employed (Full-Time)', className: 'bg-green-100 text-green-800 border-green-200' },
+        employed_part_time: { label: 'Employed (Part-Time)', className: 'bg-blue-100 text-blue-800 border-blue-200' },
+        self_employed: { label: 'Self-Employed', className: 'bg-purple-100 text-purple-800 border-purple-200' },
+        unemployed_seeking: { label: 'Unemployed (Seeking)', className: 'bg-orange-100 text-orange-800 border-orange-200' },
+        unemployed_not_seeking: { label: 'Unemployed (Not Seeking)', className: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700' },
+        continuing_education: { label: 'Continuing Education', className: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+        military_service: { label: 'Military Service', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+        other: { label: 'Other', className: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700' },
+    };
+    return map[status || ''] || { label: status ? status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Not Specified', className: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700' };
+};
+
+const formatCivilStatus = (status?: string): string => {
+    const map: Record<string, string> = {
+        single: 'Single', married: 'Married', divorced: 'Divorced',
+        widowed: 'Widowed', separated: 'Separated',
+    };
+    return map[status || ''] || (status ? status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '');
+};
+
+const formatLocationType = (type?: string): string => {
+    const map: Record<string, string> = {
+        local: 'Local (Philippines)', foreign: 'Foreign / OFW',
+        remote: 'Remote (Foreign Company)', not_applicable: 'Not Applicable',
+    };
+    return map[type || ''] || type || '';
+};
+
+const formatSalaryRange = (range?: string): string => {
+    const map: Record<string, string> = {
+        below_15k: 'Below ₱15,000', '15k_25k': '₱15,000 – ₱25,000',
+        '25k_35k': '₱25,000 – ₱35,000', '35k_50k': '₱35,000 – ₱50,000',
+        '50k_75k': '₱50,000 – ₱75,000', '75k_100k': '₱75,000 – ₱100,000',
+        above_100k: 'Above ₱100,000', prefer_not_say: 'Prefer not to say',
+    };
+    return map[range || ''] || range || '';
+};
+
+const formatCareerField = (field?: string): string => {
+    if (!field) return '';
+    return field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+};
+
+interface PageProps {
+    auth: {
+        user?: {
+            profile_picture_path?: string;
+        };
+    };
+    [key: string]: unknown;
 }
 
 export default function ProfileView() {
+    const { auth } = usePage<PageProps>().props;
     const [profile, setProfile] = useState<AlumniProfile | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    const profilePicUrl = auth?.user?.profile_picture_path
+        ? `/api/v1/files/${auth.user.profile_picture_path}`
+        : undefined;
 
     useEffect(() => {
         fetchProfile();
@@ -109,20 +198,9 @@ export default function ProfileView() {
         }
     };
 
-    const getEmploymentStatusBadge = (status?: string) => {
-        const statusMap: Record<string, { label: string; className: string }> = {
-            employed_full_time: { label: 'Employed Full-Time', className: 'bg-green-100 text-green-800 border-green-200' },
-            employed_part_time: { label: 'Employed Part-Time', className: 'bg-blue-100 text-blue-800 border-blue-200' },
-            self_employed: { label: 'Self-Employed', className: 'bg-purple-100 text-purple-800 border-purple-200' },
-            unemployed_looking: { label: 'Unemployed (Looking)', className: 'bg-orange-100 text-orange-800 border-orange-200' },
-            unemployed_not_looking: { label: 'Unemployed (Not Looking)', className: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700' },
-            further_education: { label: 'Further Education', className: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
-            other: { label: 'Other', className: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700' },
-        };
-
-        const statusInfo = statusMap[status || ''] || { label: 'Not Specified', className: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700' };
-        return <Badge className={statusInfo.className}>{statusInfo.label}</Badge>;
-    };
+    const fullName = profile
+        ? [profile.first_name, profile.middle_name, profile.last_name, profile.suffix].filter(Boolean).join(' ')
+        : '';
 
     if (loading) {
         return (
@@ -152,15 +230,34 @@ export default function ProfileView() {
         );
     }
 
+    const empStatus = formatEmploymentStatus(profile.employment_status);
+
     return (
         <AlumniBaseLayout title="My Profile">
             <Head title="My Profile" />
 
-            {/* Header with Edit Button */}
+            {/* Header with Avatar + Edit Button */}
             <div className="mb-8 flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold text-maroon-800 dark:text-gray-200">My Profile</h1>
-                    <p className="text-maroon-600 dark:text-gray-400 mt-2">View and manage your personal information</p>
+                <div className="flex items-center gap-4">
+                    <Avatar className="h-16 w-16 border-2 border-maroon-200">
+                        <AvatarImage src={profilePicUrl} />
+                        <AvatarFallback className="bg-maroon-100 text-maroon-700 text-xl font-bold">
+                            {(profile.first_name?.[0] || '') + (profile.last_name?.[0] || '')}
+                        </AvatarFallback>
+                    </Avatar>
+                    <div>
+                        <h1 className="text-3xl font-bold text-maroon-800 dark:text-gray-200">
+                            {fullName}
+                        </h1>
+                        <p className="text-maroon-600 dark:text-gray-400 mt-1">
+                            {profile.current_job_title
+                                ? `${profile.current_job_title}${profile.current_employer ? ` at ${profile.current_employer}` : ''}`
+                                : profile.degree_program || 'Alumni'}
+                        </p>
+                        {profile.maiden_name && (
+                            <p className="text-sm text-gray-500 dark:text-gray-500">née {profile.maiden_name}</p>
+                        )}
+                    </div>
                 </div>
                 <Button
                     onClick={() => router.visit('/alumni/profile/edit')}
@@ -194,6 +291,21 @@ export default function ProfileView() {
                 </CardContent>
             </Card>
 
+            {/* About Me (if present) */}
+            {profile.about_me && (
+                <Card className="mb-6 border-beige-200 dark:border-gray-700 shadow-lg">
+                    <CardHeader>
+                        <CardTitle className="flex items-center text-maroon-800 dark:text-gray-200">
+                            <Sparkles className="h-5 w-5 mr-2" />
+                            About Me
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">{profile.about_me}</p>
+                    </CardContent>
+                </Card>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Main Content - Left Column (2/3) */}
                 <div className="lg:col-span-2 space-y-6">
@@ -206,18 +318,30 @@ export default function ProfileView() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <InfoField icon={User} label="Full Name" value={`${profile.first_name} ${profile.middle_name || ''} ${profile.last_name}`.trim()} />
+                            <InfoField icon={User} label="Full Name" value={fullName} />
                             <InfoField icon={User} label="Student ID" value={profile.student_id} />
                             <InfoField icon={Calendar} label="Birth Date" value={profile.birth_date ? new Date(profile.birth_date).toLocaleDateString() : undefined} />
-                            <InfoField icon={User} label="Gender" value={profile.gender} />
+                            {profile.age != null && <InfoField icon={User} label="Age" value={`${profile.age} years old`} />}
+                            <InfoField icon={User} label="Gender" value={profile.gender ? profile.gender.charAt(0).toUpperCase() + profile.gender.slice(1).replace(/_/g, ' ') : undefined} />
+                            <InfoField icon={MapPin} label="Place of Birth" value={profile.place_of_birth} />
+                            <InfoField icon={Heart} label="Civil Status" value={formatCivilStatus(profile.civil_status)} />
+                            {profile.civil_status === 'married' && profile.spouse_name && (
+                                <InfoField icon={Users} label="Spouse Name" value={profile.spouse_name} />
+                            )}
+                            {profile.number_of_children != null && profile.number_of_children > 0 && (
+                                <InfoField icon={Users} label="No. of Children" value={profile.number_of_children.toString()} />
+                            )}
                             <InfoField icon={Mail} label="Email" value={profile.email} />
                             <InfoField icon={Mail} label="Alternate Email" value={profile.alternate_email} />
                             <InfoField icon={Phone} label="Phone" value={profile.phone} />
+                            {profile.mobile_no && profile.mobile_no !== profile.phone && (
+                                <InfoField icon={Phone} label="Mobile No." value={profile.mobile_no} />
+                            )}
                             <InfoField icon={MapPin} label="Address" value={profile.current_address} className="md:col-span-2" />
                             <InfoField icon={MapPin} label="City" value={profile.city} />
                             <InfoField icon={MapPin} label="State/Province" value={profile.state_province} />
                             <InfoField icon={MapPin} label="Postal Code" value={profile.postal_code} />
-                            <InfoField icon={MapPin} label="Country" value={profile.country} />
+                            <InfoField icon={Globe} label="Country" value={profile.country} />
                         </CardContent>
                     </Card>
 
@@ -234,10 +358,22 @@ export default function ProfileView() {
                             <InfoField icon={GraduationCap} label="Major" value={profile.major} />
                             <InfoField icon={GraduationCap} label="Minor" value={profile.minor} />
                             <InfoField icon={Award} label="GPA" value={profile.gpa?.toString()} />
+                            <InfoField icon={Calendar} label="Enrollment Year" value={profile.enrollment_year?.toString()} />
                             <InfoField icon={Calendar} label="Graduation Year" value={profile.graduation_year?.toString()} />
                             <InfoField icon={Calendar} label="Graduation Date" value={profile.graduation_date ? new Date(profile.graduation_date).toLocaleDateString() : undefined} />
                             {profile.batch && (
-                                <InfoField icon={Users} label="Batch" value={profile.batch.name} className="md:col-span-2" />
+                                <InfoField icon={Users} label="Batch" value={profile.batch.name} />
+                            )}
+                            {profile.honors_awards && (
+                                <div className="md:col-span-2">
+                                    <div className="flex items-start space-x-3">
+                                        <Award className="h-5 w-5 text-maroon-600 dark:text-gray-400 mt-0.5 flex-shrink-0" />
+                                        <div className="min-w-0 flex-1">
+                                            <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Honors & Awards</label>
+                                            <p className="text-maroon-800 dark:text-gray-200 whitespace-pre-line">{profile.honors_awards}</p>
+                                        </div>
+                                    </div>
+                                </div>
                             )}
                         </CardContent>
                     </Card>
@@ -254,14 +390,52 @@ export default function ProfileView() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Employment Status</label>
-                                    <div className="mt-1">{getEmploymentStatusBadge(profile.employment_status)}</div>
+                                    <div className="mt-1">
+                                        <Badge className={empStatus.className}>{empStatus.label}</Badge>
+                                    </div>
                                 </div>
+                                {profile.presently_employed && (
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Presently Employed</label>
+                                        <div className="mt-1">
+                                            <Badge className={profile.presently_employed === 'yes' ? 'bg-green-100 text-green-800' : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'}>
+                                                {profile.presently_employed === 'yes' ? 'Yes' : 'No'}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                )}
                                 <InfoField icon={Briefcase} label="Job Title" value={profile.current_job_title} />
+                                <InfoField icon={Briefcase} label="Job Level / Position" value={profile.job_level_position} />
                                 <InfoField icon={Building} label="Employer" value={profile.current_employer} />
+                                <InfoField icon={MapPin} label="Company Address" value={profile.company_address} />
                                 <InfoField icon={Building} label="Industry" value={profile.company_industry} />
+                                <InfoField icon={Building} label="Line of Business" value={profile.major_line_of_business} />
                                 <InfoField icon={Building} label="Company Size" value={profile.company_size} />
+                                {profile.career_field && (
+                                    <InfoField icon={Target} label="Career Field" value={formatCareerField(profile.career_field)} />
+                                )}
+                                {profile.employment_location_type && (
+                                    <InfoField icon={Globe} label="Work Location" value={formatLocationType(profile.employment_location_type)} />
+                                )}
+                                <InfoField icon={Calendar} label="Date Hired" value={profile.date_hired ? new Date(profile.date_hired).toLocaleDateString() : undefined} />
                                 <InfoField icon={Calendar} label="Job Start Date" value={profile.job_start_date ? new Date(profile.job_start_date).toLocaleDateString() : undefined} />
-                                {profile.job_related_to_degree !== undefined && (
+                                {profile.years_of_service != null && (
+                                    <InfoField icon={Clock} label="Years of Service" value={`${profile.years_of_service} year${Number(profile.years_of_service) !== 1 ? 's' : ''}`} />
+                                )}
+                                {profile.average_monthly_income && (
+                                    <InfoField icon={DollarSign} label="Avg. Monthly Income" value={profile.average_monthly_income.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} />
+                                )}
+                                {profile.salary_range && (
+                                    <InfoField icon={DollarSign} label="Salary Range" value={formatSalaryRange(profile.salary_range)} />
+                                )}
+                                {profile.current_salary != null && (
+                                    <InfoField
+                                        icon={TrendingUp}
+                                        label="Salary"
+                                        value={`${profile.salary_currency || '₱'}${Number(profile.current_salary).toLocaleString()}`}
+                                    />
+                                )}
+                                {profile.job_related_to_degree !== undefined && profile.job_related_to_degree !== null && (
                                     <div>
                                         <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Job Related to Degree</label>
                                         <div className="mt-1">
@@ -271,16 +445,27 @@ export default function ProfileView() {
                                         </div>
                                     </div>
                                 )}
-                                {profile.job_satisfaction && (
+                                {profile.job_aligned_to_course && (
+                                    <div>
+                                        <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Job Aligned to Course</label>
+                                        <div className="mt-1">
+                                            <Badge className={profile.job_aligned_to_course === 'yes' ? 'bg-green-100 text-green-800' : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'}>
+                                                {profile.job_aligned_to_course === 'yes' ? 'Yes' : 'No'}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                )}
+                                {profile.job_satisfaction != null && (
                                     <div>
                                         <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Job Satisfaction</label>
                                         <div className="mt-1 flex items-center">
                                             {[...Array(5)].map((_, i) => (
-                                                <Heart
+                                                <Star
                                                     key={i}
-                                                    className={`h-5 w-5 ${i < profile.job_satisfaction! ? 'fill-red-500 text-red-500' : 'text-gray-300'}`}
+                                                    className={`h-5 w-5 ${i < profile.job_satisfaction! ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
                                                 />
                                             ))}
+                                            <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">{profile.job_satisfaction}/5</span>
                                         </div>
                                     </div>
                                 )}
@@ -288,24 +473,39 @@ export default function ProfileView() {
                             {profile.job_description && (
                                 <div className="pt-4 border-t dark:border-gray-700">
                                     <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Job Description</label>
-                                    <p className="mt-1 text-maroon-800 dark:text-gray-200">{profile.job_description}</p>
+                                    <p className="mt-1 text-maroon-800 dark:text-gray-200 whitespace-pre-line">{profile.job_description}</p>
                                 </div>
                             )}
                             {profile.unemployment_reason && (
                                 <div className="pt-4 border-t dark:border-gray-700">
-                                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Unemployment Reason</label>
-                                    <p className="mt-1 text-maroon-800 dark:text-gray-200">{profile.unemployment_reason}</p>
+                                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Reason for Unemployment</label>
+                                    <p className="mt-1 text-maroon-800 dark:text-gray-200">{profile.unemployment_reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</p>
                                 </div>
                             )}
                         </CardContent>
                     </Card>
 
-                    {/* Skills & Certifications */}
-                    {(profile.skills?.length || profile.certifications?.length) && (
+                    {/* Achievements */}
+                    {profile.achievements && (
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader>
                                 <CardTitle className="flex items-center text-maroon-800 dark:text-gray-200">
                                     <Award className="h-5 w-5 mr-2" />
+                                    Achievements
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">{profile.achievements}</p>
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Skills & Certifications */}
+                    {(profile.skills?.length || profile.certifications?.length) ? (
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader>
+                                <CardTitle className="flex items-center text-maroon-800 dark:text-gray-200">
+                                    <Star className="h-5 w-5 mr-2" />
                                     Skills & Certifications
                                 </CardTitle>
                             </CardHeader>
@@ -337,7 +537,7 @@ export default function ProfileView() {
                                 )}
                             </CardContent>
                         </Card>
-                    )}
+                    ) : null}
 
                     {/* Career Goals & Feedback */}
                     {(profile.career_goals || profile.feedback_to_institution) && (
@@ -352,13 +552,13 @@ export default function ProfileView() {
                                 {profile.career_goals && (
                                     <div>
                                         <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Career Goals</label>
-                                        <p className="mt-1 text-maroon-800 dark:text-gray-200">{profile.career_goals}</p>
+                                        <p className="mt-1 text-maroon-800 dark:text-gray-200 whitespace-pre-line">{profile.career_goals}</p>
                                     </div>
                                 )}
                                 {profile.feedback_to_institution && (
                                     <div className="pt-4 border-t dark:border-gray-700">
                                         <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Feedback to Institution</label>
-                                        <p className="mt-1 text-maroon-800 dark:text-gray-200">{profile.feedback_to_institution}</p>
+                                        <p className="mt-1 text-maroon-800 dark:text-gray-200 whitespace-pre-line">{profile.feedback_to_institution}</p>
                                     </div>
                                 )}
                             </CardContent>

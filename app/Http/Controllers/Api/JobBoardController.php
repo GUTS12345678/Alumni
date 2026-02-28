@@ -15,9 +15,11 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use App\Traits\ExportsPdf;
 
 class JobBoardController extends Controller
 {
+    use ExportsPdf;
     /**
      * Get all active job postings (public for alumni).
      */
@@ -929,9 +931,7 @@ class JobBoardController extends Controller
 </body>
 </html>';
 
-        return response($html, 200)
-            ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'attachment; filename="job_postings_' . date('Y-m-d_His') . '.pdf"');
+        return $this->renderPdf($html, 'job_postings_' . date('Y-m-d_His') . '.pdf');
     }
 
     private function escapeCsvField($field)

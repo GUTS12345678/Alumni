@@ -9,9 +9,11 @@ use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use App\Traits\ExportsPdf;
 
 class DepartmentController extends Controller
 {
+    use ExportsPdf;
     /**
      * Get all departments with statistics
      */
@@ -869,9 +871,6 @@ class DepartmentController extends Controller
         
         $html .= '</body></html>';
         
-        return response($html, 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="department_analytics_' . $department->code . '_' . date('Y-m-d') . '.pdf"',
-        ]);
+        return $this->renderPdf($html, 'department_analytics_' . $department->code . '_' . date('Y-m-d') . '.pdf');
     }
 }

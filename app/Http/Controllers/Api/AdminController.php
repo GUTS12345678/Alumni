@@ -20,9 +20,11 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
+use App\Traits\ExportsPdf;
 
 class AdminController extends Controller
 {
+    use ExportsPdf;
     /**
      * Get dashboard metrics and overview data with robust caching
      */
@@ -50,16 +52,30 @@ class AdminController extends Controller
             
             // Cache miss or invalid - use locking to prevent race conditions
             $lock = Cache::lock('dashboard_fetch_' . ($campusId ?? 'all'), 10);
+            $lockAcquired = false;
             
             try {
-                // Try to acquire lock
-                if ($lock->get()) {
+                // Try to acquire lock (block up to 2 seconds)
+                $lockAcquired = $lock->block(2);
+                
+                if ($lockAcquired) {
+                    // Double-check cache after acquiring lock (another request may have populated it)
+                    $cachedData = Cache::get($cacheKey);
+                    if ($cachedData && $this->isValidDashboardData($cachedData)) {
+                        return response()->json([
+                            'success' => true,
+                            'data' => $cachedData,
+                            'cached' => true,
+                            'source' => 'cache_after_lock'
+                        ]);
+                    }
+                    
                     // Fetch fresh data
                     $data = $this->getDashboardMetrics($campusId);
                     
                     // Only cache if data is valid
                     if ($this->isValidDashboardData($data)) {
-                        Cache::put($cacheKey, $data, 180); // 3 minutes (reduced from 5)
+                        Cache::put($cacheKey, $data, 180); // 3 minutes
                     }
                     
                     return response()->json([
@@ -69,8 +85,7 @@ class AdminController extends Controller
                         'source' => 'database'
                     ]);
                 } else {
-                    // Couldn't get lock, wait and try cache again
-                    sleep(1);
+                    // Couldn't get lock, try cache one more time
                     $cachedData = Cache::get($cacheKey);
                     
                     if ($cachedData && $this->isValidDashboardData($cachedData)) {
@@ -93,7 +108,9 @@ class AdminController extends Controller
                     ]);
                 }
             } finally {
-                $lock->release();
+                if ($lockAcquired) {
+                    $lock->release();
+                }
             }
             
         } catch (\Exception $e) {
@@ -127,20 +144,8 @@ class AdminController extends Controller
             }
         }
         
-        // Check overview has actual data (not all zeros)
-        if (isset($data['overview'])) {
-            $overview = $data['overview'];
-            // At least one metric should be > 0 for a valid system
-            if (
-                ($overview['total_alumni'] ?? 0) === 0 &&
-                ($overview['total_surveys'] ?? 0) === 0 &&
-                ($overview['total_batches'] ?? 0) === 0
-            ) {
-                // Fresh system might have no data, log it
-                \Log::warning('Dashboard has no data - might be fresh system or data issue');
-            }
-        }
-        
+        // Zero-state is valid (e.g. after clearing alumni data)
+        // We always cache valid structures, even if metrics are zero
         return true;
     }
     
@@ -309,8 +314,6 @@ class AdminController extends Controller
      */
     private function getDashboardMetrics($campusId): array
     {
-        // Get campus_id filter if provided
-        $campusId = $campusId;
             
             // Build base queries with optional campus filtering
             $alumniQuery = AlumniProfile::query();
@@ -417,20 +420,24 @@ class AdminController extends Controller
                     ];
                 });
 
-            // Monthly registration trend (last 12 months)
+            // Monthly registration trend (last 12 months) — single query with GROUP BY
+            $trendStartDate = Carbon::now()->subMonths(11)->startOfMonth();
+            $trendQueryBuilder = AlumniProfile::where('created_at', '>=', $trendStartDate)
+                ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as month, COUNT(*) as registrations");
+            if ($campusId) {
+                $trendQueryBuilder->where('campus_id', $campusId);
+            }
+            $trendResults = $trendQueryBuilder->groupByRaw("DATE_FORMAT(created_at, '%Y-%m')")
+                ->orderBy('month')
+                ->pluck('registrations', 'month');
+
+            // Fill in any missing months with 0
             $monthlyTrend = [];
             for ($i = 11; $i >= 0; $i--) {
-                $month = Carbon::now()->subMonths($i);
-                $trendQuery = AlumniProfile::whereYear('created_at', $month->year)
-                    ->whereMonth('created_at', $month->month);
-                if ($campusId) {
-                    $trendQuery->where('campus_id', $campusId);
-                }
-                $count = $trendQuery->count();
-
+                $monthKey = Carbon::now()->subMonths($i)->format('Y-m');
                 $monthlyTrend[] = [
-                    'month' => $month->format('Y-m'),
-                    'registrations' => $count
+                    'month' => $monthKey,
+                    'registrations' => $trendResults[$monthKey] ?? 0
                 ];
             }
 
@@ -450,7 +457,7 @@ class AdminController extends Controller
             $totalEmployed = $employedAlumniQuery->count();
             $employmentRate = $totalAlumni > 0 ? round(($totalEmployed / $totalAlumni) * 100, 2) : 0;
 
-            // 2. Average Days to First Job
+            // 2. Average Days to First Job — SQL aggregate instead of PHP loop
             $timeToJobQuery = AlumniProfile::whereIn('employment_status', [
                 'employed_full_time', 
                 'employed_part_time', 
@@ -463,28 +470,13 @@ class AdminController extends Controller
                 $timeToJobQuery->where('campus_id', $campusId);
             }
             
-            $alumniWithJobDates = $timeToJobQuery->get();
-            $totalDays = 0;
-            $validRecords = 0;
+            $avgResult = (clone $timeToJobQuery)
+                ->selectRaw('ROUND(AVG(DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))))) as avg_days')
+                ->whereRaw('job_start_date >= COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))')
+                ->whereRaw('DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))) <= 1825')
+                ->first();
             
-            foreach ($alumniWithJobDates as $alumni) {
-                // Use actual graduation_date if available, otherwise assume June 1st
-                $graduationDate = $alumni->graduation_date 
-                    ? Carbon::parse($alumni->graduation_date)
-                    : Carbon::parse($alumni->graduation_year . '-06-01');
-                $jobStartDate = Carbon::parse($alumni->job_start_date);
-                
-                // Only count if job started after graduation AND within 5 years (1825 days)
-                if ($jobStartDate->greaterThanOrEqualTo($graduationDate)) {
-                    $daysToJob = $graduationDate->diffInDays($jobStartDate);
-                    if ($daysToJob <= 1825) { // 5-year cap to filter outliers
-                        $totalDays += $daysToJob;
-                        $validRecords++;
-                    }
-                }
-            }
-            
-            $avgDaysToJob = $validRecords > 0 ? round($totalDays / $validRecords) : 0;
+            $avgDaysToJob = $avgResult->avg_days ?? 0;
 
             // 3. Job Alignment Analysis — standardized: aligned = NULL or 'none' job_mismatch_reason
             $alignmentQuery = AlumniProfile::whereIn('employment_status', [
@@ -813,9 +805,22 @@ class AdminController extends Controller
             
             // Use locking
             $lock = Cache::lock('alumni_stats_' . ($campusId ?? 'all'), 10);
+            $lockAcquired = false;
             
             try {
-                if ($lock->get()) {
+                $lockAcquired = $lock->block(2);
+                
+                if ($lockAcquired) {
+                    // Double-check cache after lock
+                    $cachedData = Cache::get($cacheKey);
+                    if ($cachedData && is_array($cachedData) && isset($cachedData['overview'])) {
+                        return response()->json([
+                            'success' => true,
+                            'data' => $cachedData,
+                            'cached' => true
+                        ]);
+                    }
+                    
                     // Fetch data
                     $data = $this->calculateAlumniStats($campusId);
                     
@@ -830,8 +835,7 @@ class AdminController extends Controller
                         'cached' => false
                     ]);
                 } else {
-                    // Wait and retry
-                    sleep(1);
+                    // Couldn't get lock, try cache
                     $cachedData = Cache::get($cacheKey);
                     if ($cachedData && is_array($cachedData)) {
                         return response()->json([
@@ -841,7 +845,7 @@ class AdminController extends Controller
                         ]);
                     }
                     
-                    // Fallback
+                    // Fallback — fetch without lock
                     $data = $this->calculateAlumniStats($campusId);
                     return response()->json([
                         'success' => true,
@@ -850,7 +854,9 @@ class AdminController extends Controller
                     ]);
                 }
             } finally {
-                $lock->release();
+                if ($lockAcquired) {
+                    $lock->release();
+                }
             }
         } catch (\Exception $e) {
             \Log::error('Alumni stats error', [
@@ -967,15 +973,33 @@ class AdminController extends Controller
             $query = Survey::with(['creator:id,email'])
                 ->withCount(['questions']);
 
-            // Add campus-filtered responses count
+            // Add campus-filtered responses count + completed/in_progress counts + avg time
             if ($campusId) {
                 $query->withCount(['responses as responses_count' => function ($query) use ($campusId) {
                     $query->whereHas('user', function ($q) use ($campusId) {
                         $q->where('campus_id', $campusId);
                     });
+                }])
+                ->withCount(['responses as completed_responses_count' => function ($query) use ($campusId) {
+                    $query->where('status', 'completed')
+                        ->whereHas('user', function ($q) use ($campusId) {
+                            $q->where('campus_id', $campusId);
+                        });
+                }])
+                ->withCount(['responses as in_progress_responses_count' => function ($query) use ($campusId) {
+                    $query->where('status', 'in_progress')
+                        ->whereHas('user', function ($q) use ($campusId) {
+                            $q->where('campus_id', $campusId);
+                        });
                 }]);
             } else {
-                $query->withCount(['responses as responses_count']);
+                $query->withCount(['responses as responses_count'])
+                    ->withCount(['responses as completed_responses_count' => function ($query) {
+                        $query->where('status', 'completed');
+                    }])
+                    ->withCount(['responses as in_progress_responses_count' => function ($query) {
+                        $query->where('status', 'in_progress');
+                    }]);
             }
 
             $query->orderBy('created_at', 'desc');
@@ -1111,16 +1135,15 @@ class AdminController extends Controller
             $perPage = $request->get('per_page', 15);
             $surveys = $query->paginate($perPage);
 
-            // Add completion rate and additional statistics for each survey
+            // Add completion rate and additional statistics using pre-loaded counts (no N+1)
             $surveys->getCollection()->transform(function ($survey) {
-                $completedResponses = $survey->responses()->where('status', 'completed')->count();
+                $survey->completed_responses = $survey->completed_responses_count;
+                $survey->in_progress_responses = $survey->in_progress_responses_count;
                 $survey->completion_rate = $survey->responses_count > 0
-                    ? round(($completedResponses / $survey->responses_count) * 100, 2)
+                    ? round(($survey->completed_responses_count / $survey->responses_count) * 100, 2)
                     : 0;
-                $survey->completed_responses = $completedResponses;
-                $survey->in_progress_responses = $survey->responses()->where('status', 'in_progress')->count();
 
-                // Calculate average completion time in minutes
+                // Average completion time — single query per survey (unavoidable for aggregation)
                 $avgCompletionTime = $survey->responses()
                     ->whereNotNull('completed_at')
                     ->selectRaw('AVG(TIMESTAMPDIFF(MINUTE, created_at, completed_at)) as avg_time')
@@ -1468,10 +1491,7 @@ class AdminController extends Controller
         
         $html .= '</tbody></table></body></html>';
         
-        return response($html, 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="batches-' . date('Y-m-d') . '.pdf"',
-        ]);
+        return $this->renderPdf($html, 'batches-' . date('Y-m-d') . '.pdf');
     }
 
     /**
@@ -1665,13 +1685,15 @@ class AdminController extends Controller
 
             DB::beginTransaction();
 
-            // Create user account
+            // Create user account with random password (user must reset via email)
+            $tempPassword = \Illuminate\Support\Str::random(12);
             $user = User::create([
                 'name' => $validatedData['first_name'] . ' ' . $validatedData['last_name'],
                 'email' => $validatedData['email'],
-                'password' => bcrypt('alumni' . date('Y')), // Default password
+                'password' => bcrypt($tempPassword),
                 'role' => 'alumni',
                 'status' => 'active',
+                'must_change_password' => true,
             ]);
 
             // Build profile data from all validated fields
@@ -1721,9 +1743,12 @@ class AdminController extends Controller
 
             DB::commit();
 
+            // Flush analytics caches so new data shows immediately
+            $this->flushAllAnalyticsCaches();
+
             return response()->json([
                 'success' => true,
-                'message' => 'Alumni profile created successfully. Default password: alumni' . date('Y'),
+                'message' => 'Alumni profile created successfully. A temporary password has been generated — the user must reset their password on first login.',
                 'data' => $alumni->load(['user:id,email', 'batch:id,name,graduation_year'])
             ], 201);
 
@@ -1764,6 +1789,9 @@ class AdminController extends Controller
             ]);
 
             $alumni->update($validatedData);
+
+            // Flush analytics caches
+            $this->flushAllAnalyticsCaches();
 
             return response()->json([
                 'success' => true,
@@ -1808,6 +1836,8 @@ class AdminController extends Controller
             // Delete the alumni profile
             $alumni->delete();
 
+            $this->flushAllAnalyticsCaches();
+
             return response()->json([
                 'success' => true,
                 'message' => "Alumni profile for {$alumniName} has been deleted successfully"
@@ -1841,23 +1871,21 @@ class AdminController extends Controller
             DB::beginTransaction();
             
             $ids = $request->input('ids');
-            $count = 0;
             
-            // Get alumni profiles with their associated users
-            $alumniProfiles = AlumniProfile::with('user')->whereIn('id', $ids)->get();
+            // Bulk delete alumni profiles and their user accounts
+            $alumniProfiles = AlumniProfile::whereIn('id', $ids)->get();
+            $userIds = $alumniProfiles->pluck('user_id')->filter()->toArray();
+            $count = $alumniProfiles->count();
             
-            foreach ($alumniProfiles as $alumni) {
-                // Delete the associated user account if it exists
-                if ($alumni->user) {
-                    $alumni->user->delete();
-                }
-                
-                // Delete the alumni profile
-                $alumni->delete();
-                $count++;
+            AlumniProfile::whereIn('id', $ids)->delete();
+            if (!empty($userIds)) {
+                User::where('role', 'alumni')->whereIn('id', $userIds)->delete();
             }
             
             DB::commit();
+            
+            // Flush analytics caches after bulk delete
+            $this->flushAllAnalyticsCaches();
             
             return response()->json([
                 'success' => true,
@@ -1884,13 +1912,152 @@ class AdminController extends Controller
     }
 
     /**
+     * Clear ALL alumni data (super admin only, for testing/reset purposes)
+     */
+    public function clearAllAlumni(Request $request): JsonResponse
+    {
+        // Only super_admin can perform this destructive operation
+        if ($request->user()->role !== 'super_admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only super admins can clear all alumni data.'
+            ], 403);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Count before deletion
+            $count = AlumniProfile::count();
+
+            // Bulk delete alumni users and profiles
+            $alumniUserIds = AlumniProfile::pluck('user_id')->toArray();
+            AlumniProfile::query()->delete();
+            if (!empty($alumniUserIds)) {
+                User::where('role', 'alumni')->whereIn('id', $alumniUserIds)->delete();
+            }
+
+            DB::commit();
+
+            // Flush ALL analytics caches so dashboards reflect the cleared state
+            $this->flushAllAnalyticsCaches();
+
+            return response()->json([
+                'success' => true,
+                'message' => "All {$count} alumni profile(s) cleared successfully",
+                'deleted_count' => $count
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Clear all alumni failed: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to clear alumni data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get count of archived (soft-deleted) alumni records
+     */
+    public function getArchivedCount(): JsonResponse
+    {
+        try {
+            $count = AlumniProfile::onlyTrashed()->count();
+            return response()->json(['success' => true, 'count' => $count]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'count' => 0], 500);
+        }
+    }
+
+    /**
+     * Permanently delete all archived (soft-deleted) alumni records
+     */
+    public function clearArchive(Request $request): JsonResponse
+    {
+        if ($request->user()->role !== 'super_admin') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only super admins can clear archived data.'
+            ], 403);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // Get all soft-deleted profiles
+            $trashedProfiles = AlumniProfile::onlyTrashed()->get();
+            $count = $trashedProfiles->count();
+            $userIds = $trashedProfiles->pluck('user_id')->filter()->toArray();
+
+            // Force delete the profiles permanently
+            AlumniProfile::onlyTrashed()->forceDelete();
+
+            // Force delete associated soft-deleted user accounts
+            if (!empty($userIds)) {
+                User::onlyTrashed()->whereIn('id', $userIds)->forceDelete();
+            }
+
+            DB::commit();
+
+            $this->flushAllAnalyticsCaches();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Permanently deleted {$count} archived alumni record(s)",
+                'deleted_count' => $count,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Clear archive failed: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to clear archive',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Flush all analytics-related caches (dashboard, time-to-job, comprehensive, alumni stats)
+     */
+    private function flushAllAnalyticsCaches(): void
+    {
+        try {
+            $campusIds = \App\Models\Campus::pluck('id')->toArray();
+
+            foreach (array_merge(['all'], $campusIds) as $campusId) {
+                $keys = [
+                    'dashboard_metrics_' . $campusId,
+                    'alumni_stats_' . $campusId,
+                    'analytics_overview_' . $campusId,
+                    'analytics_time_to_job_' . $campusId . '_all',
+                    'analytics_comprehensive_' . $campusId,
+                ];
+
+                foreach ($keys as $key) {
+                    Cache::forget($key);
+                }
+            }
+
+            \Log::info('All analytics caches flushed after data change');
+        } catch (\Exception $e) {
+            \Log::warning('Failed to flush analytics caches: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Export alumni data to CSV, Excel, or PDF
      */
     public function exportAlumni(Request $request)
     {
         try {
             $format = $request->get('format', 'csv');
-            $query = AlumniProfile::with(['user:id,email', 'batch:id,name,graduation_year']);
+            $templateType = $request->get('template', 'old');
+            $query = AlumniProfile::with(['user:id,email', 'batch:id,name,graduation_year', 'department:id,name', 'course:id,name']);
 
             // Apply same filters as getAlumni
             if ($request->has('batch_id') && $request->batch_id) {
@@ -1902,6 +2069,18 @@ class AdminController extends Controller
             }
 
             $alumni = $query->get();
+
+            if ($templateType === 'new') {
+                switch ($format) {
+                    case 'excel':
+                        return $this->exportAlumniToExcelNew($alumni);
+                    case 'pdf':
+                        return $this->exportAlumniToPdfNew($alumni);
+                    case 'csv':
+                    default:
+                        return $this->exportAlumniToCsvNew($alumni);
+                }
+            }
 
             switch ($format) {
                 case 'excel':
@@ -2014,10 +2193,156 @@ class AdminController extends Controller
         
         $html .= '</tbody></table></body></html>';
         
-        return response($html, 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="alumni_export_' . date('Y-m-d_H-i-s') . '.pdf"',
+        return $this->renderPdf($html, 'alumni_export_' . date('Y-m-d_H-i-s') . '.pdf');
+    }
+
+    // ─── New (Extended) Export Methods ─────────────────────────────────────
+
+    private function getNewExportHeaders(): array
+    {
+        return [
+            'Last Name', 'First Name', 'Middle Name', 'Maiden Name', 'Suffix',
+            'Student ID', 'Email', 'Phone', 'Mobile No', 'Gender',
+            'Date of Birth', 'Age', 'Place of Birth', 'Civil Status',
+            'Spouse Name', 'No. of Children', 'Residence Address',
+            'Department', 'Course', 'Degree Program', 'Major',
+            'Year Graduated', 'Enrollment Year', 'Batch',
+            'Honors/Awards',
+            'Presently Employed', 'Employment Status',
+            'Company Name', 'Company Address', 'Present Position',
+            'Date Hired', 'Years of Service', 'Job Aligned to Course',
+            'Avg Monthly Income', 'Job Level/Position',
+            'Major Line of Business', 'Employment Location',
+            'Not Employed Reason',
+            'Achievements', 'About Me',
+            'Registration Date',
+        ];
+    }
+
+    private function alumniToNewRow($alumnus): array
+    {
+        return [
+            $alumnus->last_name ?? '',
+            $alumnus->first_name ?? '',
+            $alumnus->middle_name ?? '',
+            $alumnus->maiden_name ?? '',
+            $alumnus->suffix ?? '',
+            $alumnus->student_id ?? '',
+            $alumnus->user->email ?? '',
+            $alumnus->phone ?? '',
+            $alumnus->mobile_no ?? '',
+            $alumnus->gender ?? '',
+            $alumnus->birth_date ? $alumnus->birth_date->format('Y-m-d') : '',
+            $alumnus->age ?? '',
+            $alumnus->place_of_birth ?? '',
+            $alumnus->civil_status ?? '',
+            $alumnus->spouse_name ?? '',
+            $alumnus->number_of_children ?? '',
+            $alumnus->current_address ?? '',
+            $alumnus->department->name ?? '',
+            $alumnus->course->name ?? '',
+            $alumnus->degree_program ?? '',
+            $alumnus->major ?? '',
+            $alumnus->graduation_year ?? '',
+            $alumnus->enrollment_year ?? '',
+            $alumnus->batch->name ?? '',
+            $alumnus->honors_awards ?? '',
+            $alumnus->presently_employed ?? '',
+            $alumnus->employment_status ?? '',
+            $alumnus->current_employer ?? '',
+            $alumnus->company_address ?? '',
+            $alumnus->current_job_title ?? '',
+            $alumnus->date_hired ?? '',
+            $alumnus->years_of_service ?? '',
+            $alumnus->job_aligned_to_course ?? '',
+            $alumnus->average_monthly_income ?? '',
+            $alumnus->job_level_position ?? '',
+            $alumnus->major_line_of_business ?? '',
+            $alumnus->employment_location_type ?? '',
+            $alumnus->unemployment_reason ?? '',
+            $alumnus->achievements ?? '',
+            $alumnus->about_me ?? '',
+            $alumnus->created_at ? $alumnus->created_at->format('Y-m-d H:i:s') : '',
+        ];
+    }
+
+    private function exportAlumniToCsvNew($alumni)
+    {
+        $headers = $this->getNewExportHeaders();
+        $csvData = implode(',', $headers) . "\n";
+
+        foreach ($alumni as $alumnus) {
+            $row = $this->alumniToNewRow($alumnus);
+            $csvData .= implode(',', array_map(function ($v) {
+                return '"' . str_replace('"', '""', $v) . '"';
+            }, $row)) . "\n";
+        }
+
+        return response($csvData, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="alumni_extended_export_' . date('Y-m-d_H-i-s') . '.csv"',
         ]);
+    }
+
+    private function exportAlumniToExcelNew($alumni)
+    {
+        $headers = $this->getNewExportHeaders();
+        $csvData = "\xEF\xBB\xBF"; // UTF-8 BOM
+        $csvData .= implode(',', $headers) . "\n";
+
+        foreach ($alumni as $alumnus) {
+            $row = $this->alumniToNewRow($alumnus);
+            $csvData .= implode(',', array_map(function ($v) {
+                return '"' . str_replace('"', '""', $v) . '"';
+            }, $row)) . "\n";
+        }
+
+        return response($csvData, 200, [
+            'Content-Type' => 'application/vnd.ms-excel',
+            'Content-Disposition' => 'attachment; filename="alumni_extended_export_' . date('Y-m-d_H-i-s') . '.xlsx"',
+        ]);
+    }
+
+    private function exportAlumniToPdfNew($alumni)
+    {
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Alumni Directory (Extended)</title><style>
+            body { font-family: Arial, sans-serif; font-size: 8px; margin: 10px; }
+            h1 { font-size: 16px; margin-bottom: 8px; color: #800000; }
+            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+            th, td { border: 1px solid #ddd; padding: 4px; text-align: left; }
+            th { background-color: #800000; color: white; font-weight: bold; font-size: 7px; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .header-info { margin-bottom: 10px; font-size: 9px; }
+        </style></head><body>';
+
+        $html .= '<h1>Alumni Directory Report (Extended)</h1>';
+        $html .= '<div class="header-info">Generated: ' . date('Y-m-d H:i:s') . ' | Total: ' . count($alumni) . '</div>';
+
+        $html .= '<table><thead><tr>';
+        $pdfHeaders = ['Name', 'Email', 'Phone', 'Department', 'Course', 'Year', 'Status', 'Position', 'Company', 'Income'];
+        foreach ($pdfHeaders as $h) {
+            $html .= '<th>' . $h . '</th>';
+        }
+        $html .= '</tr></thead><tbody>';
+
+        foreach ($alumni as $alumnus) {
+            $html .= '<tr>';
+            $html .= '<td>' . htmlspecialchars($alumnus->full_name ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->user->email ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->phone ?? $alumnus->mobile_no ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->department->name ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->course->name ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->graduation_year ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->employment_status ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->current_job_title ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->current_employer ?? '') . '</td>';
+            $html .= '<td>' . htmlspecialchars($alumnus->average_monthly_income ?? '') . '</td>';
+            $html .= '</tr>';
+        }
+
+        $html .= '</tbody></table></body></html>';
+
+        return $this->renderPdf($html, 'alumni_extended_export_' . date('Y-m-d_H-i-s') . '.pdf');
     }
 
     /**
@@ -2155,10 +2480,7 @@ class AdminController extends Controller
         
         $html .= '</tbody></table></body></html>';
         
-        return response($html, 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="surveys_export_' . date('Y-m-d_H-i-s') . '.pdf"',
-        ]);
+        return $this->renderPdf($html, 'surveys_export_' . date('Y-m-d_H-i-s') . '.pdf');
     }
 
     /**
@@ -2942,10 +3264,7 @@ class AdminController extends Controller
         
         $html .= '</tbody></table></body></html>';
         
-        return response($html, 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="activity-logs-' . date('Y-m-d') . '.pdf"',
-        ]);
+        return $this->renderPdf($html, 'activity-logs-' . date('Y-m-d') . '.pdf');
     }
 
     /**
@@ -3155,10 +3474,7 @@ class AdminController extends Controller
         
         $html .= '</tbody></table></body></html>';
         
-        return response($html, 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="users-' . date('Y-m-d') . '.pdf"',
-        ]);
+        return $this->renderPdf($html, 'users-' . date('Y-m-d') . '.pdf');
     }
 
     /**

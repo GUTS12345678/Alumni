@@ -33,10 +33,8 @@ test('login page loads for guest', function () {
 });
 
 test('register page loads for guest', function () {
-    // BUG: resources/js/pages/auth/register.tsx is missing, page returns 500
-    // Registration is done via /survey/register or API instead
     $response = $this->get('/register');
-    expect($response->status())->toBeIn([200, 500]);
+    $response->assertStatus(200);
 });
 
 test('forgot password page loads for guest', function () {
@@ -96,10 +94,10 @@ test('admin roles page loads', function () {
     $response->assertStatus(200);
 });
 
-test('admin roles create page loads', function () {
+test('admin roles create page redirects to roles list', function () {
     $admin = $this->createAdmin();
     $response = $this->actingAs($admin)->get('/admin/roles/create');
-    $response->assertStatus(200);
+    $response->assertRedirect();
 });
 
 test('admin activity page loads', function () {
@@ -226,7 +224,7 @@ test('alumni surveys page loads', function () {
 
 test('alumni survey history page loads', function () {
     $alumni = $this->createAlumni();
-    $response = $this->actingAs($alumni)->get('/alumni/survey-history');
+    $response = $this->actingAs($alumni)->get('/alumni/surveys/history');
     $response->assertStatus(200);
 });
 

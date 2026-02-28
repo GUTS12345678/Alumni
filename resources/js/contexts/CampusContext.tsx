@@ -21,6 +21,7 @@ interface CampusContextType {
     campuses: Campus[];
     setSelectedCampus: (campus: Campus | null) => void; // Allow null for "All Campuses"
     isLoading: boolean;
+    fetchError: boolean;
     canSwitchCampus: boolean;
     refreshCampuses: () => Promise<void>;
     getCampusById: (id: number) => Campus | undefined;
@@ -48,12 +49,14 @@ export const CampusProvider: React.FC<CampusProviderProps> = ({
     const [selectedCampus, setSelectedCampusState] = useState<Campus | null>(null);
     const [campuses, setCampuses] = useState<Campus[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [fetchError, setFetchError] = useState(false);
     const [canSwitchCampus, setCanSwitchCampus] = useState(false);
 
     // Fetch campuses on mount
     const fetchCampuses = useCallback(async () => {
         try {
             setIsLoading(true);
+            setFetchError(false);
             const response = await axios.get('/api/v1/campuses');
 
             if (response.data.success) {
@@ -99,21 +102,11 @@ export const CampusProvider: React.FC<CampusProviderProps> = ({
             }
         } catch (error) {
             console.error('Failed to fetch campuses:', error);
-            // Set default campus on error
-            const defaultCampus: Campus = {
-                id: 1,
-                name: 'EARIST Main Campus',
-                code: 'MAIN',
-                display_name: 'Main Campus - Manila',
-                address: 'Nagtahan, Sampaloc, Manila',
-                contact_email: null,
-                contact_phone: null,
-                is_active: true,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            };
-            setCampuses([defaultCampus]);
-            setSelectedCampusState(defaultCampus);
+            // Don't silently set a hardcoded campus — leave empty and let the UI handle it.
+            // A retry will be triggered on next mount or manual refresh.
+            setCampuses([]);
+            setSelectedCampusState(null);
+            setFetchError(true);
         } finally {
             setIsLoading(false);
         }
@@ -160,6 +153,7 @@ export const CampusProvider: React.FC<CampusProviderProps> = ({
         campuses,
         setSelectedCampus,
         isLoading,
+        fetchError,
         canSwitchCampus,
         refreshCampuses,
         getCampusById,

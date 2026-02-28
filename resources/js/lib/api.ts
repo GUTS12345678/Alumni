@@ -6,6 +6,13 @@
  * Handles auth, CSRF, error normalization, and 401 redirects.
  */
 
+// Extend Window to track redirect state
+declare global {
+    interface Window {
+        __redirectingToLogin?: boolean;
+    }
+}
+
 const API_BASE = '/api/v1';
 
 // Token stored from meta tag or cookie
@@ -165,9 +172,16 @@ async function request<T = any>(
         );
     }
 
-    // Handle 401 - redirect to login
+    // Handle 401 - redirect to login (only if not already navigating)
     if (response.status === 401 && !skipAuthRedirect) {
-        window.location.href = '/login';
+        // Avoid multiple redirects from concurrent requests
+        if (!window.__redirectingToLogin) {
+            window.__redirectingToLogin = true;
+            // Small delay so user can see what happened
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 100);
+        }
         throw new ApiError('Session expired. Redirecting to login...', 401);
     }
 
@@ -189,6 +203,16 @@ async function request<T = any>(
         }
         const text = await response.text();
         data = { message: text || response.statusText };
+    }
+
+    // Handle 403 with must_change_password flag — redirect to password change page
+    if (response.status === 403 && data?.must_change_password) {
+        if (data.redirect) {
+            window.location.href = data.redirect;
+        } else {
+            window.location.href = '/force-change-password';
+        }
+        throw new ApiError('You must change your password before continuing.', 403, {}, data);
     }
 
     // Handle error responses

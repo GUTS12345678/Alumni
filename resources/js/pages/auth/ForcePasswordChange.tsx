@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BackToTop } from '@/components/ui/back-to-top';
 import { Head, router } from '@inertiajs/react';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -283,7 +284,7 @@ export default function ForcePasswordChange({ user }: ForcePasswordChangeProps) 
                                                     ))}
                                                 </div>
                                                 <p className={`text-xs font-medium ${passwordStrength.score <= 2 ? 'text-red-500' :
-                                                        passwordStrength.score <= 4 ? 'text-yellow-600' : 'text-green-600'
+                                                    passwordStrength.score <= 4 ? 'text-yellow-600' : 'text-green-600'
                                                     }`}>
                                                     Password strength: {passwordStrength.label}
                                                 </p>
@@ -373,6 +374,7 @@ export default function ForcePasswordChange({ user }: ForcePasswordChangeProps) 
                     </div>
                 </div>
             </div>
+            <BackToTop />
         </>
     );
 }

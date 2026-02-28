@@ -35,6 +35,8 @@ import {
 } from 'lucide-react';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import ResponseTrendsChart from '@/components/charts/ResponseTrendsChart';
+import { useExport } from '@/hooks/useExport';
+import { ExportProgressDialog } from '@/components/ExportProgressDialog';
 import EmploymentDistributionChart from '@/components/charts/EmploymentDistributionChart';
 
 interface Survey {
@@ -149,13 +151,9 @@ export default function SurveyAnalytics({ user }: Props) {
     const [withAnswersOnly, setWithAnswersOnly] = useState(true); // Default to showing only responses with answers
     const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'in_progress'>('all');
 
-    const getCsrfToken = () => {
-        const meta = document.querySelector('meta[name="csrf-token"]');
-        return meta ? meta.getAttribute('content') || '' : '';
-    };
-
     const [autoRefresh, setAutoRefresh] = useState(false);
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+    const { exportData, cancelExport, ...exportState } = useExport();
 
     const fetchSurveys = async () => {
         try {
@@ -362,44 +360,14 @@ export default function SurveyAnalytics({ user }: Props) {
     const exportAnalytics = async (format: 'csv' | 'excel' | 'pdf' = 'excel') => {
         if (!selectedSurvey) return;
 
-        try {
-            const token = localStorage.getItem('auth_token');
-            if (!token) {
-                window.location.href = '/login';
-                return;
-            }
-
-            const response = await fetch(`/api/v1/admin/analytics/surveys/${selectedSurvey}/export?format=${format}`, {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/octet-stream',
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': getCsrfToken(),
-                },
-                credentials: 'same-origin',
-                body: JSON.stringify({ days: dateRange }),
-            });
-
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                const extension = format === 'excel' ? 'xlsx' : format;
-                a.download = `survey_analytics_${selectedSurvey}_${new Date().toISOString().split('T')[0]}.${extension}`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-            } else {
-                alert('Failed to export analytics. Please try again.');
-            }
-        } catch (err) {
-            console.error('Export error:', err);
-            alert('An error occurred while exporting. Please try again.');
-        }
+        exportData({
+            url: `/api/v1/admin/analytics/surveys/${selectedSurvey}/export`,
+            filename: `survey_analytics_${selectedSurvey}`,
+            format,
+            method: 'POST',
+            body: { days: dateRange },
+            onError: () => alert('Failed to export analytics. Please try again.'),
+        });
     };
 
     const getStatusBadge = (status: string) => {
@@ -1252,9 +1220,24 @@ export default function SurveyAnalytics({ user }: Props) {
                                                                         );
                                                                     })}
                                                                 </div>
-                                                                {['text', 'textarea'].includes(question.question_type) && (
+                                                                {['text', 'textarea', 'email', 'phone'].includes(question.question_type) && (
                                                                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 italic">
                                                                         Showing top {question.response_distribution.length} most common answers
+                                                                    </p>
+                                                                )}
+                                                                {question.question_type === 'date' && (
+                                                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 italic">
+                                                                        Distribution by year
+                                                                    </p>
+                                                                )}
+                                                                {question.question_type === 'rating' && (
+                                                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 italic">
+                                                                        Rating distribution
+                                                                    </p>
+                                                                )}
+                                                                {question.question_type === 'number' && (
+                                                                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 italic">
+                                                                        Showing top {question.response_distribution.length} value groups
                                                                     </p>
                                                                 )}
                                                             </div>
@@ -1281,6 +1264,7 @@ export default function SurveyAnalytics({ user }: Props) {
                     </Card>
                 )}
             </div>
+            <ExportProgressDialog {...exportState} onCancel={cancelExport} />
         </AdminBaseLayout>
     );
 }

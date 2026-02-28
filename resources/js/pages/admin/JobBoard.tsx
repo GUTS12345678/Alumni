@@ -82,7 +82,9 @@ import { JobPosting, JobCategory, JobFormData } from '@/types/jobs';
 import { useToast } from '@/hooks/use-toast';
 import { useAdminChannel } from '@/hooks/useAdminChannel';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
+import { useExport } from '@/hooks/useExport';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { ExportProgressDialog } from '@/components/ExportProgressDialog';
 
 // Helper function to get CSRF token
 const getCsrfToken = (): string => {
@@ -92,6 +94,7 @@ const getCsrfToken = (): string => {
 export default function JobBoard() {
     const { toast } = useToast();
     const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
+    const { exportData, cancelExport, ...exportState } = useExport();
     // Campus context for filtering
     const { selectedCampus } = useCampus();
 
@@ -222,46 +225,20 @@ export default function JobBoard() {
     }, [search]);
 
     const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
-        try {
-            const params = new URLSearchParams();
-            params.append('format', format);
-            if (debouncedSearch) params.append('search', debouncedSearch);
-            if (statusFilter) params.append('status', statusFilter);
-            if (categoryFilter) params.append('category_id', categoryFilter);
-            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
+        const params: Record<string, string> = {};
+        if (debouncedSearch) params.search = debouncedSearch;
+        if (statusFilter) params.status = statusFilter;
+        if (categoryFilter) params.category_id = categoryFilter;
+        if (selectedCampus?.id) params.campus_id = selectedCampus.id.toString();
 
-            const response = await fetch(`/api/v1/admin/jobs/export?${params.toString()}`, {
-                headers: {
-                    'Accept': 'application/octet-stream',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                credentials: 'include',
-            });
-
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                const extension = format === 'excel' ? 'xlsx' : format;
-                a.download = `job_postings_${new Date().toISOString().split('T')[0]}.${extension}`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-
-                toast({
-                    title: 'Export Successful',
-                    description: `Job postings exported as ${format.toUpperCase()}.`,
-                });
-            } else {
-                console.error('Export failed:', response.statusText);
-                alert('Export failed. Please try again.');
-            }
-        } catch (error) {
-            console.error('Export error:', error);
-            alert('Export failed. Please try again.');
-        }
+        exportData({
+            url: '/api/v1/admin/jobs/export',
+            params,
+            filename: 'job_postings',
+            format,
+            onSuccess: (f) => toast({ title: 'Export Successful', description: `Job postings exported as ${f.toUpperCase()}.` }),
+            onError: () => toast({ title: 'Export Failed', description: 'Failed to export job postings.', variant: 'destructive' }),
+        });
     };
 
     useEffect(() => {
@@ -1739,6 +1716,7 @@ export default function JobBoard() {
                 </DialogContent>
             </Dialog>
             <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
+            <ExportProgressDialog {...exportState} onCancel={cancelExport} />
         </AdminBaseLayout>
     );
 }

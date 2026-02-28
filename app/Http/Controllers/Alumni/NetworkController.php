@@ -32,8 +32,9 @@ class NetworkController extends Controller
                   ->orWhereHas('alumniProfile', function($profile) use ($search) {
                       $profile->where('first_name', 'like', "%{$search}%")
                               ->orWhere('last_name', 'like', "%{$search}%")
-                              ->orWhere('current_company', 'like', "%{$search}%")
-                              ->orWhere('current_position', 'like', "%{$search}%");
+                              ->orWhere('current_employer', 'like', "%{$search}%")
+                              ->orWhere('current_job_title', 'like', "%{$search}%")
+                              ->orWhere('degree_program', 'like', "%{$search}%");
                   });
             });
         }
@@ -47,9 +48,31 @@ class NetworkController extends Controller
 
         $alumni = $query->paginate(12);
 
-        // Get connection statuses for each alumni
-        $alumni->getCollection()->transform(function($user) use ($currentUser) {
-            $user->connection_status = AlumniConnection::getConnectionStatus($currentUser->id, $user->id);
+        // Get connection statuses for all alumni in batch (avoids N+1)
+        $alumniIds = $alumni->getCollection()->pluck('id')->toArray();
+        $connections = AlumniConnection::where(function($q) use ($currentUser, $alumniIds) {
+            $q->where('sender_id', $currentUser->id)
+              ->whereIn('receiver_id', $alumniIds);
+        })->orWhere(function($q) use ($currentUser, $alumniIds) {
+            $q->whereIn('sender_id', $alumniIds)
+              ->where('receiver_id', $currentUser->id);
+        })->get();
+
+        // Build a lookup map by alumni ID
+        $connectionMap = [];
+        foreach ($connections as $conn) {
+            $otherUserId = $conn->sender_id == $currentUser->id ? $conn->receiver_id : $conn->sender_id;
+            $status = $conn->status;
+            if ($status === 'pending') {
+                $status = $conn->sender_id == $currentUser->id ? 'pending' : 'received';
+            }
+            $connectionMap[$otherUserId] = ['status' => $status, 'connection_id' => $conn->id];
+        }
+
+        $alumni->getCollection()->transform(function($user) use ($connectionMap) {
+            $info = $connectionMap[$user->id] ?? ['status' => null, 'connection_id' => null];
+            $user->connection_status = $info['status'];
+            $user->connection_id = $info['connection_id'];
             return $user;
         });
 
@@ -66,17 +89,17 @@ class NetworkController extends Controller
     {
         $user = $request->user();
 
-        $connections = AlumniConnection::with(['sender.alumniProfile', 'receiver.alumniProfile'])
+        $connectionsQuery = AlumniConnection::with(['sender.alumniProfile', 'receiver.alumniProfile'])
             ->where(function($query) use ($user) {
                 $query->where('sender_id', $user->id)
                       ->orWhere('receiver_id', $user->id);
             })
             ->accepted()
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->paginate(50);
 
         // Transform to get the connected user (not the current user)
-        $connections = $connections->map(function($connection) use ($user) {
+        $connections = $connectionsQuery->through(function($connection) use ($user) {
             $connectedUser = $connection->sender_id === $user->id 
                 ? $connection->receiver 
                 : $connection->sender;
@@ -123,8 +146,23 @@ class NetworkController extends Controller
      */
     public function sendRequest(Request $request)
     {
+        $request->validate([
+            'receiver_id' => 'required|integer|exists:users,id',
+        ]);
+
         $user = $request->user();
         $receiverId = $request->receiver_id;
+
+        // Prevent self-connection
+        if ($receiverId == $user->id) {
+            return redirect()->back()->with('error', 'You cannot connect with yourself.');
+        }
+
+        // Check if receiver is an active alumni
+        $receiver = User::where('id', $receiverId)->where('role', 'alumni')->where('status', 'active')->first();
+        if (!$receiver) {
+            return redirect()->back()->with('error', 'User not found or not available for connection.');
+        }
 
         // Check if already connected or request exists
         $existing = AlumniConnection::where(function($query) use ($user, $receiverId) {
@@ -134,7 +172,12 @@ class NetworkController extends Controller
         })->first();
 
         if ($existing) {
-            return redirect()->back()->with('error', 'Connection request already exists!');
+            // Allow re-sending if previously rejected — delete the old record
+            if ($existing->status === 'rejected') {
+                $existing->delete();
+            } else {
+                return redirect()->back()->with('error', 'Connection request already exists!');
+            }
         }
 
         $connection = AlumniConnection::create([
@@ -144,7 +187,6 @@ class NetworkController extends Controller
             'message' => $request->message,
         ]);
 
-        $receiver = User::find($receiverId);
         ActivityLog::logActivity(
             $user->id,
             'connection_sent',
@@ -263,6 +305,54 @@ class NetworkController extends Controller
         return response()->json([
             'success' => true,
             'data' => $connectedAlumni,
+        ]);
+    }
+
+    /**
+     * View another alumni's profile
+     */
+    public function viewProfile(Request $request, $id)
+    {
+        $currentUser = $request->user();
+        
+        $user = User::with('alumniProfile.batch')
+            ->where('id', $id)
+            ->where('role', 'alumni')
+            ->where('status', 'active')
+            ->firstOrFail();
+
+        $connectionStatus = AlumniConnection::getConnectionStatus($currentUser->id, $user->id);
+        
+        // Get connection record if exists
+        $connection = AlumniConnection::where(function($q) use ($currentUser, $id) {
+            $q->where('sender_id', $currentUser->id)->where('receiver_id', $id);
+        })->orWhere(function($q) use ($currentUser, $id) {
+            $q->where('sender_id', $id)->where('receiver_id', $currentUser->id);
+        })->first();
+
+        // Count mutual connections
+        $currentUserConnections = AlumniConnection::where(function($q) use ($currentUser) {
+            $q->where('sender_id', $currentUser->id)->orWhere('receiver_id', $currentUser->id);
+        })->accepted()->get()->map(function($c) use ($currentUser) {
+            return $c->sender_id === $currentUser->id ? $c->receiver_id : $c->sender_id;
+        });
+
+        $targetUserConnections = AlumniConnection::where(function($q) use ($id) {
+            $q->where('sender_id', $id)->orWhere('receiver_id', $id);
+        })->accepted()->get()->map(function($c) use ($id) {
+            return $c->sender_id == $id ? $c->receiver_id : $c->sender_id;
+        });
+
+        $mutualCount = $currentUserConnections->intersect($targetUserConnections)->count();
+        $totalConnections = $targetUserConnections->count();
+
+        return Inertia::render('Alumni/Network/AlumniProfileView', [
+            'alumniUser' => $user,
+            'profile' => $user->alumniProfile,
+            'connectionStatus' => $connectionStatus,
+            'connectionId' => $connection?->id,
+            'mutualConnections' => $mutualCount,
+            'totalConnections' => $totalConnections,
         ]);
     }
 

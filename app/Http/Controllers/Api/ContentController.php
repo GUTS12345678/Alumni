@@ -17,9 +17,11 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use App\Traits\ExportsPdf;
 
 class ContentController extends Controller
 {
+    use ExportsPdf;
     // =========================================================
     // ALUMNI / PUBLIC ENDPOINTS
     // =========================================================
@@ -1028,7 +1030,7 @@ class ContentController extends Controller
             if ($emailResult['success'] ?? false) {
                 return " Email notifications queued for {$emailResult['total_recipients']} recipients.";
             }
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('Failed to send content notification emails: ' . $e->getMessage());
         }
 
@@ -1145,9 +1147,7 @@ class ContentController extends Controller
 
         $html .= '</tbody></table></body></html>';
 
-        return response($html, 200)
-            ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'attachment; filename="content_' . date('Y-m-d_His') . '.pdf"');
+        return $this->renderPdf($html, 'content_' . date('Y-m-d_His') . '.pdf');
     }
 
     private function escapeCsvField($field)

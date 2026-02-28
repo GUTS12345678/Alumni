@@ -99,7 +99,10 @@ class MentorshipController extends Controller
 
         $profile = MentorProfile::create([
             'user_id' => $user->id,
-            ...$request->all(),
+            ...$request->only([
+                'expertise_area', 'bio', 'specializations', 'years_of_experience',
+                'max_mentees', 'availability',
+            ]),
             'status' => 'active',
             'is_available' => true,
         ]);
@@ -139,7 +142,10 @@ class MentorshipController extends Controller
         $user = $request->user();
 
         $profile = MentorProfile::where('user_id', $user->id)->firstOrFail();
-        $profile->update($request->all());
+        $profile->update($request->only([
+            'expertise_area', 'bio', 'specializations', 'years_of_experience',
+            'max_mentees', 'availability', 'is_available',
+        ]));
 
         ActivityLog::logActivity(
             $user->id,

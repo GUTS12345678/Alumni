@@ -14,9 +14,11 @@ use App\Models\SurveyAnswer;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use App\Traits\ExportsPdf;
 
 class AnalyticsController extends Controller
 {
+    use ExportsPdf;
     /**
      * Get time-to-first-job analytics data with robust caching
      */
@@ -46,9 +48,22 @@ class AnalyticsController extends Controller
             
             // Use locking to prevent race conditions
             $lock = Cache::lock('analytics_ttj_' . ($campusId ?? 'all'), 10);
+            $lockAcquired = false;
             
             try {
-                if ($lock->get()) {
+                $lockAcquired = $lock->block(2);
+                
+                if ($lockAcquired) {
+                    // Double-check cache after acquiring lock
+                    $cachedData = Cache::get($cacheKey);
+                    if ($cachedData && is_array($cachedData) && !empty($cachedData)) {
+                        return response()->json([
+                            'success' => true,
+                            'data' => $cachedData,
+                            'cached' => true
+                        ]);
+                    }
+                    
                     $data = [
                         'yearly_data' => $this->getYearlyTimeToJobData($yearFilter, $campusId),
                         'kpi_metrics' => $this->getKPIMetrics($yearFilter, $campusId),
@@ -66,8 +81,7 @@ class AnalyticsController extends Controller
                         'cached' => false
                     ]);
                 } else {
-                    // Wait and retry cache
-                    sleep(1);
+                    // Couldn't get lock, try cache
                     $cachedData = Cache::get($cacheKey);
                     if ($cachedData && is_array($cachedData)) {
                         return response()->json([
@@ -91,7 +105,9 @@ class AnalyticsController extends Controller
                     ]);
                 }
             } finally {
-                $lock->release();
+                if ($lockAcquired) {
+                    $lock->release();
+                }
             }
 
         } catch (\Exception $e) {
@@ -199,7 +215,7 @@ class AnalyticsController extends Controller
         $hasEmploymentRecords = DB::table('employments')->exists();
         
         // Get data directly from alumni_profiles using graduation_year field
-        $queryFromProfiles = DB::table('alumni_profiles')
+        $queryFromProfiles = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->select(
                 'graduation_year',
                 DB::raw('COUNT(id) as total_alumni'),
@@ -220,7 +236,7 @@ class AnalyticsController extends Controller
         // If we have employment records, also get data from there
         $queryFromJobs = collect();
         if ($hasEmploymentRecords) {
-            $queryFromJobs = DB::table('alumni_profiles as ap')
+            $queryFromJobs = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
                 ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
                 ->select(
                     'ap.graduation_year',
@@ -284,7 +300,7 @@ class AnalyticsController extends Controller
         
         // Get data from profiles using course relationship (COALESCE degree_program with courses.name)
         // This ensures we get program names even when degree_program field is NULL
-        $programsFromProfiles = DB::table('alumni_profiles as ap')
+        $programsFromProfiles = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
             ->leftJoin('courses as c', 'ap.course_id', '=', 'c.id')
             ->select(
                 DB::raw('COALESCE(ap.degree_program, c.name) as program'),
@@ -305,7 +321,7 @@ class AnalyticsController extends Controller
         // If we have employment records, also get data from there
         $programsFromJobs = collect();
         if ($hasEmploymentRecords) {
-            $programsFromJobs = DB::table('alumni_profiles as ap')
+            $programsFromJobs = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
                 ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
                 ->leftJoin('courses as c', 'ap.course_id', '=', 'c.id')
                 ->select(
@@ -380,7 +396,7 @@ class AnalyticsController extends Controller
         $hasEmploymentRecords = DB::table('employments')->exists();
         
         // Get days from profiles directly (only positive days - job after graduation, capped at 5 years)
-        $daysFromProfiles = DB::table('alumni_profiles')
+        $daysFromProfiles = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->select(DB::raw('DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))) as days_to_job'))
             ->where('graduation_year', $year)
             ->whereNotNull('job_start_date')
@@ -395,7 +411,7 @@ class AnalyticsController extends Controller
         // Get days from employments table if available (with >= 0 filter and 5-year cap)
         $daysFromJobs = [];
         if ($hasEmploymentRecords) {
-            $daysFromJobs = DB::table('alumni_profiles as ap')
+            $daysFromJobs = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
                 ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
                 ->select(DB::raw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) as days_to_job'))
                 ->where('ap.graduation_year', $year)
@@ -434,7 +450,7 @@ class AnalyticsController extends Controller
     {
         // Overall average days from employments table (only positive days, capped at 5 years)
         // Use COALESCE to fall back to graduation_year-06-01 when graduation_date is NULL
-        $overallFromJobs = DB::table('alumni_profiles as ap')
+        $overallFromJobs = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->whereNotNull('ap.graduation_year')
             ->whereNotNull('e.start_date')
@@ -448,7 +464,7 @@ class AnalyticsController extends Controller
             ->avg(DB::raw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01")))'));
             
         // Overall average days from profiles (fallback, capped at 5 years)
-        $overallFromProfiles = DB::table('alumni_profiles')
+        $overallFromProfiles = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->whereNotNull('graduation_year')
             ->whereNotNull('job_start_date')
             ->whereRaw('DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01"))) BETWEEN 0 AND 1825')
@@ -471,7 +487,7 @@ class AnalyticsController extends Controller
 
         // Current year average
         $currentYear = date('Y');
-        $currentYearFromJobs = DB::table('alumni_profiles as ap')
+        $currentYearFromJobs = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->where('ap.graduation_year', $currentYear)
             ->whereNotNull('ap.graduation_year')
@@ -479,7 +495,7 @@ class AnalyticsController extends Controller
             ->whereRaw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) BETWEEN 0 AND 1825')
             ->avg(DB::raw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01")))'));
             
-        $currentYearFromProfiles = DB::table('alumni_profiles')
+        $currentYearFromProfiles = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->where('graduation_year', $currentYear)
             ->whereNotNull('graduation_year')
             ->whereNotNull('job_start_date')
@@ -496,7 +512,7 @@ class AnalyticsController extends Controller
 
         // Previous year for improvement calculation
         $previousYear = $currentYear - 1;
-        $previousYearFromJobs = DB::table('alumni_profiles as ap')
+        $previousYearFromJobs = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->where('ap.graduation_year', $previousYear)
             ->whereNotNull('ap.graduation_year')
@@ -504,7 +520,7 @@ class AnalyticsController extends Controller
             ->whereRaw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01"))) BETWEEN 0 AND 1825')
             ->avg(DB::raw('DATEDIFF(e.start_date, COALESCE(ap.graduation_date, CONCAT(ap.graduation_year, "-06-01")))'));
             
-        $previousYearFromProfiles = DB::table('alumni_profiles')
+        $previousYearFromProfiles = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->where('graduation_year', $previousYear)
             ->whereNotNull('graduation_year')
             ->whereNotNull('job_start_date')
@@ -526,7 +542,7 @@ class AnalyticsController extends Controller
         }
 
         // Fastest employment program (from both sources)
-        $fastestFromJobs = DB::table('alumni_profiles as ap')
+        $fastestFromJobs = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->select(
                 'ap.degree_program as name',
@@ -539,7 +555,7 @@ class AnalyticsController extends Controller
             ->orderBy('avg_days')
             ->first();
             
-        $fastestFromProfiles = DB::table('alumni_profiles')
+        $fastestFromProfiles = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->select(
                 'degree_program as name',
                 DB::raw('AVG(DATEDIFF(job_start_date, COALESCE(graduation_date, CONCAT(graduation_year, "-06-01")))) as avg_days')
@@ -555,13 +571,13 @@ class AnalyticsController extends Controller
         $fastestProgram = $fastestFromJobs ?? $fastestFromProfiles;
 
         // Total tracked alumni (from both sources)
-        $totalFromJobs = DB::table('alumni_profiles as ap')
+        $totalFromJobs = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->whereNotNull('ap.graduation_year')
             ->whereNotNull('e.start_date')
             ->count(DB::raw('DISTINCT ap.id'));
             
-        $totalFromProfiles = DB::table('alumni_profiles')
+        $totalFromProfiles = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->whereNotNull('graduation_year')
             ->whereNotNull('job_start_date')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
@@ -643,21 +659,33 @@ class AnalyticsController extends Controller
     {
         $filename = 'time-to-job-analytics-' . date('Y-m-d') . '.pdf';
         
-        $content = "Time to First Job Analytics Report\n";
-        $content .= "Generated on: " . date('Y-m-d H:i:s') . "\n\n";
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+            body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+            h1 { color: #7c2d3f; border-bottom: 3px solid #7c2d3f; padding-bottom: 10px; }
+            .header-info { margin: 15px 0; color: #666; font-size: 14px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #7c2d3f; color: white; font-weight: bold; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+        </style></head><body>';
+        $html .= '<h1>Time to First Job Analytics Report</h1>';
+        $html .= '<div class="header-info">Generated on: ' . date('Y-m-d H:i:s') . '</div>';
+        $html .= '<table><thead><tr><th>Graduation Year</th><th>Avg Days to Job</th><th>Total Alumni</th><th>Employed Alumni</th><th>Employment Rate</th><th>Median Days</th></tr></thead><tbody>';
         
         foreach ($data as $row) {
-            $content .= "Year {$row['graduation_year']}:\n";
-            $content .= "  Average Days to Job: {$row['avg_days_to_job']}\n";
-            $content .= "  Total Alumni: {$row['total_alumni']}\n";
-            $content .= "  Employed Alumni: {$row['employed_alumni']}\n";
-            $content .= "  Employment Rate: {$row['employment_rate']}%\n";
-            $content .= "  Median Days: {$row['median_days']}\n\n";
+            $html .= '<tr>';
+            $html .= '<td>' . $row['graduation_year'] . '</td>';
+            $html .= '<td>' . $row['avg_days_to_job'] . '</td>';
+            $html .= '<td>' . $row['total_alumni'] . '</td>';
+            $html .= '<td>' . $row['employed_alumni'] . '</td>';
+            $html .= '<td>' . $row['employment_rate'] . '%</td>';
+            $html .= '<td>' . $row['median_days'] . '</td>';
+            $html .= '</tr>';
         }
         
-        return response($content)
-            ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+        $html .= '</tbody></table></body></html>';
+        
+        return $this->renderPdf($html, $filename);
     }
 
     /**
@@ -865,51 +893,65 @@ class AnalyticsController extends Controller
     {
         $filename = 'comprehensive-analytics-' . date('Y-m-d') . '.pdf';
         
-        $content = "COMPREHENSIVE ANALYTICS REPORT\n";
-        $content .= "Generated on: " . date('Y-m-d H:i:s') . "\n";
-        $content .= str_repeat('=', 80) . "\n\n";
+        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+            body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+            h1 { color: #7c2d3f; border-bottom: 3px solid #7c2d3f; padding-bottom: 10px; }
+            h2 { color: #555; border-bottom: 2px solid #ddd; padding-bottom: 8px; margin-top: 25px; font-size: 16px; }
+            .header-info { margin: 15px 0; color: #666; font-size: 14px; }
+            table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 11px; }
+            th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+            th { background-color: #7c2d3f; color: white; font-weight: bold; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .metric { background-color: #f5f5f5; padding: 8px 12px; margin: 4px 0; border-left: 4px solid #7c2d3f; font-size: 12px; }
+        </style></head><body>';
+        $html .= '<h1>Comprehensive Analytics Report</h1>';
+        $html .= '<div class="header-info">Generated on: ' . date('Y-m-d H:i:s') . '</div>';
         
         // Time to Job
-        $content .= "TIME TO JOB ANALYTICS\n" . str_repeat('-', 80) . "\n";
+        $html .= '<h2>Time to Job Analytics</h2>';
+        $html .= '<table><thead><tr><th>Year</th><th>Avg Days</th><th>Employed</th><th>Total</th><th>Rate</th></tr></thead><tbody>';
         foreach ($data['time_to_job'] as $row) {
-            $content .= "Year {$row['graduation_year']}: {$row['avg_days_to_job']} days avg, {$row['employed_alumni']}/{$row['total_alumni']} employed ({$row['employment_rate']}%)\n";
+            $html .= '<tr><td>' . $row['graduation_year'] . '</td><td>' . $row['avg_days_to_job'] . '</td><td>' . $row['employed_alumni'] . '</td><td>' . $row['total_alumni'] . '</td><td>' . $row['employment_rate'] . '%</td></tr>';
         }
-        $content .= "\n";
+        $html .= '</tbody></table>';
         
         // Enrollment
-        $content .= "ENROLLMENT METRICS\n" . str_repeat('-', 80) . "\n";
-        $content .= "Total Enrolled: {$data['enrollment_metrics']['summary']['total_enrolled']}\n";
-        $content .= "Total Graduated: {$data['enrollment_metrics']['summary']['total_graduated']}\n";
-        $content .= "Graduation Rate: {$data['enrollment_metrics']['summary']['overall_graduation_rate']}%\n\n";
+        $html .= '<h2>Enrollment Metrics</h2>';
+        $html .= '<div class="metric"><strong>Total Enrolled:</strong> ' . $data['enrollment_metrics']['summary']['total_enrolled'] . '</div>';
+        $html .= '<div class="metric"><strong>Total Graduated:</strong> ' . $data['enrollment_metrics']['summary']['total_graduated'] . '</div>';
+        $html .= '<div class="metric"><strong>Graduation Rate:</strong> ' . $data['enrollment_metrics']['summary']['overall_graduation_rate'] . '%</div>';
         
         // Performance
-        $content .= "PERFORMANCE INDICATOR\n" . str_repeat('-', 80) . "\n";
-        $content .= "Employed Within 2 Years: {$data['performance_indicator']['employed_within_2_years']}/{$data['performance_indicator']['total_graduates']}\n";
-        $content .= "Performance Rate: {$data['performance_indicator']['performance_rate']}%\n\n";
+        $html .= '<h2>Performance Indicator</h2>';
+        $html .= '<div class="metric"><strong>Employed Within 2 Years:</strong> ' . $data['performance_indicator']['employed_within_2_years'] . '/' . $data['performance_indicator']['total_graduates'] . '</div>';
+        $html .= '<div class="metric"><strong>Performance Rate:</strong> ' . $data['performance_indicator']['performance_rate'] . '%</div>';
         
         // Job Alignment
-        $content .= "JOB ALIGNMENT\n" . str_repeat('-', 80) . "\n";
-        $content .= "Aligned: {$data['job_alignment']['aligned']['count']} ({$data['job_alignment']['aligned']['percentage']}%)\n";
-        $content .= "Overqualified: {$data['job_alignment']['overqualified']['count']} ({$data['job_alignment']['overqualified']['percentage']}%)\n";
-        $content .= "Underqualified: {$data['job_alignment']['underqualified']['count']} ({$data['job_alignment']['underqualified']['percentage']}%)\n";
-        $content .= "Unfit: {$data['job_alignment']['unfit']['count']} ({$data['job_alignment']['unfit']['percentage']}%)\n\n";
+        $html .= '<h2>Job Alignment</h2>';
+        $html .= '<table><thead><tr><th>Category</th><th>Count</th><th>Percentage</th></tr></thead><tbody>';
+        $html .= '<tr><td>Aligned</td><td>' . $data['job_alignment']['aligned']['count'] . '</td><td>' . $data['job_alignment']['aligned']['percentage'] . '%</td></tr>';
+        $html .= '<tr><td>Overqualified</td><td>' . $data['job_alignment']['overqualified']['count'] . '</td><td>' . $data['job_alignment']['overqualified']['percentage'] . '%</td></tr>';
+        $html .= '<tr><td>Underqualified</td><td>' . $data['job_alignment']['underqualified']['count'] . '</td><td>' . $data['job_alignment']['underqualified']['percentage'] . '%</td></tr>';
+        $html .= '<tr><td>Unfit</td><td>' . $data['job_alignment']['unfit']['count'] . '</td><td>' . $data['job_alignment']['unfit']['percentage'] . '%</td></tr>';
+        $html .= '</tbody></table>';
         
         // Program Performance
-        $content .= "PROGRAM-WISE PERFORMANCE (Top Programs)\n" . str_repeat('-', 80) . "\n";
+        $html .= '<h2>Program-wise Performance (Top 10)</h2>';
+        $html .= '<table><thead><tr><th>Program</th><th>Employed</th><th>Total</th><th>Rate</th><th>Avg Days</th></tr></thead><tbody>';
         foreach (array_slice($data['program_performance'], 0, 10) as $row) {
-            $content .= "{$row['program']}: {$row['employed']}/{$row['total_alumni']} employed ({$row['employment_rate']}%), {$row['avg_days_to_job']} days avg\n";
+            $html .= '<tr><td>' . htmlspecialchars($row['program']) . '</td><td>' . $row['employed'] . '</td><td>' . $row['total_alumni'] . '</td><td>' . $row['employment_rate'] . '%</td><td>' . $row['avg_days_to_job'] . '</td></tr>';
         }
-        $content .= "\n";
+        $html .= '</tbody></table>';
         
         // Employment Location
-        $content .= "EMPLOYMENT LOCATION\n" . str_repeat('-', 80) . "\n";
-        $content .= "Local: {$data['employment_location']['summary']['local']} ({$data['employment_location']['summary']['local_rate']}%)\n";
-        $content .= "Foreign: {$data['employment_location']['summary']['foreign']} ({$data['employment_location']['summary']['foreign_rate']}%)\n";
-        $content .= "Remote: {$data['employment_location']['summary']['remote']} ({$data['employment_location']['summary']['remote_rate']}%)\n";
+        $html .= '<h2>Employment Location</h2>';
+        $html .= '<div class="metric"><strong>Local:</strong> ' . $data['employment_location']['summary']['local'] . ' (' . $data['employment_location']['summary']['local_rate'] . '%)</div>';
+        $html .= '<div class="metric"><strong>Foreign:</strong> ' . $data['employment_location']['summary']['foreign'] . ' (' . $data['employment_location']['summary']['foreign_rate'] . '%)</div>';
+        $html .= '<div class="metric"><strong>Remote:</strong> ' . $data['employment_location']['summary']['remote'] . ' (' . $data['employment_location']['summary']['remote_rate'] . '%)</div>';
         
-        return response($content)
-            ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+        $html .= '</body></html>';
+        
+        return $this->renderPdf($html, $filename);
     }
 
     /**
@@ -935,9 +977,22 @@ class AnalyticsController extends Controller
             
             // Use locking
             $lock = Cache::lock('analytics_overview_' . ($campusId ?? 'all'), 10);
+            $lockAcquired = false;
             
             try {
-                if ($lock->get()) {
+                $lockAcquired = $lock->block(2);
+                
+                if ($lockAcquired) {
+                    // Double-check cache after acquiring lock
+                    $cachedData = Cache::get($cacheKey);
+                    if ($cachedData && is_array($cachedData) && isset($cachedData['total_surveys'])) {
+                        return response()->json([
+                            'success' => true,
+                            'data' => $cachedData,
+                            'cached' => true
+                        ]);
+                    }
+                    
                     $totalSurveys = DB::table('surveys')->count();
                     $activeSurveys = DB::table('surveys')->where('status', 'active')->count();
                     
@@ -1019,7 +1074,6 @@ class AnalyticsController extends Controller
                     ]);
                 } else {
                     // Wait and retry
-                    sleep(1);
                     $cachedData = Cache::get($cacheKey);
                     if ($cachedData && is_array($cachedData)) {
                         return response()->json([
@@ -1029,11 +1083,30 @@ class AnalyticsController extends Controller
                         ]);
                     }
                     
-                    // Fallback - fetch without lock
-                    throw new \Exception('Could not acquire lock, retry failed');
+                    // Fallback - fetch without lock instead of throwing
+                    $totalSurveys = DB::table('surveys')->count();
+                    $activeSurveys = DB::table('surveys')->where('status', 'active')->count();
+                    $totalResponses = DB::table('survey_responses')->count();
+                    
+                    $data = [
+                        'total_surveys' => (int) $totalSurveys,
+                        'active_surveys' => (int) $activeSurveys,
+                        'total_responses' => (int) $totalResponses,
+                        'avg_completion_rate' => 0,
+                        'most_popular_survey' => 'N/A',
+                        'recent_activity' => []
+                    ];
+                    
+                    return response()->json([
+                        'success' => true,
+                        'data' => $data,
+                        'cached' => false
+                    ]);
                 }
             } finally {
-                $lock->release();
+                if ($lockAcquired) {
+                    $lock->release();
+                }
             }
 
         } catch (\Exception $e) {
@@ -1205,7 +1278,7 @@ class AnalyticsController extends Controller
                     
                     // Build response distribution for choice-type questions
                     $responseDistribution = [];
-                    $choiceTypes = ['radio', 'checkbox', 'select', 'dropdown', 'multiple_choice'];
+                    $choiceTypes = ['radio', 'checkbox', 'select', 'dropdown', 'multiple_choice', 'single_choice'];
                     
                     if (in_array($question->question_type, $choiceTypes) && $totalAnswers > 0) {
                         $answers = DB::table('survey_answers')
@@ -1253,8 +1326,8 @@ class AnalyticsController extends Controller
                             ];
                         }
                     }
-                    // For text/textarea: show top common answers
-                    elseif (in_array($question->question_type, ['text', 'textarea']) && $totalAnswers > 0) {
+                    // For text/textarea/email/phone: show top common answers
+                    elseif (in_array($question->question_type, ['text', 'textarea', 'email', 'phone']) && $totalAnswers > 0) {
                         $textAnswers = DB::table('survey_answers')
                             ->join('survey_responses', 'survey_answers.survey_response_id', '=', 'survey_responses.id')
                             ->where('survey_answers.survey_question_id', $question->id)
@@ -1279,6 +1352,104 @@ class AnalyticsController extends Controller
                             ];
                         }
                     }
+                    // For number/rating: show distribution of numeric values
+                    elseif (in_array($question->question_type, ['number', 'rating']) && $totalAnswers > 0) {
+                        $numericAnswers = DB::table('survey_answers')
+                            ->join('survey_responses', 'survey_answers.survey_response_id', '=', 'survey_responses.id')
+                            ->where('survey_answers.survey_question_id', $question->id)
+                            ->where('survey_responses.survey_id', $surveyId)
+                            ->when($days !== 'all', function ($q) use ($days) {
+                                return $q->where('survey_responses.created_at', '>=', Carbon::now()->subDays((int) $days));
+                            })
+                            ->select('survey_answers.answer_number', 'survey_answers.answer_text')
+                            ->get();
+
+                        $valueCounts = [];
+                        foreach ($numericAnswers as $answer) {
+                            $val = $answer->answer_number ?? $answer->answer_text;
+                            if ($val !== null && $val !== '') {
+                                // For ratings (1-5 or 1-10), keep as-is
+                                // For large numbers, bucket them into ranges
+                                $numVal = (float) $val;
+                                if ($question->question_type === 'rating') {
+                                    $key = (string) (int) $numVal;
+                                } elseif ($numVal > 1000) {
+                                    // Bucket large numbers (e.g., salary, graduation year)
+                                    if ($numVal >= 2000 && $numVal <= 2100) {
+                                        // Looks like a year — keep exact value
+                                        $key = (string) (int) $numVal;
+                                    } else {
+                                        // Bucket into ranges
+                                        $magnitude = pow(10, floor(log10(max($numVal, 1))));
+                                        $lower = floor($numVal / $magnitude) * $magnitude;
+                                        $upper = $lower + $magnitude;
+                                        $key = number_format($lower) . ' - ' . number_format($upper);
+                                    }
+                                } else {
+                                    $key = (string) round($numVal, 1);
+                                }
+                                $valueCounts[$key] = ($valueCounts[$key] ?? 0) + 1;
+                            }
+                        }
+
+                        // Sort: for ratings sort by key ascending, for others sort by count descending
+                        if ($question->question_type === 'rating') {
+                            ksort($valueCounts);
+                        } else {
+                            arsort($valueCounts);
+                            $valueCounts = array_slice($valueCounts, 0, 15, true);
+                        }
+
+                        $answersTotal = array_sum($valueCounts);
+                        foreach ($valueCounts as $option => $count) {
+                            $label = $question->question_type === 'rating' ? "★ {$option}" : (string) $option;
+                            $responseDistribution[] = [
+                                'option' => $label,
+                                'count' => $count,
+                                'percentage' => $answersTotal > 0 ? round(($count / $answersTotal) * 100, 1) : 0,
+                            ];
+                        }
+                    }
+                    // For date: show distribution by month/year
+                    elseif ($question->question_type === 'date' && $totalAnswers > 0) {
+                        $dateAnswers = DB::table('survey_answers')
+                            ->join('survey_responses', 'survey_answers.survey_response_id', '=', 'survey_responses.id')
+                            ->where('survey_answers.survey_question_id', $question->id)
+                            ->where('survey_responses.survey_id', $surveyId)
+                            ->when($days !== 'all', function ($q) use ($days) {
+                                return $q->where('survey_responses.created_at', '>=', Carbon::now()->subDays((int) $days));
+                            })
+                            ->whereNotNull('survey_answers.answer_date')
+                            ->selectRaw("DATE_FORMAT(survey_answers.answer_date, '%Y') as year_val")
+                            ->get();
+
+                        $yearCounts = [];
+                        foreach ($dateAnswers as $answer) {
+                            if ($answer->year_val) {
+                                $yearCounts[$answer->year_val] = ($yearCounts[$answer->year_val] ?? 0) + 1;
+                            }
+                        }
+                        ksort($yearCounts);
+                        $answersTotal = array_sum($yearCounts);
+                        foreach ($yearCounts as $year => $count) {
+                            $responseDistribution[] = [
+                                'option' => $year,
+                                'count' => $count,
+                                'percentage' => $answersTotal > 0 ? round(($count / $answersTotal) * 100, 1) : 0,
+                            ];
+                        }
+                    }
+
+                    // Calculate average response time for this question
+                    $avgTime = DB::table('survey_answers')
+                        ->join('survey_responses', 'survey_answers.survey_response_id', '=', 'survey_responses.id')
+                        ->where('survey_answers.survey_question_id', $question->id)
+                        ->where('survey_responses.survey_id', $surveyId)
+                        ->when($days !== 'all', function ($q) use ($days) {
+                            return $q->where('survey_responses.created_at', '>=', Carbon::now()->subDays((int) $days));
+                        })
+                        ->whereNotNull('survey_answers.time_spent_seconds')
+                        ->avg('survey_answers.time_spent_seconds');
 
                     $questionAnalytics[] = [
                         'question_id' => $question->id,
@@ -1286,6 +1457,7 @@ class AnalyticsController extends Controller
                         'question_type' => $question->question_type,
                         'total_responses' => (int) $totalAnswers,
                         'skip_rate' => round($skipRate, 1),
+                        'avg_response_time' => $avgTime ? round($avgTime, 1) : null,
                         'response_distribution' => $responseDistribution
                     ];
                 }
@@ -1657,9 +1829,7 @@ class AnalyticsController extends Controller
         
         $html .= '</body></html>';
         
-        return response($html)
-            ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
+        return $this->renderPdf($html, $filename);
     }
 
     /**
@@ -1855,7 +2025,7 @@ class AnalyticsController extends Controller
     private function getJobMismatchStatistics($yearFilter = null, $campusId = null): array
     {
         // Get employed alumni from employments table (with current jobs)
-        $employedQuery = DB::table('alumni_profiles as ap')
+        $employedQuery = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->where('e.is_current', true);
             
@@ -1869,7 +2039,7 @@ class AnalyticsController extends Controller
         $totalEmployedFromJobs = $employedQuery->count();
         
         // Get alumni with employment status but no job records
-        $employedFromStatusQuery = DB::table('alumni_profiles')
+        $employedFromStatusQuery = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotExists(function ($query) {
                 $query->select(DB::raw(1))
@@ -1889,7 +2059,7 @@ class AnalyticsController extends Controller
         $totalEmployed = $totalEmployedFromJobs + $totalEmployedFromStatus;
         
         // Job mismatch breakdown (from employments table with job_mismatch_reason)
-        $mismatchBreakdownFromJobs = DB::table('alumni_profiles as ap')
+        $mismatchBreakdownFromJobs = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->select('ap.job_mismatch_reason', DB::raw('COUNT(*) as count'))
             ->where('e.is_current', true)
@@ -1904,7 +2074,7 @@ class AnalyticsController extends Controller
             ->get();
             
         // Job mismatch from profiles without employment records
-        $mismatchBreakdownFromStatus = DB::table('alumni_profiles')
+        $mismatchBreakdownFromStatus = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->select('job_mismatch_reason', DB::raw('COUNT(*) as count'))
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotNull('job_mismatch_reason')
@@ -1941,7 +2111,7 @@ class AnalyticsController extends Controller
         })->toArray();
         
         // Unemployment reasons breakdown
-        $unemploymentReasons = DB::table('alumni_profiles')
+        $unemploymentReasons = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->select('unemployment_reason', DB::raw('COUNT(*) as count'))
             ->whereIn('employment_status', ['unemployed_seeking', 'unemployed_not_seeking'])
             ->whereNotNull('unemployment_reason')
@@ -1958,7 +2128,7 @@ class AnalyticsController extends Controller
             ->toArray();
         
         // Job satisfaction average (from profiles with current employment)
-        $avgJobSatisfactionFromJobs = DB::table('alumni_profiles as ap')
+        $avgJobSatisfactionFromJobs = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->where('e.is_current', true)
             ->whereNotNull('ap.job_satisfaction')
@@ -1967,7 +2137,7 @@ class AnalyticsController extends Controller
             })
             ->avg('ap.job_satisfaction');
             
-        $avgJobSatisfactionFromStatus = DB::table('alumni_profiles')
+        $avgJobSatisfactionFromStatus = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotNull('job_satisfaction')
             ->whereNotExists(function ($query) {
@@ -1994,7 +2164,7 @@ class AnalyticsController extends Controller
         }
         
         // Job-related to degree statistics (from employments + profiles)
-        $jobRelatedFromJobs = DB::table('alumni_profiles as ap')
+        $jobRelatedFromJobs = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
             ->join('employments as e', 'ap.id', '=', 'e.alumni_id')
             ->select(
                 DB::raw('SUM(CASE WHEN ap.job_related_to_degree = 1 THEN 1 ELSE 0 END) as related_count'),
@@ -2007,7 +2177,7 @@ class AnalyticsController extends Controller
             })
             ->first();
             
-        $jobRelatedFromStatus = DB::table('alumni_profiles')
+        $jobRelatedFromStatus = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->select(
                 DB::raw('SUM(CASE WHEN job_related_to_degree = 1 THEN 1 ELSE 0 END) as related_count'),
                 DB::raw('SUM(CASE WHEN job_related_to_degree = 0 THEN 1 ELSE 0 END) as unrelated_count')
@@ -2104,7 +2274,7 @@ class AnalyticsController extends Controller
     private function getEnrollmentMetrics($campusId = null): array
     {
         // Get actual alumni counts by graduation year from alumni_profiles
-        $alumniByYear = DB::table('alumni_profiles')
+        $alumniByYear = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->select(
                 'graduation_year',
                 DB::raw('COUNT(*) as graduated'),
@@ -2187,7 +2357,7 @@ class AnalyticsController extends Controller
     private function getPerformanceIndicator($campusId = null): array
     {
         // Get alumni with graduation date and job start date — employed within 2 years
-        $employedWithin2Years = DB::table('alumni_profiles')
+        $employedWithin2Years = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotNull('job_start_date')
             ->whereNotNull('graduation_year')
@@ -2198,7 +2368,7 @@ class AnalyticsController extends Controller
             ->count();
 
         // Count all employed alumni who have graduation data
-        $totalEmployedWithGradData = DB::table('alumni_profiles')
+        $totalEmployedWithGradData = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotNull('graduation_year')
             ->when($campusId, function ($q) use ($campusId) {
@@ -2207,7 +2377,7 @@ class AnalyticsController extends Controller
             ->count();
 
         // Total graduates (all alumni profiles)
-        $totalGraduates = DB::table('alumni_profiles')
+        $totalGraduates = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->whereNotNull('graduation_year')
             ->when($campusId, function ($q) use ($campusId) {
                 return $q->where('campus_id', $campusId);
@@ -2215,7 +2385,7 @@ class AnalyticsController extends Controller
             ->count();
 
         // Calculate performance by year
-        $yearlyPerformance = DB::table('alumni_profiles')
+        $yearlyPerformance = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->select(
                 'graduation_year',
                 DB::raw('COUNT(*) as total_graduates'),
@@ -2262,7 +2432,7 @@ class AnalyticsController extends Controller
      */
     private function getJobAlignmentStats($campusId = null): array
     {
-        $stats = DB::table('alumni_profiles')
+        $stats = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->select(
                 'job_mismatch_reason',
                 DB::raw('COUNT(*) as count')
@@ -2311,7 +2481,7 @@ class AnalyticsController extends Controller
     private function getAttritionRate($campusId = null): array
     {
         // Get alumni employment breakdown by graduation year
-        $alumniByYear = DB::table('alumni_profiles')
+        $alumniByYear = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->select(
                 'graduation_year',
                 DB::raw('COUNT(*) as total'),
@@ -2410,7 +2580,7 @@ class AnalyticsController extends Controller
      */
     private function getProgramWisePerformance($campusId = null): array
     {
-        $programData = DB::table('alumni_profiles as ap')
+        $programData = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
             ->leftJoin('courses as c', 'ap.course_id', '=', 'c.id')
             ->select(
                 DB::raw('COALESCE(ap.degree_program, c.name) as program'),
@@ -2452,7 +2622,7 @@ class AnalyticsController extends Controller
      */
     private function getCollegeEnrollmentBreakdown($campusId = null): array
     {
-        $collegeData = DB::table('alumni_profiles as ap')
+        $collegeData = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
             ->join('courses as c', 'ap.course_id', '=', 'c.id')
             ->join('departments as d', 'c.department_id', '=', 'd.id')
             ->select(
@@ -2493,7 +2663,7 @@ class AnalyticsController extends Controller
      */
     private function getCourseEnrollmentBreakdown($campusId = null): array
     {
-        $courseData = DB::table('alumni_profiles as ap')
+        $courseData = DB::table('alumni_profiles as ap')->whereNull('ap.deleted_at')
             ->join('courses as c', 'ap.course_id', '=', 'c.id')
             ->join('departments as d', 'c.department_id', '=', 'd.id')
             ->select(
@@ -2546,7 +2716,7 @@ class AnalyticsController extends Controller
         $totalEmployed = (clone $baseQuery)->count();
 
         // Overall counts
-        $locationCounts = DB::table('alumni_profiles')
+        $locationCounts = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotNull('employment_location_type')
             ->when($campusId, fn($q) => $q->where('campus_id', $campusId))
@@ -2560,7 +2730,7 @@ class AnalyticsController extends Controller
         $remote = $locationCounts['remote'] ?? 0;
 
         // Per-year trend
-        $yearlyTrend = DB::table('alumni_profiles')
+        $yearlyTrend = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->whereIn('employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotNull('employment_location_type')
             ->whereNotNull('graduation_year')
@@ -2586,7 +2756,7 @@ class AnalyticsController extends Controller
             ->toArray();
 
         // Per-department breakdown
-        $departmentBreakdown = DB::table('alumni_profiles')
+        $departmentBreakdown = DB::table('alumni_profiles')->whereNull('deleted_at')
             ->join('departments', 'alumni_profiles.department_id', '=', 'departments.id')
             ->whereIn('alumni_profiles.employment_status', ['employed_full_time', 'employed_part_time', 'self_employed'])
             ->whereNotNull('alumni_profiles.employment_location_type')

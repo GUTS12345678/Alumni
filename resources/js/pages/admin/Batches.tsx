@@ -51,6 +51,9 @@ import {
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { useExport } from '@/hooks/useExport';
+import { ExportProgressDialog } from '@/components/ExportProgressDialog';
+import { ScrollFadeIn } from '@/components/scroll-animations';
 
 interface Batch {
     id: number;
@@ -87,6 +90,7 @@ export default function Batches({ user }: Props) {
     // Campus context for filtering
     const { selectedCampus } = useCampus();
     const { confirm, confirmState, handleConfirm, handleCancel } = useConfirmDialog();
+    const { exportData, cancelExport, ...exportState } = useExport();
 
     const [batches, setBatches] = useState<Batch[]>([]);
     const [loading, setLoading] = useState(true);
@@ -167,47 +171,17 @@ export default function Batches({ user }: Props) {
     }, [currentPage, debouncedSearchTerm, selectedCampus?.id]);
 
     const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
-        try {
-            const params = new URLSearchParams();
-            params.append('format', format);
-            if (debouncedSearchTerm) params.append('search', debouncedSearchTerm);
-            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
+        const params: Record<string, string> = {};
+        if (debouncedSearchTerm) params.search = debouncedSearchTerm;
+        if (selectedCampus?.id) params.campus_id = selectedCampus.id.toString();
 
-            const token = localStorage.getItem('auth_token');
-            if (!token) {
-                window.location.href = '/login';
-                return;
-            }
-
-            const response = await fetch(`/api/v1/admin/batches/export?${params}`, {
-                credentials: 'include',
-                headers: {
-                    'Accept': 'application/octet-stream',
-                    'Authorization': `Bearer ${token}`,
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-            });
-
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                const extension = format === 'excel' ? 'xlsx' : format;
-                a.download = `batches-${new Date().toISOString().split('T')[0]}.${extension}`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-            } else {
-                console.error('Export failed:', response.status);
-                alert('Failed to export batches. Please try again.');
-            }
-        } catch (err) {
-            console.error('Export error:', err);
-            alert('An error occurred while exporting. Please try again.');
-        }
+        exportData({
+            url: '/api/v1/admin/batches/export',
+            params,
+            filename: 'batches',
+            format,
+            onError: () => alert('Failed to export batches. Please try again.'),
+        });
     };
 
     // Debounce search term
@@ -401,316 +375,324 @@ export default function Batches({ user }: Props) {
     return (
         <AdminBaseLayout title="Batch Management" user={user}>
             <div className="space-y-6">
-                {/* Header with Actions */}
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
-                        <h2 className="text-2xl font-bold text-maroon-800 dark:text-gray-200">Batch Management</h2>
-                        <p className="text-maroon-600 dark:text-gray-400">Manage graduation year cohorts and alumni batches</p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                            onClick={() => fetchBatches()}
-                            variant="outline"
-                            size="sm"
-                            disabled={refreshing}
-                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
-                        >
-                            <RefreshCw className={`h-4 w-4 sm:mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                            <span className="hidden sm:inline">Refresh</span>
-                        </Button>
-
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="border-green-300 text-green-700 hover:bg-green-50"
-                                >
-                                    <Download className="h-4 w-4 sm:mr-2" />
-                                    <span className="hidden sm:inline">Export</span>
-                                    <ChevronDown className="h-4 w-4 sm:ml-2" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleExport('csv')}>
-                                    <FileText className="h-4 w-4 mr-2" />
-                                    Export as CSV
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleExport('excel')}>
-                                    <FileText className="h-4 w-4 mr-2" />
-                                    Export as Excel
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleExport('pdf')}>
-                                    <FileText className="h-4 w-4 mr-2" />
-                                    Export as PDF
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        <Button
-                            onClick={handleAddBatch}
-                            className="bg-maroon-700 hover:bg-maroon-800 text-white"
-                            size="sm"
-                        >
-                            <Plus className="h-4 w-4 sm:mr-2" />
-                            <span className="hidden sm:inline">Add Batch</span>
-                        </Button>
-                    </div>
-                </div>
-
-                {/* Search Bar */}
-                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                    <CardHeader>
-                        <CardTitle className="text-lg text-maroon-800 dark:text-gray-200 flex items-center">
-                            <Search className="h-5 w-5 mr-2" />
-                            Search Batches
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                            <Input
-                                placeholder="Search by batch name or graduation year..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10 border-beige-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500"
-                            />
+                <ScrollFadeIn>
+                    {/* Header with Actions */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div>
+                            <h2 className="text-2xl font-bold text-maroon-800 dark:text-gray-200">Batch Management</h2>
+                            <p className="text-maroon-600 dark:text-gray-400">Manage graduation year cohorts and alumni batches</p>
                         </div>
-                    </CardContent>
-                </Card>
 
-                {/* Batch Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                                onClick={() => fetchBatches()}
+                                variant="outline"
+                                size="sm"
+                                disabled={refreshing}
+                                className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
+                            >
+                                <RefreshCw className={`h-4 w-4 sm:mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+                                <span className="hidden sm:inline">Refresh</span>
+                            </Button>
+
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="border-green-300 text-green-700 hover:bg-green-50"
+                                    >
+                                        <Download className="h-4 w-4 sm:mr-2" />
+                                        <span className="hidden sm:inline">Export</span>
+                                        <ChevronDown className="h-4 w-4 sm:ml-2" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleExport('csv')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as CSV
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExport('excel')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as Excel
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Export as PDF
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            <Button
+                                onClick={handleAddBatch}
+                                className="bg-maroon-700 hover:bg-maroon-800 text-white"
+                                size="sm"
+                            >
+                                <Plus className="h-4 w-4 sm:mr-2" />
+                                <span className="hidden sm:inline">Add Batch</span>
+                            </Button>
+                        </div>
+                    </div>
+                </ScrollFadeIn>
+
+                <ScrollFadeIn delay={100}>
+                    {/* Search Bar */}
                     <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Batches</CardTitle>
-                            <GraduationCap className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                        <CardHeader>
+                            <CardTitle className="text-lg text-maroon-800 dark:text-gray-200 flex items-center">
+                                <Search className="h-5 w-5 mr-2" />
+                                Search Batches
+                            </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">{total}</div>
-                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">All graduation cohorts</p>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Active Batches</CardTitle>
-                            <Users className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-green-600">
-                                {batches.filter(b => b.status === 'active').length}
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                                <Input
+                                    placeholder="Search by batch name or graduation year..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="pl-10 border-beige-300 dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600 focus:border-maroon-500 focus:ring-maroon-500"
+                                />
                             </div>
-                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Currently active</p>
                         </CardContent>
                     </Card>
+                </ScrollFadeIn>
 
-                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Latest Year</CardTitle>
-                            <Calendar className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-blue-600">
-                                {Math.max(...batches.map(b => b.graduation_year), 0)}
-                            </div>
-                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Most recent graduation</p>
-                        </CardContent>
-                    </Card>
+                <ScrollFadeIn delay={100}>
+                    {/* Batch Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Batches</CardTitle>
+                                <GraduationCap className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">{total}</div>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">All graduation cohorts</p>
+                            </CardContent>
+                        </Card>
 
-                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Alumni</CardTitle>
-                            <BarChart3 className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold text-purple-600">
-                                {totalAlumni}
-                            </div>
-                            <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Across all batches</p>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Batches Table */}
-                <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                    <CardHeader>
-                        <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Graduation Batches</CardTitle>
-                        <CardDescription className="text-maroon-600 dark:text-gray-400">
-                            Showing {batches.length} of {total} batches
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-0">
-                        {/* Mobile Card View */}
-                        <div className="md:hidden divide-y divide-beige-200 dark:divide-gray-700">
-                            {batches.map((batch) => (
-                                <div key={batch.id} className="p-4 space-y-2">
-                                    <div className="flex items-start justify-between">
-                                        <div className="min-w-0 flex-1">
-                                            <div className="font-medium text-maroon-800 dark:text-gray-200">{batch.name}</div>
-                                            <div className="text-sm text-gray-600 dark:text-gray-400 line-clamp-1">{batch.description}</div>
-                                        </div>
-                                        {getStatusBadge(batch.status)}
-                                    </div>
-                                    <div className="flex items-center gap-4 text-sm">
-                                        <div className="flex items-center gap-1">
-                                            <Calendar className="h-3.5 w-3.5 text-maroon-600 dark:text-gray-400" />
-                                            <span className="font-medium">{batch.graduation_year}</span>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <Users className="h-3.5 w-3.5 text-blue-600" />
-                                            <span className="font-medium text-blue-800">{batch.alumni_count || 0} alumni</span>
-                                        </div>
-                                    </div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400">Created: {formatDate(batch.created_at)}</div>
-                                    <div className="flex flex-wrap gap-1 pt-1 border-t border-beige-100 dark:border-gray-700">
-                                        <Button variant="ghost" size="sm" onClick={() => handleViewBatch(batch)} className="h-7 text-xs text-maroon-700 dark:text-gray-300" title="View">
-                                            <Eye className="h-3.5 w-3.5 mr-1" /> View
-                                        </Button>
-                                        <Button variant="ghost" size="sm" onClick={() => handleEditBatch(batch)} className="h-7 text-xs text-blue-700" title="Edit">
-                                            <Edit className="h-3.5 w-3.5 mr-1" /> Edit
-                                        </Button>
-                                        <Button variant="ghost" size="sm" className="h-7 text-xs text-green-700" title="Alumni" onClick={() => window.location.href = `/admin/alumni?graduation_year=${batch.graduation_year}&batch_name=${encodeURIComponent(batch.name)}`}>
-                                            <Users className="h-3.5 w-3.5 mr-1" /> Alumni
-                                        </Button>
-                                        <Button variant="ghost" size="sm" onClick={() => handleDeleteBatch(batch)} className="h-7 text-xs text-red-700" title="Delete">
-                                            <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
-                                        </Button>
-                                    </div>
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Active Batches</CardTitle>
+                                <Users className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold text-green-600">
+                                    {batches.filter(b => b.status === 'active').length}
                                 </div>
-                            ))}
-                        </div>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Currently active</p>
+                            </CardContent>
+                        </Card>
 
-                        {/* Desktop Table View */}
-                        <div className="hidden md:block overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow className="bg-beige-50 dark:bg-gray-800/50">
-                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Batch Details</TableHead>
-                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Graduation Year</TableHead>
-                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Alumni Count</TableHead>
-                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Status</TableHead>
-                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Created</TableHead>
-                                        <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Actions</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {batches.map((batch) => (
-                                        <TableRow key={batch.id} className="hover:bg-beige-50 dark:hover:bg-gray-800">
-                                            <TableCell>
-                                                <div className="space-y-1">
-                                                    <div className="font-medium text-maroon-800 dark:text-gray-200">
-                                                        {batch.name}
-                                                    </div>
-                                                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                                                        {batch.description}
-                                                    </div>
-                                                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                        ID: {batch.id}
-                                                    </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center space-x-2">
-                                                    <Calendar className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
-                                                    <span className="font-medium text-maroon-800 dark:text-gray-200">
-                                                        {batch.graduation_year}
-                                                    </span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center space-x-2">
-                                                    <Users className="h-4 w-4 text-blue-600" />
-                                                    <span className="font-medium text-blue-800">
-                                                        {batch.alumni_count || 0}
-                                                    </span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                {getStatusBadge(batch.status)}
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="text-sm">
-                                                    {formatDate(batch.created_at)}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center space-x-1">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleViewBatch(batch)}
-                                                        className="text-maroon-700 dark:text-gray-300 hover:text-maroon-800 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
-                                                        title="View Details"
-                                                    >
-                                                        <Eye className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleEditBatch(batch)}
-                                                        className="text-blue-700 hover:text-blue-800 hover:bg-blue-50"
-                                                        title="Edit Batch"
-                                                    >
-                                                        <Edit className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="text-green-700 hover:text-green-800 hover:bg-green-50"
-                                                        title="View Alumni"
-                                                        onClick={() => window.location.href = `/admin/alumni?graduation_year=${batch.graduation_year}&batch_name=${encodeURIComponent(batch.name)}`}
-                                                    >
-                                                        <Users className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => handleDeleteBatch(batch)}
-                                                        className="text-red-700 hover:text-red-800 hover:bg-red-50"
-                                                        title="Delete Batch"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </TableCell>
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Latest Year</CardTitle>
+                                <Calendar className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold text-blue-600">
+                                    {Math.max(...batches.map(b => b.graduation_year), 0)}
+                                </div>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Most recent graduation</p>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Alumni</CardTitle>
+                                <BarChart3 className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold text-purple-600">
+                                    {totalAlumni}
+                                </div>
+                                <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Across all batches</p>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </ScrollFadeIn>
+
+                <ScrollFadeIn delay={100}>
+                    {/* Batches Table */}
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
+                        <CardHeader>
+                            <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Graduation Batches</CardTitle>
+                            <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                Showing {batches.length} of {total} batches
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            {/* Mobile Card View */}
+                            <div className="md:hidden divide-y divide-beige-200 dark:divide-gray-700">
+                                {batches.map((batch) => (
+                                    <div key={batch.id} className="p-4 space-y-2">
+                                        <div className="flex items-start justify-between">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="font-medium text-maroon-800 dark:text-gray-200">{batch.name}</div>
+                                                <div className="text-sm text-gray-600 dark:text-gray-400 line-clamp-1">{batch.description}</div>
+                                            </div>
+                                            {getStatusBadge(batch.status)}
+                                        </div>
+                                        <div className="flex items-center gap-4 text-sm">
+                                            <div className="flex items-center gap-1">
+                                                <Calendar className="h-3.5 w-3.5 text-maroon-600 dark:text-gray-400" />
+                                                <span className="font-medium">{batch.graduation_year}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <Users className="h-3.5 w-3.5 text-blue-600" />
+                                                <span className="font-medium text-blue-800">{batch.alumni_count || 0} alumni</span>
+                                            </div>
+                                        </div>
+                                        <div className="text-xs text-gray-500 dark:text-gray-400">Created: {formatDate(batch.created_at)}</div>
+                                        <div className="flex flex-wrap gap-1 pt-1 border-t border-beige-100 dark:border-gray-700">
+                                            <Button variant="ghost" size="sm" onClick={() => handleViewBatch(batch)} className="h-7 text-xs text-maroon-700 dark:text-gray-300" title="View">
+                                                <Eye className="h-3.5 w-3.5 mr-1" /> View
+                                            </Button>
+                                            <Button variant="ghost" size="sm" onClick={() => handleEditBatch(batch)} className="h-7 text-xs text-blue-700" title="Edit">
+                                                <Edit className="h-3.5 w-3.5 mr-1" /> Edit
+                                            </Button>
+                                            <Button variant="ghost" size="sm" className="h-7 text-xs text-green-700" title="Alumni" onClick={() => window.location.href = `/admin/alumni?graduation_year=${batch.graduation_year}&batch_name=${encodeURIComponent(batch.name)}`}>
+                                                <Users className="h-3.5 w-3.5 mr-1" /> Alumni
+                                            </Button>
+                                            <Button variant="ghost" size="sm" onClick={() => handleDeleteBatch(batch)} className="h-7 text-xs text-red-700" title="Delete">
+                                                <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Desktop Table View */}
+                            <div className="hidden md:block overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-beige-50 dark:bg-gray-800/50">
+                                            <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Batch Details</TableHead>
+                                            <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Graduation Year</TableHead>
+                                            <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Alumni Count</TableHead>
+                                            <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Status</TableHead>
+                                            <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Created</TableHead>
+                                            <TableHead className="text-maroon-800 dark:text-gray-200 font-semibold">Actions</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </div>
-
-                        {/* Pagination */}
-                        {totalPages > 1 && (
-                            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 sm:px-6 py-4 border-t border-beige-200 dark:border-gray-700">
-                                <div className="text-sm text-gray-700 dark:text-gray-300">
-                                    Showing page {currentPage} of {totalPages}
-                                </div>
-                                <div className="space-x-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                                        disabled={currentPage === 1}
-                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
-                                    >
-                                        Previous
-                                    </Button>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                                        disabled={currentPage === totalPages}
-                                        className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
-                                    >
-                                        Next
-                                    </Button>
-                                </div>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {batches.map((batch) => (
+                                            <TableRow key={batch.id} className="hover:bg-beige-50 dark:hover:bg-gray-800">
+                                                <TableCell>
+                                                    <div className="space-y-1">
+                                                        <div className="font-medium text-maroon-800 dark:text-gray-200">
+                                                            {batch.name}
+                                                        </div>
+                                                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                                                            {batch.description}
+                                                        </div>
+                                                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                                                            ID: {batch.id}
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center space-x-2">
+                                                        <Calendar className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
+                                                        <span className="font-medium text-maroon-800 dark:text-gray-200">
+                                                            {batch.graduation_year}
+                                                        </span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center space-x-2">
+                                                        <Users className="h-4 w-4 text-blue-600" />
+                                                        <span className="font-medium text-blue-800">
+                                                            {batch.alumni_count || 0}
+                                                        </span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {getStatusBadge(batch.status)}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="text-sm">
+                                                        {formatDate(batch.created_at)}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center space-x-1">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleViewBatch(batch)}
+                                                            className="text-maroon-700 dark:text-gray-300 hover:text-maroon-800 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
+                                                            title="View Details"
+                                                        >
+                                                            <Eye className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleEditBatch(batch)}
+                                                            className="text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+                                                            title="Edit Batch"
+                                                        >
+                                                            <Edit className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="text-green-700 hover:text-green-800 hover:bg-green-50"
+                                                            title="View Alumni"
+                                                            onClick={() => window.location.href = `/admin/alumni?graduation_year=${batch.graduation_year}&batch_name=${encodeURIComponent(batch.name)}`}
+                                                        >
+                                                            <Users className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            onClick={() => handleDeleteBatch(batch)}
+                                                            className="text-red-700 hover:text-red-800 hover:bg-red-50"
+                                                            title="Delete Batch"
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
                             </div>
-                        )}
-                    </CardContent>
-                </Card>
+
+                            {/* Pagination */}
+                            {totalPages > 1 && (
+                                <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 sm:px-6 py-4 border-t border-beige-200 dark:border-gray-700">
+                                    <div className="text-sm text-gray-700 dark:text-gray-300">
+                                        Showing page {currentPage} of {totalPages}
+                                    </div>
+                                    <div className="space-x-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                                            disabled={currentPage === 1}
+                                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
+                                        >
+                                            Previous
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                                            disabled={currentPage === totalPages}
+                                            className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
+                                        >
+                                            Next
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </ScrollFadeIn>
 
                 {/* Add Batch Modal */}
                 <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
@@ -964,6 +946,7 @@ export default function Batches({ user }: Props) {
                 </Dialog>
             </div>
             <ConfirmDialog open={confirmState.open} title={confirmState.title} message={confirmState.message} confirmLabel={confirmState.confirmLabel} cancelLabel={confirmState.cancelLabel} variant={confirmState.variant} onConfirm={handleConfirm} onCancel={handleCancel} />
+            <ExportProgressDialog {...exportState} onCancel={cancelExport} />
         </AdminBaseLayout >
     );
 }

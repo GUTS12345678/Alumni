@@ -54,6 +54,8 @@ import axios from 'axios';
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import QuestionsManager from '@/components/QuestionsManager';
 import { useAdminChannel } from '@/hooks/useAdminChannel';
+import { useExport } from '@/hooks/useExport';
+import { ExportProgressDialog } from '@/components/ExportProgressDialog';
 
 interface Survey {
     id: number;
@@ -85,6 +87,7 @@ interface Props {
 export default function SurveyBank({ user }: Props) {
     // Campus context for filtering
     const { selectedCampus } = useCampus();
+    const { exportData, cancelExport, ...exportState } = useExport();
 
     const [surveys, setSurveys] = useState<Survey[]>([]);
     const [loading, setLoading] = useState(true);
@@ -191,44 +194,17 @@ export default function SurveyBank({ user }: Props) {
     }, [searchTerm]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
-        try {
-            const token = localStorage.getItem('auth_token');
-            if (!token) {
-                window.location.href = '/login';
-                return;
-            }
+        const params: Record<string, string> = {};
+        if (searchTerm) params.search = searchTerm;
+        if (selectedCampus?.id) params.campus_id = selectedCampus.id.toString();
 
-            const params = new URLSearchParams();
-            if (searchTerm) params.append('search', searchTerm);
-            params.append('format', format);
-            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
-
-            const response = await axios.get(`/api/v1/admin/surveys/export?${params}`, {
-                headers: {
-                    'Accept': 'application/octet-stream',
-                    'Authorization': `Bearer ${token}`,
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-                responseType: 'blob'
-            });
-
-            // Create blob from response
-            const blob = new Blob([response.data]);
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            const extension = format === 'excel' ? 'xlsx' : format;
-            a.download = `surveys-export-${new Date().toISOString().split('T')[0]}.${extension}`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-            alert(`Surveys data exported successfully as ${format.toUpperCase()}!`);
-        } catch (error) {
-            console.error('Export error:', error);
-            alert('Failed to export surveys data. Please try again.');
-        }
+        exportData({
+            url: '/api/v1/admin/surveys/export',
+            params,
+            filename: 'surveys-export',
+            format,
+            onError: () => alert('Failed to export surveys data. Please try again.'),
+        });
     };
 
     const getStatusBadge = (status: string) => {
@@ -1090,6 +1066,7 @@ export default function SurveyBank({ user }: Props) {
                     </DialogContent>
                 </Dialog>
             </div>
+            <ExportProgressDialog {...exportState} onCancel={cancelExport} />
         </AdminBaseLayout >
     );
 }

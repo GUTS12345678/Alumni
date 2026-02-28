@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
+import { sanitizeHtml } from '@/lib/sanitize';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -178,7 +179,7 @@ const SavedJobs: React.FC<SavedJobsProps> = ({ savedJobs }) => {
 
                                     <div
                                         className="mt-4 text-gray-700 line-clamp-2 prose prose-sm max-w-none"
-                                        dangerouslySetInnerHTML={{ __html: job.content }}
+                                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(job.content) }}
                                     />
 
                                     {job.saved_at && (
@@ -271,7 +272,7 @@ const SavedJobs: React.FC<SavedJobsProps> = ({ savedJobs }) => {
                                 <h3 className="font-semibold text-lg mb-2 text-maroon-800">Job Description</h3>
                                 <div
                                     className="text-gray-700 prose prose-sm max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: selectedJob.content }}
+                                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedJob.content) }}
                                 />
                             </div>
 

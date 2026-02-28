@@ -41,7 +41,7 @@ test('public can view single job', function () {
         'title' => 'Test Job',
         'slug' => 'test-job-' . uniqid(),
         'company_name' => 'Test Corp',
-        'description' => 'A test job posting.',
+        'content' => 'A test job posting.',
         'location' => 'Manila',
         'job_type' => 'full_time',
         'status' => 'published',
@@ -80,7 +80,7 @@ test('admin can create job posting', function () {
     $response = $this->withHeaders($headers)->postJson('/api/v1/admin/jobs', [
         'title' => 'Software Engineer',
         'company_name' => 'TechCo',
-        'description' => 'We need a developer.',
+        'content' => 'We need a developer.',
         'location' => 'Makati City',
         'job_type' => 'full_time',
         'experience_level' => 'mid',
@@ -102,7 +102,7 @@ test('admin can create job with background image', function () {
     $response = $this->withHeaders($headers)->postJson('/api/v1/admin/jobs', [
         'title' => 'Designer',
         'company_name' => 'DesignCo',
-        'description' => 'Design things.',
+        'content' => 'Design things.',
         'location' => 'Remote',
         'job_type' => 'full_time',
         'work_arrangement' => 'remote',
@@ -122,7 +122,7 @@ test('admin can update job posting', function () {
         'title' => 'Original Title',
         'slug' => 'original-' . uniqid(),
         'company_name' => 'Corp',
-        'description' => 'Description',
+        'content' => 'Job description content.',
         'location' => 'Manila',
         'job_type' => 'full_time',
         'status' => 'draft',
@@ -145,7 +145,7 @@ test('admin can delete job posting', function () {
         'title' => 'To Delete',
         'slug' => 'delete-' . uniqid(),
         'company_name' => 'Corp',
-        'description' => 'Will be deleted',
+        'content' => 'Will be deleted.',
         'location' => 'Manila',
         'job_type' => 'full_time',
         'status' => 'draft',
@@ -221,12 +221,12 @@ test('admin can bulk update job status', function () {
 
     $job1 = JobPosting::create([
         'title' => 'Bulk 1', 'slug' => 'bulk-1-' . uniqid(), 'company_name' => 'C',
-        'description' => 'D', 'location' => 'L', 'job_type' => 'full_time',
+        'content' => 'Bulk job 1 content.', 'location' => 'L', 'job_type' => 'full_time',
         'status' => 'draft', 'created_by' => $admin->id,
     ]);
     $job2 = JobPosting::create([
         'title' => 'Bulk 2', 'slug' => 'bulk-2-' . uniqid(), 'company_name' => 'C',
-        'description' => 'D', 'location' => 'L', 'job_type' => 'full_time',
+        'content' => 'Bulk job 2 content.', 'location' => 'L', 'job_type' => 'full_time',
         'status' => 'draft', 'created_by' => $admin->id,
     ]);
 
@@ -249,7 +249,7 @@ test('alumni cannot create job via admin endpoint', function () {
     $response = $this->withHeaders($headers)->postJson('/api/v1/admin/jobs', [
         'title' => 'Unauthorized',
         'company_name' => 'Corp',
-        'description' => 'Should fail',
+        'content' => 'Should fail.',
         'location' => 'Manila',
         'job_type' => 'full_time',
     ]);

@@ -331,4 +331,32 @@ class ArchiveController extends Controller
             'deleted_count' => $deleted,
         ]);
     }
+
+    public function clearAll()
+    {
+        $configs = $this->getModelConfig();
+        $deleted = 0;
+
+        foreach ($configs as $config) {
+            $count = $config['model']::onlyTrashed()->count();
+            if ($count > 0) {
+                $config['model']::onlyTrashed()->forceDelete();
+                $deleted += $count;
+            }
+        }
+
+        // Flush analytics caches
+        $cacheKeys = ['dashboard_metrics', 'alumni_stats', 'analytics_overview', 'analytics_time_to_job', 'analytics_comprehensive'];
+        foreach ($cacheKeys as $key) {
+            \Illuminate\Support\Facades\Cache::forget($key);
+            foreach (\App\Models\Campus::pluck('id') as $campusId) {
+                \Illuminate\Support\Facades\Cache::forget("{$key}_campus_{$campusId}");
+            }
+        }
+
+        return response()->json([
+            'message' => "{$deleted} archived item(s) permanently deleted",
+            'deleted_count' => $deleted,
+        ]);
+    }
 }

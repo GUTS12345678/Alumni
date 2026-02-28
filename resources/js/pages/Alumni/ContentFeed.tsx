@@ -1,14 +1,21 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Head } from '@inertiajs/react';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
+import { sanitizeHtml } from '@/lib/sanitize';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
     Layers, Briefcase, Megaphone, Calendar, Search,
     MapPin, Building2, ExternalLink, Clock, Eye, Star,
-    Loader2, ChevronLeft, ChevronRight, AlertTriangle, XCircle,
+    Loader2, ChevronLeft, ChevronRight, AlertTriangle,
     Newspaper, BookOpen, GraduationCap, FileText
 } from 'lucide-react';
 import axios from 'axios';
@@ -80,7 +87,9 @@ export default function ContentFeed() {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
-    const [typeFilter, setTypeFilter] = useState<string>('');
+    // Read initial filter from URL query params (e.g., /alumni/content?type=job)
+    const urlParams = new URLSearchParams(window.location.search);
+    const [typeFilter, setTypeFilter] = useState<string>(urlParams.get('type') || '');
     const [searchQuery, setSearchQuery] = useState('');
     const [searchInput, setSearchInput] = useState('');
     const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
@@ -359,184 +368,177 @@ export default function ContentFeed() {
                 )}
             </div>
 
-            {/* Content Detail Modal */}
-            {selectedContent && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-                        <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between sticky top-0 bg-white dark:bg-gray-800 z-10">
-                            <div className="flex items-center gap-3 min-w-0">
-                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${typeColors[selectedContent.content_type]}`}>
-                                    {typeIcons[selectedContent.content_type]}
-                                    {selectedContent.content_type}
-                                </span>
-                                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">
-                                    {selectedContent.title}
-                                </h2>
-                            </div>
-                            <button onClick={() => setSelectedContent(null)} className="text-gray-400 hover:text-gray-600 ml-2 flex-shrink-0">
-                                <XCircle className="h-6 w-6" />
-                            </button>
-                        </div>
+            {/* Content Detail Dialog */}
+            <Dialog open={!!selectedContent} onOpenChange={() => setSelectedContent(null)}>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    {selectedContent && (
+                        <>
+                            <DialogHeader>
+                                <div className="flex items-center gap-3">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium flex-shrink-0 ${typeColors[selectedContent.content_type]}`}>
+                                        {typeIcons[selectedContent.content_type]}
+                                        {selectedContent.content_type}
+                                    </span>
+                                    <DialogTitle className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                                        {selectedContent.title}
+                                    </DialogTitle>
+                                </div>
+                            </DialogHeader>
 
-                        <div className="p-6 space-y-4">
-                            {/* Featured image */}
-                            {selectedContent.featured_image && (
-                                <div className="rounded-lg overflow-hidden">
-                                    <img
-                                        src={resolveImageUrl(selectedContent.featured_image)}
-                                        alt={selectedContent.title}
-                                        className="w-full max-h-64 object-cover"
+                            <div className="space-y-4">
+                                {/* Featured image */}
+                                {selectedContent.featured_image && (
+                                    <div className="rounded-lg overflow-hidden">
+                                        <img
+                                            src={resolveImageUrl(selectedContent.featured_image)}
+                                            alt={selectedContent.title}
+                                            className="w-full max-h-64 object-cover"
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Meta info */}
+                                <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400 flex-wrap">
+                                    <span>{formatDate(selectedContent.published_at || selectedContent.created_at)}</span>
+                                    {selectedContent.created_by && (
+                                        <span>by {selectedContent.created_by.name}</span>
+                                    )}
+                                    {selectedContent.priority && selectedContent.priority !== 'normal' && (
+                                        <Badge variant="outline" className={`capitalize ${priorityColors[selectedContent.priority]}`}>
+                                            {selectedContent.priority}
+                                        </Badge>
+                                    )}
+                                    {selectedContent.is_featured && (
+                                        <Badge variant="outline" className="text-yellow-600 border-yellow-300">
+                                            <Star className="h-3 w-3 mr-1 fill-yellow-500" /> Featured
+                                        </Badge>
+                                    )}
+                                </div>
+
+                                {/* Content body - rendered as sanitized HTML */}
+                                {selectedContent.content && (
+                                    <div
+                                        className="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300"
+                                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedContent.content) }}
                                     />
-                                </div>
-                            )}
+                                )}
 
-                            {/* Meta info */}
-                            <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400 flex-wrap">
-                                <span>{formatDate(selectedContent.published_at || selectedContent.created_at)}</span>
-                                {selectedContent.created_by && (
-                                    <span>by {selectedContent.created_by.name}</span>
+                                {/* Job-specific details */}
+                                {selectedContent.content_type === 'job' && (
+                                    <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 space-y-3">
+                                        <h4 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                            <Briefcase className="h-4 w-4" /> Job Details
+                                        </h4>
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                            {selectedContent.company_name && (
+                                                <div>
+                                                    <span className="text-gray-500 dark:text-gray-400 block text-xs">Company</span>
+                                                    <span className="font-medium">{selectedContent.company_name}</span>
+                                                </div>
+                                            )}
+                                            {selectedContent.category && (
+                                                <div>
+                                                    <span className="text-gray-500 dark:text-gray-400 block text-xs">Category</span>
+                                                    <span>{selectedContent.category.name}</span>
+                                                </div>
+                                            )}
+                                            {selectedContent.job_type && (
+                                                <div>
+                                                    <span className="text-gray-500 dark:text-gray-400 block text-xs">Type</span>
+                                                    <span className="capitalize">{selectedContent.job_type.replace('_', ' ')}</span>
+                                                </div>
+                                            )}
+                                            {selectedContent.work_arrangement && (
+                                                <div>
+                                                    <span className="text-gray-500 dark:text-gray-400 block text-xs">Arrangement</span>
+                                                    <span className="capitalize">{selectedContent.work_arrangement}</span>
+                                                </div>
+                                            )}
+                                            {selectedContent.location && (
+                                                <div>
+                                                    <span className="text-gray-500 dark:text-gray-400 block text-xs">Location</span>
+                                                    <span>{selectedContent.location}</span>
+                                                </div>
+                                            )}
+                                            {(selectedContent.salary_min || selectedContent.salary_max) && (
+                                                <div>
+                                                    <span className="text-gray-500 dark:text-gray-400 block text-xs">Salary</span>
+                                                    <span>
+                                                        {selectedContent.salary_min && `₱${Number(selectedContent.salary_min).toLocaleString()}`}
+                                                        {selectedContent.salary_min && selectedContent.salary_max && ' – '}
+                                                        {selectedContent.salary_max && `₱${Number(selectedContent.salary_max).toLocaleString()}`}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {selectedContent.application_deadline && (
+                                                <div>
+                                                    <span className="text-gray-500 dark:text-gray-400 block text-xs">Deadline</span>
+                                                    <span>{formatDate(selectedContent.application_deadline)}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {selectedContent.requirements && (
+                                            <div>
+                                                <span className="text-gray-500 dark:text-gray-400 block text-xs mb-1">Requirements</span>
+                                                <p className="text-sm whitespace-pre-wrap">{selectedContent.requirements}</p>
+                                            </div>
+                                        )}
+                                        {selectedContent.benefits && (
+                                            <div>
+                                                <span className="text-gray-500 dark:text-gray-400 block text-xs mb-1">Benefits</span>
+                                                <p className="text-sm whitespace-pre-wrap">{selectedContent.benefits}</p>
+                                            </div>
+                                        )}
+                                        <div className="flex gap-2 pt-2">
+                                            {selectedContent.external_url && (
+                                                <a
+                                                    href={selectedContent.external_url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center gap-1 text-sm text-maroon-600 hover:underline"
+                                                >
+                                                    <ExternalLink className="h-3 w-3" /> Apply / View
+                                                </a>
+                                            )}
+                                            {selectedContent.contact_email && (
+                                                <a
+                                                    href={`mailto:${selectedContent.contact_email}`}
+                                                    className="inline-flex items-center gap-1 text-sm text-maroon-600 hover:underline"
+                                                >
+                                                    Contact
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
                                 )}
-                                {selectedContent.priority && selectedContent.priority !== 'normal' && (
-                                    <Badge variant="outline" className={`capitalize ${priorityColors[selectedContent.priority]}`}>
-                                        {selectedContent.priority}
-                                    </Badge>
-                                )}
-                                {selectedContent.is_featured && (
-                                    <Badge variant="outline" className="text-yellow-600 border-yellow-300">
-                                        <Star className="h-3 w-3 mr-1 fill-yellow-500" /> Featured
-                                    </Badge>
+
+                                {/* Event-specific details */}
+                                {selectedContent.content_type === 'event' && (
+                                    <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 space-y-2">
+                                        <h4 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                            <Calendar className="h-4 w-4" /> Event Details
+                                        </h4>
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                            {selectedContent.start_date && (
+                                                <div>
+                                                    <span className="text-gray-500 dark:text-gray-400 block text-xs">Date & Time</span>
+                                                    <span>{formatDateTime(selectedContent.start_date)}</span>
+                                                </div>
+                                            )}
+                                            {selectedContent.location && (
+                                                <div>
+                                                    <span className="text-gray-500 dark:text-gray-400 block text-xs">Location</span>
+                                                    <span>{selectedContent.location}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
                                 )}
                             </div>
-
-                            {/* Content body - rendered as HTML */}
-                            {selectedContent.content && (
-                                <div
-                                    className="prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300"
-                                    dangerouslySetInnerHTML={{ __html: selectedContent.content }}
-                                />
-                            )}
-
-                            {/* Job-specific details */}
-                            {selectedContent.content_type === 'job' && (
-                                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 space-y-3">
-                                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                                        <Briefcase className="h-4 w-4" /> Job Details
-                                    </h4>
-                                    <div className="grid grid-cols-2 gap-3 text-sm">
-                                        {selectedContent.company_name && (
-                                            <div>
-                                                <span className="text-gray-500 dark:text-gray-400 block text-xs">Company</span>
-                                                <span className="font-medium">{selectedContent.company_name}</span>
-                                            </div>
-                                        )}
-                                        {selectedContent.category && (
-                                            <div>
-                                                <span className="text-gray-500 dark:text-gray-400 block text-xs">Category</span>
-                                                <span>{selectedContent.category.name}</span>
-                                            </div>
-                                        )}
-                                        {selectedContent.job_type && (
-                                            <div>
-                                                <span className="text-gray-500 dark:text-gray-400 block text-xs">Type</span>
-                                                <span className="capitalize">{selectedContent.job_type.replace('_', ' ')}</span>
-                                            </div>
-                                        )}
-                                        {selectedContent.work_arrangement && (
-                                            <div>
-                                                <span className="text-gray-500 dark:text-gray-400 block text-xs">Arrangement</span>
-                                                <span className="capitalize">{selectedContent.work_arrangement}</span>
-                                            </div>
-                                        )}
-                                        {selectedContent.location && (
-                                            <div>
-                                                <span className="text-gray-500 dark:text-gray-400 block text-xs">Location</span>
-                                                <span>{selectedContent.location}</span>
-                                            </div>
-                                        )}
-                                        {(selectedContent.salary_min || selectedContent.salary_max) && (
-                                            <div>
-                                                <span className="text-gray-500 dark:text-gray-400 block text-xs">Salary</span>
-                                                <span>
-                                                    {selectedContent.salary_min && `₱${Number(selectedContent.salary_min).toLocaleString()}`}
-                                                    {selectedContent.salary_min && selectedContent.salary_max && ' – '}
-                                                    {selectedContent.salary_max && `₱${Number(selectedContent.salary_max).toLocaleString()}`}
-                                                </span>
-                                            </div>
-                                        )}
-                                        {selectedContent.application_deadline && (
-                                            <div>
-                                                <span className="text-gray-500 dark:text-gray-400 block text-xs">Deadline</span>
-                                                <span>{formatDate(selectedContent.application_deadline)}</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                    {selectedContent.requirements && (
-                                        <div>
-                                            <span className="text-gray-500 dark:text-gray-400 block text-xs mb-1">Requirements</span>
-                                            <p className="text-sm whitespace-pre-wrap">{selectedContent.requirements}</p>
-                                        </div>
-                                    )}
-                                    {selectedContent.benefits && (
-                                        <div>
-                                            <span className="text-gray-500 dark:text-gray-400 block text-xs mb-1">Benefits</span>
-                                            <p className="text-sm whitespace-pre-wrap">{selectedContent.benefits}</p>
-                                        </div>
-                                    )}
-                                    <div className="flex gap-2 pt-2">
-                                        {selectedContent.external_url && (
-                                            <a
-                                                href={selectedContent.external_url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-1 text-sm text-maroon-600 hover:underline"
-                                            >
-                                                <ExternalLink className="h-3 w-3" /> Apply / View
-                                            </a>
-                                        )}
-                                        {selectedContent.contact_email && (
-                                            <a
-                                                href={`mailto:${selectedContent.contact_email}`}
-                                                className="inline-flex items-center gap-1 text-sm text-maroon-600 hover:underline"
-                                            >
-                                                Contact
-                                            </a>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Event-specific details */}
-                            {selectedContent.content_type === 'event' && (
-                                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 space-y-2">
-                                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                                        <Calendar className="h-4 w-4" /> Event Details
-                                    </h4>
-                                    <div className="grid grid-cols-2 gap-3 text-sm">
-                                        {selectedContent.start_date && (
-                                            <div>
-                                                <span className="text-gray-500 dark:text-gray-400 block text-xs">Date & Time</span>
-                                                <span>{formatDateTime(selectedContent.start_date)}</span>
-                                            </div>
-                                        )}
-                                        {selectedContent.location && (
-                                            <div>
-                                                <span className="text-gray-500 dark:text-gray-400 block text-xs">Location</span>
-                                                <span>{selectedContent.location}</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-                            <Button variant="outline" className="w-full" onClick={() => setSelectedContent(null)}>
-                                Close
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                        </>
+                    )}
+                </DialogContent>
+            </Dialog>
         </AlumniBaseLayout>
     );
 }

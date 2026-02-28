@@ -18,9 +18,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use App\Traits\ExportsPdf;
 
 class SurveyController extends Controller
 {
+    use ExportsPdf;
     /**
      * Get survey by ID or token (for public access)
      */
@@ -480,7 +482,9 @@ class SurveyController extends Controller
                 $profileData['employment_status'] = $this->mapEmploymentStatus($directData['employment_status'] ?? '');
                 if (!empty($directData['company_name'])) $profileData['current_employer'] = $directData['company_name'];
                 if (!empty($directData['present_position'])) $profileData['current_job_title'] = $directData['present_position'];
-                if (!empty($directData['average_monthly_income'])) $profileData['current_salary'] = $directData['average_monthly_income'];
+                if (!empty($directData['average_monthly_income'])) {
+                    $profileData['current_salary'] = $this->sanitizeSalary($directData['average_monthly_income']);
+                }
                 $profileData['salary_currency'] = 'PHP';
 
                 // Job start date (date hired) — critical for time-to-first-job analytics
@@ -525,7 +529,6 @@ class SurveyController extends Controller
                 'graduation_year' => ['Graduation Year', 'graduation'],
                 'current_job_title' => ['Job Title', 'current job'],
                 'current_employer' => ['Employer', 'company'],
-                'current_salary' => ['Salary'],
                 'current_address' => ['Address'],
                 'city' => ['City'],
                 'country' => ['Country'],
@@ -542,6 +545,11 @@ class SurveyController extends Controller
                             break 2;
                         }
                     }
+                }
+
+                // Handle salary separately with sanitization
+                if (str_contains($questionText, 'salary')) {
+                    $profileData['current_salary'] = $this->sanitizeSalary($answer->formatted_answer);
                 }
             }
         }
@@ -597,6 +605,42 @@ class SurveyController extends Controller
         ];
 
         return $mapping[$status] ?? 'employed_full_time';
+    }
+
+    /**
+     * Sanitize salary value to a numeric format suitable for decimal(10,2).
+     * Handles text like "₱10,000 - ₱15,000", "10000", "10,000.50", etc.
+     */
+    private function sanitizeSalary($value): ?float
+    {
+        if ($value === null || $value === '') return null;
+
+        // If it's already numeric, return it directly
+        if (is_numeric($value)) {
+            return min((float) $value, 99999999.99); // Max for decimal(10,2)
+        }
+
+        // If it's a range like "10,000 - 15,000", take the midpoint
+        $value = (string) $value;
+        if (preg_match('/[\d,.]+\s*[-–—to]+\s*[\d,.]+/', $value)) {
+            preg_match_all('/[\d,.]+/', $value, $matches);
+            $numbers = array_map(function ($n) {
+                return (float) str_replace(',', '', $n);
+            }, $matches[0]);
+            $numbers = array_filter($numbers, fn($n) => $n > 0);
+            if (!empty($numbers)) {
+                return min(array_sum($numbers) / count($numbers), 99999999.99);
+            }
+        }
+
+        // Strip non-numeric characters except dots and commas, then parse
+        $cleaned = preg_replace('/[^\d.,]/', '', $value);
+        $cleaned = str_replace(',', '', $cleaned);
+        if ($cleaned !== '' && is_numeric($cleaned)) {
+            return min((float) $cleaned, 99999999.99);
+        }
+
+        return null;
     }
 
     /**
@@ -888,14 +932,7 @@ class SurveyController extends Controller
         // Create filename
         $filename = 'survey_response_' . $responseToken . '_' . now()->format('Ymd') . '.pdf';
 
-        // For now, return the HTML as a downloadable file
-        // In production, you would use a PDF library like dompdf or wkhtmltopdf
-        return response($html)
-            ->header('Content-Type', 'text/html')
-            ->header('Content-Disposition', 'attachment; filename="' . $filename . '.html"')
-            ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
-            ->header('Pragma', 'no-cache')
-            ->header('Expires', '0');
+        return $this->renderPdf($html, $filename, 'portrait');
     }
 
     /**

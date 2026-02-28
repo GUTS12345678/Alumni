@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Head, router } from '@inertiajs/react';
 import AlumniBaseLayout from '@/components/base/AlumniBaseLayout';
+import { sanitizeHtml } from '@/lib/sanitize';
 import { Card, CardContent } from '@/components/ui/card';
 import { Briefcase, Search, MapPin, DollarSign, Clock, Building2, Eye, Bookmark, BookmarkCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -202,7 +203,7 @@ export default function Jobs({ jobs, filters }: Props) {
                                                         </div>
                                                         <div
                                                             className="text-gray-600 dark:text-gray-400 line-clamp-2 prose prose-sm max-w-none dark:prose-invert"
-                                                            dangerouslySetInnerHTML={{ __html: job.content }}
+                                                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(job.content) }}
                                                         />
                                                     </div>
                                                 </div>
@@ -295,7 +296,7 @@ export default function Jobs({ jobs, filters }: Props) {
                                     <h3 className="font-semibold text-lg mb-2 text-maroon-800 dark:text-gray-200">Job Description</h3>
                                     <div
                                         className="text-gray-700 dark:text-gray-300 prose prose-sm max-w-none dark:prose-invert"
-                                        dangerouslySetInnerHTML={{ __html: selectedJob.content }}
+                                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(selectedJob.content) }}
                                     />
                                 </div>
 

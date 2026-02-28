@@ -18,6 +18,22 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { Conversation, Message, UserSearchResult } from '@/types/messaging';
 
+// Lazy-load echo.ts — only loads pusher-js when messaging is used
+let echoLoaded = false;
+async function ensureEcho(): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (echoLoaded || (window as any).Echo) {
+        echoLoaded = true;
+        return;
+    }
+    try {
+        await import('@/echo');
+        echoLoaded = true;
+    } catch {
+        // Echo failed to load — real-time disabled, polling still works
+    }
+}
+
 export interface OnlineUser {
     id: number;
     name: string;
@@ -229,11 +245,11 @@ export function useMessaging({ userId, connectionsOnly = false }: UseMessagingOp
 
         if (!selectedConversation) return;
 
-        // Poll every 2 seconds for new messages
+        // Poll every 5 seconds for new messages
         messagesPollRef.current = setInterval(() => {
             const conv = selectedConversationRef.current;
             if (conv) fetchMessages(conv.id, null); // null = no auto-scroll on poll
-        }, 2000);
+        }, 5000);
 
         return () => {
             if (messagesPollRef.current) {
@@ -241,15 +257,16 @@ export function useMessaging({ userId, connectionsOnly = false }: UseMessagingOp
                 messagesPollRef.current = null;
             }
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedConversation?.id, fetchMessages]);
 
-    // ─── Conversations list poll (5 s, always) ───────────────────────
+    // ─── Conversations list poll (10 s, always) ──────────────────────
 
     useEffect(() => {
         convPollRef.current = setInterval(() => {
             fetchConversations();
             fetchUnreadCount();
-        }, 5000);
+        }, 10000);
 
         return () => {
             if (convPollRef.current) clearInterval(convPollRef.current);
@@ -260,32 +277,41 @@ export function useMessaging({ userId, connectionsOnly = false }: UseMessagingOp
 
     // Connection state indicator
     useEffect(() => {
-        const echo = window.Echo;
-        if (!echo) return;
+        let cancelled = false;
+        let cleanupFn: (() => void) | undefined;
 
-        try {
-            const conn = (echo as unknown as {
-                connector?: { pusher?: { connection?: { state?: string; bind?: (e: string, cb: () => void) => void; unbind?: (e: string, cb: () => void) => void } } }
-            }).connector?.pusher?.connection;
+        (async () => {
+            await ensureEcho();
+            if (cancelled) return;
+            const echo = window.Echo;
+            if (!echo) return;
 
-            if (!conn) { setIsEchoConnected(true); return; }
+            try {
+                const conn = (echo as unknown as {
+                    connector?: { pusher?: { connection?: { state?: string; bind?: (e: string, cb: () => void) => void; unbind?: (e: string, cb: () => void) => void } } }
+                }).connector?.pusher?.connection;
 
-            setIsEchoConnected(conn.state === 'connected');
-            const onConn = () => setIsEchoConnected(true);
-            const onDisc = () => setIsEchoConnected(false);
-            conn.bind?.('connected', onConn);
-            conn.bind?.('disconnected', onDisc);
-            conn.bind?.('unavailable', onDisc);
-            conn.bind?.('failed', onDisc);
-            return () => {
-                conn.unbind?.('connected', onConn);
-                conn.unbind?.('disconnected', onDisc);
-                conn.unbind?.('unavailable', onDisc);
-                conn.unbind?.('failed', onDisc);
-            };
-        } catch {
-            setIsEchoConnected(false);
-        }
+                if (!conn) { setIsEchoConnected(true); return; }
+
+                setIsEchoConnected(conn.state === 'connected');
+                const onConn = () => setIsEchoConnected(true);
+                const onDisc = () => setIsEchoConnected(false);
+                conn.bind?.('connected', onConn);
+                conn.bind?.('disconnected', onDisc);
+                conn.bind?.('unavailable', onDisc);
+                conn.bind?.('failed', onDisc);
+                cleanupFn = () => {
+                    conn.unbind?.('connected', onConn);
+                    conn.unbind?.('disconnected', onDisc);
+                    conn.unbind?.('unavailable', onDisc);
+                    conn.unbind?.('failed', onDisc);
+                };
+            } catch {
+                setIsEchoConnected(false);
+            }
+        })();
+
+        return () => { cancelled = true; cleanupFn?.(); };
     }, []);
 
     // User-level private channel (new conversations, invitations)
@@ -384,6 +410,7 @@ export function useMessaging({ userId, connectionsOnly = false }: UseMessagingOp
             try { echo.leave(`conversation.${selectedConversation.id}`); } catch { /* ignore */ }
             try { echo.leave(`presence.conversation.${selectedConversation.id}`); } catch { /* ignore */ }
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedConversation?.id, userId, scrollToBottom, showBrowserNotification]);
 
     // ─── Actions ────────────────────────────────────────────────────

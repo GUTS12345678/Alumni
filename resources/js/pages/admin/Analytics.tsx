@@ -51,6 +51,9 @@ import {
 import AdminBaseLayout from '@/components/base/AdminBaseLayout';
 import { useCampus } from '@/contexts/CampusContext';
 import { useAdminChannel } from '@/hooks/useAdminChannel';
+import { ScrollFadeIn } from '@/components/scroll-animations';
+import { useExport } from '@/hooks/useExport';
+import { ExportProgressDialog } from '@/components/ExportProgressDialog';
 
 interface User {
     id: number;
@@ -263,15 +266,10 @@ const COLORS = {
 
 export default function Analytics({ user }: Props) {
     const { selectedCampus } = useCampus();
+    const { exportData, cancelExport, ...exportState } = useExport();
 
-    // Animation state
+    // Animation state (kept for CountUp triggers)
     const [animated, setAnimated] = useState(false);
-
-    const sectionStyle = (delay: number): React.CSSProperties => ({
-        opacity: animated ? 1 : 0,
-        transform: animated ? 'translateY(0)' : 'translateY(24px)',
-        transition: `opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1) ${delay}ms, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1) ${delay}ms`,
-    });
 
     // Animated counter component
     const CountUp = ({ end, decimals = 0, duration = 1500, prefix = '', suffix = '' }: {
@@ -294,7 +292,7 @@ export default function Analytics({ user }: Props) {
             };
             ref.current = requestAnimationFrame(step);
             return () => cancelAnimationFrame(ref.current);
-        }, [end, animated, duration]);
+        }, [end, duration]);
 
         return <>{prefix}{decimals > 0 ? value.toFixed(decimals) : Math.round(value)}{suffix}</>;
     };
@@ -427,7 +425,7 @@ export default function Analytics({ user }: Props) {
             fetchTimeToJobAnalytics();
             fetchComprehensiveAnalytics();
             setLastRefresh(new Date());
-        }, 60000);
+        }, 120000); // Refresh every 2 minutes
 
         return () => clearInterval(interval);
     }, [fetchDashboardStats, fetchTimeToJobAnalytics, fetchComprehensiveAnalytics]);
@@ -446,40 +444,17 @@ export default function Analytics({ user }: Props) {
         setLastRefresh(new Date());
     };
 
-    const handleExport = async (format: 'csv' | 'excel' | 'pdf') => {
-        try {
-            const params = new URLSearchParams();
-            params.append('format', format);
-            if (selectedCampus?.id) params.append('campus_id', selectedCampus.id.toString());
+    const handleExport = async (format: 'csv' | 'excel' | 'pdf' = 'csv') => {
+        const params: Record<string, string> = {};
+        if (selectedCampus?.id) params.campus_id = selectedCampus.id.toString();
 
-            const exportHeaders = getApiHeaders();
-            exportHeaders['Accept'] = 'application/octet-stream';
-
-            const response = await fetch(`/api/v1/admin/analytics/comprehensive/export?${params.toString()}`, {
-                credentials: 'include',
-                headers: exportHeaders,
-            });
-
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                const extension = format === 'excel' ? 'xlsx' : format;
-                a.download = `comprehensive-analytics-${new Date().toISOString().split('T')[0]}.${extension}`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-            } else {
-                console.error('Export failed:', response.status);
-                alert('Failed to export analytics. Please try again.');
-            }
-        } catch (error) {
-            console.error('Export error:', error);
-            alert('An error occurred while exporting. Please try again.');
-        }
+        exportData({
+            url: '/api/v1/admin/analytics/comprehensive/export',
+            params,
+            filename: 'comprehensive-analytics',
+            format,
+            onError: () => alert('Failed to export analytics. Please try again.'),
+        });
     };
 
     const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) => {
@@ -547,12 +522,12 @@ export default function Analytics({ user }: Props) {
 
     return (
         <AdminBaseLayout title="Analytics Dashboard" user={user}>
-            <div className="space-y-6">
+            <div className="space-y-4 md:space-y-6">
                 {/* Header with Controls */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h2 className="text-3xl font-bold text-maroon-800 dark:text-gray-200">Analytics Dashboard</h2>
-                        <p className="text-maroon-600 dark:text-gray-400">Comprehensive alumni tracking and performance metrics</p>
+                        <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-maroon-800 dark:text-gray-200">Analytics Dashboard</h2>
+                        <p className="text-xs sm:text-sm text-maroon-600 dark:text-gray-400">Comprehensive alumni tracking and performance metrics</p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -580,7 +555,8 @@ export default function Analytics({ user }: Props) {
                                         className="border-maroon-300 dark:border-gray-600 text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30"
                                     >
                                         <Download className="h-4 w-4 mr-1" />
-                                        Export All Analytics
+                                        <span className="hidden sm:inline">Export All Analytics</span>
+                                        <span className="sm:hidden">Export</span>
                                         <ChevronDown className="h-4 w-4 ml-1" />
                                     </Button>
                                 </DropdownMenuTrigger>
@@ -604,23 +580,23 @@ export default function Analytics({ user }: Props) {
                 </div>
 
                 {/* Section 1: Key Performance Indicators */}
-                <div className="space-y-4" style={sectionStyle(0)}>
-                    <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
-                        <Target className="h-5 w-5 mr-2" />
+                <ScrollFadeIn className="space-y-3 md:space-y-4">
+                    <h3 className="text-base md:text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                        <Target className="h-4 w-4 md:h-5 md:w-5 mr-2" />
                         Key Performance Indicators
                     </h3>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
                         {/* Total Alumni */}
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Total Alumni</CardTitle>
-                                <div className="p-2 bg-maroon-100 dark:bg-maroon-800/30 rounded-lg">
-                                    <Users className="h-5 w-5 text-maroon-600 dark:text-gray-400" />
+                                <CardTitle className="text-xs md:text-sm font-medium text-maroon-800 dark:text-gray-200">Total Alumni</CardTitle>
+                                <div className="p-1.5 md:p-2 bg-maroon-100 dark:bg-maroon-800/30 rounded-lg">
+                                    <Users className="h-4 w-4 md:h-5 md:w-5 text-maroon-600 dark:text-gray-400" />
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold text-maroon-800 dark:text-gray-200">
+                                <div className="text-xl md:text-3xl font-bold text-maroon-800 dark:text-gray-200">
                                     <CountUp end={dashboardStats?.overview.total_alumni || 0} />
                                 </div>
                                 <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">Registered in system</p>
@@ -630,13 +606,13 @@ export default function Analytics({ user }: Props) {
                         {/* Performance Rate (Employed within 2 years) */}
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-green-50 to-white dark:from-green-900/20 dark:to-gray-800">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-green-800">Performance Rate</CardTitle>
-                                <div className="p-2 bg-green-100 rounded-lg">
-                                    <Award className="h-5 w-5 text-green-600" />
+                                <CardTitle className="text-xs md:text-sm font-medium text-green-800">Performance Rate</CardTitle>
+                                <div className="p-1.5 md:p-2 bg-green-100 rounded-lg">
+                                    <Award className="h-4 w-4 md:h-5 md:w-5 text-green-600" />
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold text-green-700">
+                                <div className="text-xl md:text-3xl font-bold text-green-700">
                                     <CountUp end={comprehensiveData?.performance_indicator.performance_rate || 0} suffix="%" />
                                 </div>
                                 <p className="text-xs text-green-600 mt-1">Employed within 2 years</p>
@@ -649,13 +625,13 @@ export default function Analytics({ user }: Props) {
                         {/* Job Alignment Rate */}
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-800">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-blue-800">Job Alignment</CardTitle>
-                                <div className="p-2 bg-blue-100 rounded-lg">
-                                    <CheckCircle className="h-5 w-5 text-blue-600" />
+                                <CardTitle className="text-xs md:text-sm font-medium text-blue-800">Job Alignment</CardTitle>
+                                <div className="p-1.5 md:p-2 bg-blue-100 rounded-lg">
+                                    <CheckCircle className="h-4 w-4 md:h-5 md:w-5 text-blue-600" />
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold text-blue-700">
+                                <div className="text-xl md:text-3xl font-bold text-blue-700">
                                     <CountUp end={comprehensiveData?.job_alignment.alignment_rate || 0} suffix="%" />
                                 </div>
                                 <p className="text-xs text-blue-600 mt-1">Working in related field</p>
@@ -668,13 +644,13 @@ export default function Analytics({ user }: Props) {
                         {/* Employment Rate */}
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-purple-50 to-white dark:from-purple-900/20 dark:to-gray-800">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-purple-800">Employment Rate</CardTitle>
-                                <div className="p-2 bg-purple-100 rounded-lg">
-                                    <GraduationCap className="h-5 w-5 text-purple-600" />
+                                <CardTitle className="text-xs md:text-sm font-medium text-purple-800">Employment Rate</CardTitle>
+                                <div className="p-1.5 md:p-2 bg-purple-100 rounded-lg">
+                                    <GraduationCap className="h-4 w-4 md:h-5 md:w-5 text-purple-600" />
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold text-purple-700">
+                                <div className="text-xl md:text-3xl font-bold text-purple-700">
                                     <CountUp end={dashboardStats?.overview.total_alumni && dashboardStats.overview.total_alumni > 0
                                         ? Math.round(((comprehensiveData?.job_alignment.total_employed || 0) / dashboardStats.overview.total_alumni) * 100)
                                         : 0} suffix="%" />
@@ -689,13 +665,13 @@ export default function Analytics({ user }: Props) {
                         {/* Non-Employment Rate */}
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all bg-gradient-to-br from-red-50 to-white dark:from-red-900/20 dark:to-gray-800">
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium text-red-800">Non-Employment</CardTitle>
-                                <div className="p-2 bg-red-100 rounded-lg">
-                                    <AlertTriangle className="h-5 w-5 text-red-600" />
+                                <CardTitle className="text-xs md:text-sm font-medium text-red-800">Non-Employment</CardTitle>
+                                <div className="p-1.5 md:p-2 bg-red-100 rounded-lg">
+                                    <AlertTriangle className="h-4 w-4 md:h-5 md:w-5 text-red-600" />
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-3xl font-bold text-red-700">
+                                <div className="text-xl md:text-3xl font-bold text-red-700">
                                     <CountUp end={comprehensiveData?.attrition_rate.summary.overall_attrition_rate || 0} suffix="%" />
                                 </div>
                                 <p className="text-xs text-red-600 mt-1">Unemployed + Continuing Ed.</p>
@@ -705,26 +681,25 @@ export default function Analytics({ user }: Props) {
                             </CardContent>
                         </Card>
                     </div>
-                </div>
+                </ScrollFadeIn>
 
                 {/* Section 2: Employment Analytics */}
-                <div className="space-y-4" style={sectionStyle(150)}>
-                    <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
-                        <Briefcase className="h-5 w-5 mr-2" />
+                <ScrollFadeIn className="space-y-3 md:space-y-4">
+                    <h3 className="text-base md:text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                        <Briefcase className="h-4 w-4 md:h-5 md:w-5 mr-2" />
                         Employment Analytics
                     </h3>
 
                     {/* Employment KPI Cards */}
                     {kpiMetrics && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                                     <CardTitle className="text-sm font-medium text-maroon-800 dark:text-gray-200">Avg Time to Job</CardTitle>
                                     <Calendar className="h-4 w-4 text-maroon-600 dark:text-gray-400" />
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="text-2xl font-bold text-maroon-800 dark:text-gray-200">
-                                        {formatDays(kpiMetrics.overall_avg_days)}
+                                    <div className="text-lg md:text-2xl font-bold text-maroon-800 dark:text-gray-200">
                                     </div>
                                     <p className="text-xs text-maroon-600 dark:text-gray-400 mt-1">After graduation</p>
                                 </CardContent>
@@ -736,7 +711,7 @@ export default function Analytics({ user }: Props) {
                                     <CheckCircle className="h-4 w-4 text-green-600" />
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="text-2xl font-bold text-green-600">
+                                    <div className="text-lg md:text-2xl font-bold text-green-600">
                                         {jobMismatchStats?.good_match_count || 0}
                                     </div>
                                     <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
@@ -751,7 +726,7 @@ export default function Analytics({ user }: Props) {
                                     <ArrowUp className="h-4 w-4 text-orange-600" />
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="text-2xl font-bold text-orange-600">
+                                    <div className="text-lg md:text-2xl font-bold text-orange-600">
                                         {jobMismatchStats?.overqualified_count || 0}
                                     </div>
                                     <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
@@ -766,7 +741,7 @@ export default function Analytics({ user }: Props) {
                                     <XCircle className="h-4 w-4 text-red-600" />
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="text-2xl font-bold text-red-600">
+                                    <div className="text-lg md:text-2xl font-bold text-red-600">
                                         {jobMismatchStats?.unfit_count || 0}
                                     </div>
                                     <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
@@ -781,7 +756,7 @@ export default function Analytics({ user }: Props) {
                                     <ArrowDown className="h-4 w-4 text-blue-600" />
                                 </CardHeader>
                                 <CardContent>
-                                    <div className="text-2xl font-bold text-blue-600">
+                                    <div className="text-lg md:text-2xl font-bold text-blue-600">
                                         {jobMismatchStats?.underqualified_count || 0}
                                     </div>
                                     <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
@@ -793,12 +768,12 @@ export default function Analytics({ user }: Props) {
                     )}
 
                     {/* Employment Charts Row */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
                         {/* Job Qualification Match Distribution */}
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Job Qualification Match</CardTitle>
-                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                <CardTitle className="text-base md:text-xl text-maroon-800 dark:text-gray-200">Job Qualification Match</CardTitle>
+                                <CardDescription className="text-xs md:text-sm text-maroon-600 dark:text-gray-400">
                                     Distribution of job matches among employed alumni
                                 </CardDescription>
                             </CardHeader>
@@ -813,15 +788,15 @@ export default function Analytics({ user }: Props) {
                                         ]}
                                     >
                                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                        <XAxis dataKey="name" stroke={COLORS.primary} fontSize={12} />
-                                        <YAxis stroke={COLORS.primary} fontSize={12} />
+                                        <XAxis dataKey="name" stroke={COLORS.primary} fontSize={10} />
+                                        <YAxis stroke={COLORS.primary} fontSize={10} />
                                         <Tooltip content={<CustomTooltip />} />
                                         <Bar dataKey="value" radius={[4, 4, 0, 0]} name="Alumni Count">
                                             {[
                                                 { name: 'Good Match', color: COLORS.success },
-                                                { name: 'Overqualified', color: COLORS.warning },
+                                                { name: 'Over-qual.', color: COLORS.warning },
                                                 { name: 'Unfit', color: COLORS.danger },
-                                                { name: 'Underqualified', color: COLORS.info },
+                                                { name: 'Under-qual.', color: COLORS.info },
                                             ].map((entry, index) => (
                                                 <Cell key={`cell-${index}`} fill={entry.color} />
                                             ))}
@@ -834,8 +809,8 @@ export default function Analytics({ user }: Props) {
                         {/* Program Performance Comparison */}
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Program Performance</CardTitle>
-                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                <CardTitle className="text-base md:text-xl text-maroon-800 dark:text-gray-200">Program Performance</CardTitle>
+                                <CardDescription className="text-xs md:text-sm text-maroon-600 dark:text-gray-400">
                                     Average time-to-job by degree program
                                     {(() => {
                                         const yearWithData = [...timeToJobData].reverse().find(y => y.program_breakdown && y.program_breakdown.length > 0);
@@ -888,21 +863,21 @@ export default function Analytics({ user }: Props) {
                             </CardContent>
                         </Card>
                     </div>
-                </div>
+                </ScrollFadeIn>
 
                 {/* Section 3: Enrollment & Attrition Analytics */}
-                <div className="space-y-4" style={sectionStyle(300)}>
-                    <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
-                        <GraduationCap className="h-5 w-5 mr-2" />
+                <ScrollFadeIn className="space-y-3 md:space-y-4">
+                    <h3 className="text-base md:text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                        <GraduationCap className="h-4 w-4 md:h-5 md:w-5 mr-2" />
                         Enrollment & Attrition Analytics
                     </h3>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
                         {/* Enrollment vs Graduation Chart */}
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Graduates vs Employed</CardTitle>
-                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                <CardTitle className="text-base md:text-xl text-maroon-800 dark:text-gray-200">Graduates vs Employed</CardTitle>
+                                <CardDescription className="text-xs md:text-sm text-maroon-600 dark:text-gray-400">
                                     Graduated alumni and employment count by year
                                 </CardDescription>
                             </CardHeader>
@@ -927,8 +902,8 @@ export default function Analytics({ user }: Props) {
                         {/* Attrition Breakdown */}
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Unemployment Breakdown</CardTitle>
-                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                <CardTitle className="text-base md:text-xl text-maroon-800 dark:text-gray-200">Unemployment Breakdown</CardTitle>
+                                <CardDescription className="text-xs md:text-sm text-maroon-600 dark:text-gray-400">
                                     Unemployed and continuing education by graduation year
                                 </CardDescription>
                             </CardHeader>
@@ -952,12 +927,12 @@ export default function Analytics({ user }: Props) {
                     </div>
 
                     {/* College-level Breakdown */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6 mt-4 md:mt-6">
                         {/* Alumni by College */}
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Alumni by College</CardTitle>
-                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                <CardTitle className="text-base md:text-xl text-maroon-800 dark:text-gray-200">Alumni by College</CardTitle>
+                                <CardDescription className="text-xs md:text-sm text-maroon-600 dark:text-gray-400">
                                     Total alumni and employment by college/department
                                 </CardDescription>
                             </CardHeader>
@@ -989,8 +964,8 @@ export default function Analytics({ user }: Props) {
                         {/* Job Alignment by College */}
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Job Alignment by College</CardTitle>
-                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                <CardTitle className="text-base md:text-xl text-maroon-800 dark:text-gray-200">Job Alignment by College</CardTitle>
+                                <CardDescription className="text-xs md:text-sm text-maroon-600 dark:text-gray-400">
                                     Employed vs job-aligned alumni by college/department
                                 </CardDescription>
                             </CardHeader>
@@ -1021,10 +996,10 @@ export default function Analytics({ user }: Props) {
                     </div>
 
                     {/* Course-level Table */}
-                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg mt-6">
+                    <Card className="border-beige-200 dark:border-gray-700 shadow-lg mt-4 md:mt-6">
                         <CardHeader>
-                            <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Course Alumni & Employment Breakdown</CardTitle>
-                            <CardDescription className="text-maroon-600 dark:text-gray-400">
+                            <CardTitle className="text-base md:text-xl text-maroon-800 dark:text-gray-200">Course Alumni & Employment Breakdown</CardTitle>
+                            <CardDescription className="text-xs md:text-sm text-maroon-600 dark:text-gray-400">
                                 Alumni employment and job alignment by course/program (Top 15)
                             </CardDescription>
                         </CardHeader>
@@ -1105,21 +1080,21 @@ export default function Analytics({ user }: Props) {
                             </div>
                         </CardContent>
                     </Card>
-                </div>
+                </ScrollFadeIn>
 
                 {/* Section 4: Performance Trends */}
-                <div className="space-y-4" style={sectionStyle(450)}>
-                    <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
-                        <TrendingUp className="h-5 w-5 mr-2" />
+                <ScrollFadeIn className="space-y-3 md:space-y-4">
+                    <h3 className="text-base md:text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                        <TrendingUp className="h-4 w-4 md:h-5 md:w-5 mr-2" />
                         Performance Trends
                     </h3>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
                         {/* Performance Indicator by Year */}
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Employment Performance by Year</CardTitle>
-                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                <CardTitle className="text-base md:text-xl text-maroon-800 dark:text-gray-200">Employment Performance by Year</CardTitle>
+                                <CardDescription className="text-xs md:text-sm text-maroon-600 dark:text-gray-400">
                                     Percentage of graduates employed within 2 years
                                 </CardDescription>
                             </CardHeader>
@@ -1156,8 +1131,8 @@ export default function Analytics({ user }: Props) {
                         {/* Time-to-Job Trend */}
                         <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                             <CardHeader>
-                                <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Time-to-Job Trend</CardTitle>
-                                <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                <CardTitle className="text-base md:text-xl text-maroon-800 dark:text-gray-200">Time-to-Job Trend</CardTitle>
+                                <CardDescription className="text-xs md:text-sm text-maroon-600 dark:text-gray-400">
                                     Average days to secure employment by graduation year
                                 </CardDescription>
                             </CardHeader>
@@ -1188,39 +1163,39 @@ export default function Analytics({ user }: Props) {
                             </CardContent>
                         </Card>
                     </div>
-                </div>
+                </ScrollFadeIn>
 
                 {/* Section 5: Program-wise Performance Table */}
-                <div className="space-y-4" style={sectionStyle(550)}>
-                    <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
-                        <Building className="h-5 w-5 mr-2" />
+                <ScrollFadeIn className="space-y-3 md:space-y-4">
+                    <h3 className="text-base md:text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                        <Building className="h-4 w-4 md:h-5 md:w-5 mr-2" />
                         Program-wise Performance
                     </h3>
 
                     {/* Summary row */}
                     {comprehensiveData?.program_performance && comprehensiveData.program_performance.length > 0 && (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <div className="rounded-xl bg-gradient-to-br from-maroon-50 to-beige-50 dark:from-maroon-950/30 dark:to-gray-800 p-4 border border-maroon-100 dark:border-gray-700">
+                            <div className="rounded-xl bg-gradient-to-br from-maroon-50 to-beige-50 dark:from-maroon-950/30 dark:to-gray-800 p-3 md:p-4 border border-maroon-100 dark:border-gray-700">
                                 <p className="text-xs font-medium text-maroon-600 dark:text-gray-400 mb-1">Total Programs</p>
-                                <p className="text-2xl font-bold text-maroon-800 dark:text-gray-200"><CountUp end={comprehensiveData.program_performance.length} duration={800} /></p>
+                                <p className="text-lg md:text-2xl font-bold text-maroon-800 dark:text-gray-200"><CountUp end={comprehensiveData.program_performance.length} duration={800} /></p>
                             </div>
-                            <div className="rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-gray-800 p-4 border border-green-100 dark:border-gray-700">
+                            <div className="rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-gray-800 p-3 md:p-4 border border-green-100 dark:border-gray-700">
                                 <p className="text-xs font-medium text-green-600 dark:text-gray-400 mb-1">Best Employment</p>
-                                <p className="text-2xl font-bold text-green-700 dark:text-green-300"><CountUp end={Math.max(...comprehensiveData.program_performance.map(p => p.employment_rate))} suffix="%" duration={800} /></p>
+                                <p className="text-lg md:text-2xl font-bold text-green-700 dark:text-green-300"><CountUp end={Math.max(...comprehensiveData.program_performance.map(p => p.employment_rate))} suffix="%" duration={800} /></p>
                             </div>
-                            <div className="rounded-xl bg-gradient-to-br from-blue-50 to-sky-50 dark:from-blue-950/30 dark:to-gray-800 p-4 border border-blue-100 dark:border-gray-700">
+                            <div className="rounded-xl bg-gradient-to-br from-blue-50 to-sky-50 dark:from-blue-950/30 dark:to-gray-800 p-3 md:p-4 border border-blue-100 dark:border-gray-700">
                                 <p className="text-xs font-medium text-blue-600 dark:text-gray-400 mb-1">Best Alignment</p>
-                                <p className="text-2xl font-bold text-blue-700 dark:text-blue-300"><CountUp end={Math.max(...comprehensiveData.program_performance.map(p => p.alignment_rate))} suffix="%" duration={800} /></p>
+                                <p className="text-lg md:text-2xl font-bold text-blue-700 dark:text-blue-300"><CountUp end={Math.max(...comprehensiveData.program_performance.map(p => p.alignment_rate))} suffix="%" duration={800} /></p>
                             </div>
-                            <div className="rounded-xl bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/30 dark:to-gray-800 p-4 border border-purple-100 dark:border-gray-700">
+                            <div className="rounded-xl bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/30 dark:to-gray-800 p-3 md:p-4 border border-purple-100 dark:border-gray-700">
                                 <p className="text-xs font-medium text-purple-600 dark:text-gray-400 mb-1">Total Alumni</p>
-                                <p className="text-2xl font-bold text-purple-700 dark:text-purple-300"><CountUp end={comprehensiveData.program_performance.reduce((s, p) => s + p.total_alumni, 0)} duration={800} /></p>
+                                <p className="text-lg md:text-2xl font-bold text-purple-700 dark:text-purple-300"><CountUp end={comprehensiveData.program_performance.reduce((s, p) => s + p.total_alumni, 0)} duration={800} /></p>
                             </div>
                         </div>
                     )}
 
                     {/* Program Cards Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
                         {comprehensiveData?.program_performance
                             .sort((a, b) => b.employment_rate - a.employment_rate)
                             .map((program, index) => {
@@ -1313,56 +1288,56 @@ export default function Analytics({ user }: Props) {
                                 );
                             })}
                     </div>
-                </div>
+                </ScrollFadeIn>
 
                 {/* Section 5.5: Employment Location Analytics */}
                 {comprehensiveData?.employment_location && (
-                    <div className="space-y-4" style={sectionStyle(650)}>
-                        <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
-                            <Globe className="h-5 w-5 mr-2" />
+                    <ScrollFadeIn className="space-y-3 md:space-y-4">
+                        <h3 className="text-base md:text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                            <Globe className="h-4 w-4 md:h-5 md:w-5 mr-2" />
                             Employment Location (Local vs Foreign)
                         </h3>
 
                         {/* Summary Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30">
-                                <CardContent className="p-6">
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className="p-2 bg-emerald-500 rounded-lg"><MapPin className="h-5 w-5 text-white" /></div>
-                                        <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Local (Philippines)</span>
+                                <CardContent className="p-4 md:p-6">
+                                    <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-3">
+                                        <div className="p-1.5 md:p-2 bg-emerald-500 rounded-lg"><MapPin className="h-4 w-4 md:h-5 md:w-5 text-white" /></div>
+                                        <span className="text-xs md:text-sm font-semibold text-emerald-700 dark:text-emerald-300">Local (Philippines)</span>
                                     </div>
-                                    <p className="text-3xl font-bold text-emerald-800 dark:text-emerald-200"><CountUp end={comprehensiveData.employment_location.summary.local} /></p>
-                                    <p className="text-sm text-emerald-600 dark:text-emerald-400"><CountUp end={comprehensiveData.employment_location.summary.local_rate} suffix="% of employed" /></p>
+                                    <p className="text-xl md:text-3xl font-bold text-emerald-800 dark:text-emerald-200"><CountUp end={comprehensiveData.employment_location.summary.local} /></p>
+                                    <p className="text-xs md:text-sm text-emerald-600 dark:text-emerald-400"><CountUp end={comprehensiveData.employment_location.summary.local_rate} suffix="% of employed" /></p>
                                 </CardContent>
                             </Card>
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-sky-50 to-blue-50 dark:from-sky-950/30 dark:to-blue-950/30">
-                                <CardContent className="p-6">
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className="p-2 bg-sky-500 rounded-lg"><Globe className="h-5 w-5 text-white" /></div>
-                                        <span className="text-sm font-semibold text-sky-700 dark:text-sky-300">Foreign / OFW</span>
+                                <CardContent className="p-4 md:p-6">
+                                    <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-3">
+                                        <div className="p-1.5 md:p-2 bg-sky-500 rounded-lg"><Globe className="h-4 w-4 md:h-5 md:w-5 text-white" /></div>
+                                        <span className="text-xs md:text-sm font-semibold text-sky-700 dark:text-sky-300">Foreign / OFW</span>
                                     </div>
-                                    <p className="text-3xl font-bold text-sky-800 dark:text-sky-200"><CountUp end={comprehensiveData.employment_location.summary.foreign} /></p>
-                                    <p className="text-sm text-sky-600 dark:text-sky-400"><CountUp end={comprehensiveData.employment_location.summary.foreign_rate} suffix="% working abroad" /></p>
+                                    <p className="text-xl md:text-3xl font-bold text-sky-800 dark:text-sky-200"><CountUp end={comprehensiveData.employment_location.summary.foreign} /></p>
+                                    <p className="text-xs md:text-sm text-sky-600 dark:text-sky-400"><CountUp end={comprehensiveData.employment_location.summary.foreign_rate} suffix="% working abroad" /></p>
                                 </CardContent>
                             </Card>
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/30">
-                                <CardContent className="p-6">
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <div className="p-2 bg-violet-500 rounded-lg"><Briefcase className="h-5 w-5 text-white" /></div>
-                                        <span className="text-sm font-semibold text-violet-700 dark:text-violet-300">Remote (Foreign Co.)</span>
+                                <CardContent className="p-4 md:p-6">
+                                    <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-3">
+                                        <div className="p-1.5 md:p-2 bg-violet-500 rounded-lg"><Briefcase className="h-4 w-4 md:h-5 md:w-5 text-white" /></div>
+                                        <span className="text-xs md:text-sm font-semibold text-violet-700 dark:text-violet-300">Remote (Foreign Co.)</span>
                                     </div>
-                                    <p className="text-3xl font-bold text-violet-800 dark:text-violet-200"><CountUp end={comprehensiveData.employment_location.summary.remote} /></p>
-                                    <p className="text-sm text-violet-600 dark:text-violet-400"><CountUp end={comprehensiveData.employment_location.summary.remote_rate} suffix="% remote work" /></p>
+                                    <p className="text-xl md:text-3xl font-bold text-violet-800 dark:text-violet-200"><CountUp end={comprehensiveData.employment_location.summary.remote} /></p>
+                                    <p className="text-xs md:text-sm text-violet-600 dark:text-violet-400"><CountUp end={comprehensiveData.employment_location.summary.remote_rate} suffix="% remote work" /></p>
                                 </CardContent>
                             </Card>
                         </div>
 
                         {/* Yearly Trend Chart */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                                 <CardHeader>
-                                    <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Location Trend by Year</CardTitle>
-                                    <CardDescription className="text-maroon-600 dark:text-gray-400">Employment location distribution per graduation year</CardDescription>
+                                    <CardTitle className="text-base md:text-xl text-maroon-800 dark:text-gray-200">Location Trend by Year</CardTitle>
+                                    <CardDescription className="text-xs md:text-sm text-maroon-600 dark:text-gray-400">Employment location distribution per graduation year</CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <ResponsiveContainer width="100%" height={300}>
@@ -1383,19 +1358,19 @@ export default function Analytics({ user }: Props) {
                             {/* Department Breakdown */}
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                                 <CardHeader>
-                                    <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Location by Department</CardTitle>
-                                    <CardDescription className="text-maroon-600 dark:text-gray-400">Where each department's alumni work</CardDescription>
+                                    <CardTitle className="text-base md:text-xl text-maroon-800 dark:text-gray-200">Location by Department</CardTitle>
+                                    <CardDescription className="text-xs md:text-sm text-maroon-600 dark:text-gray-400">Where each department's alumni work</CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <ResponsiveContainer width="100%" height={300}>
                                         <BarChart
                                             data={comprehensiveData.employment_location.department_breakdown}
                                             layout="vertical"
-                                            margin={{ top: 10, right: 10, left: 20, bottom: 5 }}
+                                            margin={{ top: 10, right: 10, left: 0, bottom: 5 }}
                                         >
                                             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                                            <XAxis type="number" stroke={COLORS.primary} fontSize={12} />
-                                            <YAxis dataKey="department" type="category" stroke={COLORS.primary} fontSize={10} width={120} />
+                                            <XAxis type="number" stroke={COLORS.primary} fontSize={10} />
+                                            <YAxis dataKey="department" type="category" stroke={COLORS.primary} fontSize={9} width={80} />
                                             <Tooltip content={<CustomTooltip />} />
                                             <Legend />
                                             <Bar dataKey="local" stackId="loc" fill="#10B981" name="Local" />
@@ -1406,41 +1381,41 @@ export default function Analytics({ user }: Props) {
                                 </CardContent>
                             </Card>
                         </div>
-                    </div>
+                    </ScrollFadeIn>
                 )}
 
                 {/* Section 6: System Overview (only for super_admin) */}
                 {user.role === 'super_admin' && dashboardStats && (
-                    <div className="space-y-4" style={sectionStyle(750)}>
-                        <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
-                            <Activity className="h-5 w-5 mr-2" />
+                    <ScrollFadeIn className="space-y-3 md:space-y-4">
+                        <h3 className="text-base md:text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                            <Activity className="h-4 w-4 md:h-5 md:w-5 mr-2" />
                             System Overview
                         </h3>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                                <CardContent className="p-6">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="p-3 bg-blue-100 rounded-lg">
-                                            <Users className="h-6 w-6 text-blue-600" />
+                                <CardContent className="p-4 md:p-6">
+                                    <div className="flex items-center justify-between mb-3 md:mb-4">
+                                        <div className="p-2 md:p-3 bg-blue-100 rounded-lg">
+                                            <Users className="h-4 w-4 md:h-6 md:w-6 text-blue-600" />
                                         </div>
                                     </div>
-                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Users</p>
-                                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                                    <p className="text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400">Total Users</p>
+                                    <p className="text-xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">
                                         {dashboardStats.overview.total_users || 0}
                                     </p>
                                 </CardContent>
                             </Card>
 
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                                <CardContent className="p-6">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="p-3 bg-purple-100 rounded-lg">
-                                            <Building className="h-6 w-6 text-purple-600" />
+                                <CardContent className="p-4 md:p-6">
+                                    <div className="flex items-center justify-between mb-3 md:mb-4">
+                                        <div className="p-2 md:p-3 bg-purple-100 rounded-lg">
+                                            <Building className="h-4 w-4 md:h-6 md:w-6 text-purple-600" />
                                         </div>
                                     </div>
-                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Departments</p>
-                                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                                    <p className="text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400">Departments</p>
+                                    <p className="text-xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">
                                         {dashboardStats.overview.total_departments || 0}
                                     </p>
                                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
@@ -1450,14 +1425,14 @@ export default function Analytics({ user }: Props) {
                             </Card>
 
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                                <CardContent className="p-6">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="p-3 bg-orange-100 rounded-lg">
-                                            <ClipboardList className="h-6 w-6 text-orange-600" />
+                                <CardContent className="p-4 md:p-6">
+                                    <div className="flex items-center justify-between mb-3 md:mb-4">
+                                        <div className="p-2 md:p-3 bg-orange-100 rounded-lg">
+                                            <ClipboardList className="h-4 w-4 md:h-6 md:w-6 text-orange-600" />
                                         </div>
                                     </div>
-                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Surveys</p>
-                                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                                    <p className="text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400">Surveys</p>
+                                    <p className="text-xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">
                                         {dashboardStats.overview.total_surveys || 0}
                                     </p>
                                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
@@ -1467,14 +1442,14 @@ export default function Analytics({ user }: Props) {
                             </Card>
 
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
-                                <CardContent className="p-6">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="p-3 bg-green-100 rounded-lg">
-                                            <BarChart3 className="h-6 w-6 text-green-600" />
+                                <CardContent className="p-4 md:p-6">
+                                    <div className="flex items-center justify-between mb-3 md:mb-4">
+                                        <div className="p-2 md:p-3 bg-green-100 rounded-lg">
+                                            <BarChart3 className="h-4 w-4 md:h-6 md:w-6 text-green-600" />
                                         </div>
                                     </div>
-                                    <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Response Rate</p>
-                                    <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                                    <p className="text-xs md:text-sm font-medium text-gray-600 dark:text-gray-400">Response Rate</p>
+                                    <p className="text-xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 mt-1">
                                         {dashboardStats.overview.response_rate?.toFixed(1) || 0}%
                                     </p>
                                     <div className="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
@@ -1486,23 +1461,23 @@ export default function Analytics({ user }: Props) {
                                 </CardContent>
                             </Card>
                         </div>
-                    </div>
+                    </ScrollFadeIn>
                 )}
 
                 {/* Section 7: Additional Charts */}
                 {dashboardStats && (
-                    <div className="space-y-4" style={sectionStyle(850)}>
-                        <h3 className="text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
-                            <BarChart3 className="h-5 w-5 mr-2" />
+                    <ScrollFadeIn className="space-y-3 md:space-y-4">
+                        <h3 className="text-base md:text-xl font-bold text-maroon-800 dark:text-gray-200 flex items-center">
+                            <BarChart3 className="h-4 w-4 md:h-5 md:w-5 mr-2" />
                             Additional Insights
                         </h3>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-6">
                             {/* Employment Status Distribution */}
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                                 <CardHeader>
-                                    <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Employment Status Distribution</CardTitle>
-                                    <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                    <CardTitle className="text-base md:text-xl text-maroon-800 dark:text-gray-200">Employment Status Distribution</CardTitle>
+                                    <CardDescription className="text-xs md:text-sm text-maroon-600 dark:text-gray-400">
                                         Current employment breakdown
                                     </CardDescription>
                                 </CardHeader>
@@ -1546,8 +1521,8 @@ export default function Analytics({ user }: Props) {
                             {/* Batch Distribution */}
                             <Card className="border-beige-200 dark:border-gray-700 shadow-lg">
                                 <CardHeader>
-                                    <CardTitle className="text-xl text-maroon-800 dark:text-gray-200">Batch Distribution</CardTitle>
-                                    <CardDescription className="text-maroon-600 dark:text-gray-400">
+                                    <CardTitle className="text-base md:text-xl text-maroon-800 dark:text-gray-200">Batch Distribution</CardTitle>
+                                    <CardDescription className="text-xs md:text-sm text-maroon-600 dark:text-gray-400">
                                         Alumni count by graduation batch
                                     </CardDescription>
                                 </CardHeader>
@@ -1567,9 +1542,10 @@ export default function Analytics({ user }: Props) {
                                 </CardContent>
                             </Card>
                         </div>
-                    </div>
+                    </ScrollFadeIn>
                 )}
             </div>
+            <ExportProgressDialog {...exportState} onCancel={cancelExport} />
         </AdminBaseLayout>
     );
 }

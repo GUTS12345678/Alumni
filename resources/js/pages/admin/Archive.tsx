@@ -190,6 +190,28 @@ export default function ArchivePage({ user }: { user: { id: number; email: strin
         }
     };
 
+    const handleClearAll = async () => {
+        const ok = await confirm({
+            title: 'Clear All Archive',
+            message: `Permanently delete all ${totalArchived} archived item(s) across all categories? This action is irreversible.`,
+            variant: 'destructive',
+            confirmLabel: 'Delete All',
+        });
+        if (!ok) return;
+        setActionLoading('clear-all');
+        try {
+            await axios.delete('/api/v1/admin/archive/clear-all');
+            showToast(`All archived items permanently deleted`, 'success');
+            setSelectedItems(new Set());
+            fetchArchive(1);
+        } catch (error: unknown) {
+            const err = error as { response?: { data?: { message?: string } } };
+            showToast(err.response?.data?.message || 'Failed to clear archive', 'error');
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     const toggleSelect = (type: string, id: number) => {
         const key = `${type}-${id}`;
         setSelectedItems(prev => {
@@ -242,6 +264,16 @@ export default function ArchivePage({ user }: { user: { id: number; email: strin
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
+                        {totalArchived > 0 && (
+                            <button
+                                onClick={handleClearAll}
+                                disabled={actionLoading === 'clear-all'}
+                                className="flex items-center gap-1.5 px-3 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                                {actionLoading === 'clear-all' ? 'Clearing...' : `Clear All (${totalArchived})`}
+                            </button>
+                        )}
                         <button
                             onClick={() => fetchArchive(meta.current_page)}
                             className="px-3 py-2 text-sm border border-beige-300 dark:border-gray-600 rounded-lg text-maroon-700 dark:text-gray-300 hover:bg-maroon-50 dark:hover:bg-maroon-800/30 transition-colors"
